@@ -84,11 +84,19 @@ struct mac_learning_info {
   uint8_t mac_addr[6];
   uint8_t bridge_id;
   uint32_t src_port;
+  uint32_t rx_src_port;
   struct port_vlan_info vlan_info;
   union {
     struct tunnel_info tnl_info;
     struct vlan_info vln_info;
   };
+};
+
+struct ip_mac_map_info {
+  uint8_t src_mac_addr[6];
+  uint8_t dst_mac_addr[6];
+  struct p4_ipaddr src_ip_addr;
+  struct p4_ipaddr dst_ip_addr;
 };
 
 // Function declarations
@@ -105,6 +113,9 @@ extern void ConfigRxTunnelSrcTableEntry(struct tunnel_info tunnel_info,
                                         bool insert_entry);
 
 extern enum ovs_tunnel_type TunnelTypeStrtoEnum(const char* tnl_type);
+
+extern void ConfigIpMacMapTableEntry(struct ip_mac_map_info learn_info,
+                                     bool insert_entry);
 
 #ifdef __cplusplus
 }  // extern "C"
