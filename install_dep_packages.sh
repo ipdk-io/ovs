@@ -137,7 +137,11 @@ echo "####  Cloning, Building and Installing the '$MODULE' module ####"
 mkdir -p ${SRC_DIR}/$MODULE
 git clone https://github.com/google/protobuf.git  ${SRC_DIR}/$MODULE
 cd ${SRC_DIR}/$MODULE
-git checkout tags/v3.6.1
+if [ "${OS}" = "Ubuntu" ] && [ "${VER}" = "20.04" ]; then
+    git checkout tags/v3.7.1
+else
+    git checkout tags/v3.6.1
+fi
 ./autogen.sh
 ./configure $CONFIG_PREFIX
 make $NUM_THREADS
@@ -150,7 +154,11 @@ echo "####  Cloning, Building and Installing the '$MODULE' module ####"
 mkdir -p ${SRC_DIR}/$MODULE
 git clone https://github.com/google/grpc.git  ${SRC_DIR}/$MODULE
 cd ${SRC_DIR}/$MODULE
-git checkout tags/v1.17.2
+if [ "${OS}" = "Ubuntu" ] && [ "${VER}" = "20.04" ]; then
+    git checkout tags/v1.27.1
+else
+    git checkout tags/v1.17.2
+fi
 git submodule update --init --recursive
 if [[ $OS =~ "Fedora" ]];
 then
