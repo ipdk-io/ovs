@@ -258,6 +258,7 @@ EXTRA_DIST = \
         unit_test/gtest_main.cpp\
         unit_test/test_switchlink_sai.cpp\
         unit_test/vlog_mock.c\
+	OVS_WITH_P4_ARCH.rst \
 	.mailmap
 bin_PROGRAMS =
 sbin_PROGRAMS =
