@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright (c) 2021 Intel Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,10 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#! /bin/bash
 set -e
 
-source os_ver_details.sh
+. os_ver_details.sh
 WS_DIR=$PWD
 echo "WS_DIR: $WS_DIR"
 
@@ -64,15 +64,12 @@ echo "Number of Parallel threads used: $NUM_THREADS ..."
 echo ""
 
 # Dependencies needed for building netlink library
-if [[ $OS =~ "Fedora" ]]; then
-    sudo dnf install -y pkgconfig
-    sudo dnf install -y libnl3-devel
-elif [[ $OS =~ "Ubuntu" ]]; then
-    sudo apt-get install -y pkg-config
-    sudo apt-get install -y libnl-route-3-dev
+if [ $OS = "Fedora" ]; then
+    sudo dnf install -y pkgconfig libnl3-devel
+elif [ $OS = "Ubuntu" ] then
+    sudo apt-get install -y pkg-config libnl-route-3-dev
 else
-    sudo yum install -y pkgconfig
-    sudo yum install -y libnl3-devel
+    sudo yum install -y pkgconfig libnl3-devel
 fi
 
 #gflags source code Repo checkout, Build and Install

@@ -14,7 +14,7 @@
 #! /bin/bash
 set -e
 
-source os_ver_details.sh
+. os_ver_details.sh
 
 if [ -z "$1" ]
 then
