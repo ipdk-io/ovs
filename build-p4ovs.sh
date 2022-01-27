@@ -1,3 +1,4 @@
+#!/bin/bash
 # Copyright (c) 2021 Intel Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#! /bin/bash
+
 set -e
 
 if [ -z "$1" ]
@@ -29,9 +30,9 @@ echo $DEPS_INSTALL_PATH
 
 if [ ! -z "$DEPS_INSTALL_PATH" ]
 then
-    source p4ovs_env_setup.sh $SDE_INSTALL_PATH $DEPS_INSTALL_PATH
+    . p4ovs_env_setup.sh $SDE_INSTALL_PATH $DEPS_INSTALL_PATH
 else
-    source p4ovs_env_setup.sh $SDE_INSTALL_PATH
+    . p4ovs_env_setup.sh $SDE_INSTALL_PATH
 fi
 
 ./apply_stratum_artifacts.sh $SDE_INSTALL_PATH
