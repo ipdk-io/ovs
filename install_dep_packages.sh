@@ -153,8 +153,8 @@ if [[ $OS =~ "Fedora" ]];
 then
    git apply "$WS_DIR"/external/PATCH-01-GRPC
 fi
-make "$NUM_THREADS" "$MAKE_PREFIX"
-sudo make "$NUM_THREADS" "$MAKE_PREFIX" install
+make "$NUM_THREADS" $MAKE_PREFIX
+sudo make "$NUM_THREADS" $MAKE_PREFIX install
 sudo ldconfig
 
 #nlohmann source code Repo checkout, Build and Install
