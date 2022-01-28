@@ -82,8 +82,8 @@ git checkout 827c769e5fc98e0f2a34c47cef953cc6328abced
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
 cmake -DBUILD_SHARED_LIBS=ON "$CMAKE_PREFIX" ..
-make "$NUM_THREADS"
-sudo make "$NUM_THREADS" install
+make -j"$NUM_THREADS"
+sudo make -j"$NUM_THREADS" install
 sudo ldconfig
 
 #glog source code Repo checkout, Build and Install
@@ -96,8 +96,8 @@ git checkout 503e3dec8d1fe071376befc62119a837c26612a3
 mkdir -p "$SRC_DIR"/"$MODULE/"build
 cd "$SRC_DIR"/"$MODULE"/build
 cmake "$CMAKE_PREFIX" ..
-make "$NUM_THREADS"
-sudo make "$NUM_THREADS" install
+make -j"$NUM_THREADS"
+sudo make -j"$NUM_THREADS" install
 sudo ldconfig
 
 #abseil-cpp source code Repo checkout, Build and Install
@@ -110,8 +110,8 @@ git checkout ec0d76f1d012cc1a4b3b08dfafcfc5237f5ba2c9
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
 cmake -DBUILD_TESTING=OFF "$CMAKE_PREFIX" ..
-make "$NUM_THREADS"
-sudo make "$NUM_THREADS" install
+make -j"$NUM_THREADS"
+sudo make -j"$NUM_THREADS" install
 sudo ldconfig
 
 #cctz source code Repo checkout, Build and Install
@@ -124,8 +124,8 @@ git checkout 02918d62329ef440935862719829d061a5f4beba
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
 cmake -DBUILD_TESTING=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON "$CMAKE_PREFIX" ..
-make "$NUM_THREADS"
-sudo make "$NUM_THREADS" install
+make -j"$NUM_THREADS"
+sudo make -j"$NUM_THREADS" install
 sudo ldconfig
 
 #Protobuf source code Repo checkout, Build and Install
@@ -137,8 +137,8 @@ cd "$SRC_DIR"/"$MODULE"
 git checkout tags/v3.6.1
 ./autogen.sh
 ./configure "$CONFIG_PREFIX"
-make "$NUM_THREADS"
-sudo make "$NUM_THREADS" install
+make -j"$NUM_THREADS"
+sudo make -j"$NUM_THREADS" install
 sudo ldconfig
 
 #grpc source code Repo checkout, Build and Install
@@ -153,8 +153,8 @@ if [[ $OS =~ "Fedora" ]];
 then
    git apply "$WS_DIR"/external/PATCH-01-GRPC
 fi
-make "$NUM_THREADS" $MAKE_PREFIX
-sudo make "$NUM_THREADS" $MAKE_PREFIX install
+make -j"$NUM_THREADS" $MAKE_PREFIX
+sudo make -j"$NUM_THREADS" $MAKE_PREFIX install
 sudo ldconfig
 
 #nlohmann source code Repo checkout, Build and Install
@@ -167,8 +167,8 @@ git checkout 760304635dc74a5bf77903ad92446a6febb85acf
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
 cmake "$CMAKE_PREFIX" ..
-make "$NUM_THREADS"
-sudo make "$NUM_THREADS" install
+make -j"$NUM_THREADS"
+sudo make -j"$NUM_THREADS" install
 sudo ldconfig
 
 set +e
