@@ -60,9 +60,9 @@ echo "Number of Parallel threads used: $NUM_THREADS ..."
 echo ""
 
 # Dependencies needed for building netlink library
-if [ "$OS" == "Fedora" ]; then
+if [ "$OS" = "Fedora" ]; then
     sudo dnf install -y pkgconfig libnl3-devel
-elif [ "$OS" == "Ubuntu" ]; then
+elif [ "$OS" = "Ubuntu" ]; then
     sudo apt-get install -y pkg-config libnl-route-3-dev
 else
     sudo yum install -y pkgconfig libnl3-devel
