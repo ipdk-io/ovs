@@ -64,6 +64,6 @@ get_num_cores()
        fi
     else
         NUM_CORES=1
-        NUM_THREADS=j1
+        NUM_THREADS=-j1
     fi
 }
