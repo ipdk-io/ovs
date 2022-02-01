@@ -105,11 +105,6 @@ MODULE="grpc"
 echo "####  Uninstalling the '$MODULE' module ####"
 mkdir -p $SRC_DIR/$MODULE/build
 cd ${SRC_DIR}/$MODULE/build
-#In the grpc v1.17.2, 'make uninstall' not supported. This is the work-around
-#to get install file list
-cmake -DgRPC_INSTALL=ON -DBUILD_TESTING=OFF $CMAKE_PREFIX ..
-make $NUM_THREADS $MAKE_PREFIX
-sudo make $NUM_THREADS $MAKE_PREFIX install
 cat install_manifest.txt | xargs rm -rf
 sudo ldconfig
 
