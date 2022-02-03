@@ -132,8 +132,8 @@ git clone --depth=1 -b v3.18.1 https://github.com/google/protobuf.git "$SRC_DIR"
 cd "$SRC_DIR"/"$MODULE"
 mkdir -p $SRC_DIR/$MODULE/build
 cd $SRC_DIR/$MODULE/build
-cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON $CMAKE_PREFIX ../cmake
-sudo make $NUM_THREADS
+cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON "$CMAKE_PREFIX" ../cmake
+make "$NUM_THREADS"
 sudo make "$NUM_THREADS" install
 sudo ldconfig
 
@@ -150,9 +150,9 @@ cmake \
    -DgRPC_BUILD_TESTS=OFF \
    -DBUILD_SHARED_LIBS=ON \
    -DgRPC_INSTALL=ON \
-   -DCMAKE_POSITION_INDEPENDENT_CODE=ON $CMAKE_PREFIX ..
-sudo make $NUM_THREADS
-sudo make $NUM_THREADS install
+   -DCMAKE_POSITION_INDEPENDENT_CODE=ON "$CMAKE_PREFIX" ..
+make "$NUM_THREADS"
+sudo make "$NUM_THREADS" install
 sudo ldconfig
 
 #nlohmann source code Repo checkout, Build and Install
