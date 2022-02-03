@@ -148,9 +148,8 @@ sudo ldconfig
 MODULE="protobuf"
 echo "####  Cloning, Building and Installing the '$MODULE' module ####"
 mkdir -p "${SRC_DIR}"/"$MODULE"
-git clone https://github.com/google/protobuf.git "$SRC_DIR"/"$MODULE"
+git clone --depth=1 -b v3.18.1 https://github.com/google/protobuf.git "$SRC_DIR"/"$MODULE"
 cd "$SRC_DIR"/"$MODULE"
-git checkout tags/v3.18.1
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
 cmake -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON "$CMAKE_PREFIX" ../cmake
@@ -162,9 +161,8 @@ sudo ldconfig
 MODULE="grpc"
 echo "####  Cloning, Building and Installing the '$MODULE' module ####"
 mkdir -p "${SRC_DIR}"/"$MODULE"
-git clone https://github.com/google/grpc.git "$SRC_DIR"/"$MODULE"
+git clone --depth=1 -b v1.42.0 https://github.com/google/grpc.git "$SRC_DIR"/"$MODULE"
 cd "$SRC_DIR"/"$MODULE"
-git checkout tags/v1.42.0
 git submodule update --init --recursive
 mkdir build
 cd build
@@ -173,7 +171,7 @@ cmake \
    -DBUILD_SHARED_LIBS=ON \
    -DgRPC_INSTALL=ON \
    -DCMAKE_POSITION_INDEPENDENT_CODE=ON "$CMAKE_PREFIX" ..
-sudo make "$NUM_THREADS"
+make "$NUM_THREADS"
 sudo make "$NUM_THREADS" install
 sudo ldconfig
 
