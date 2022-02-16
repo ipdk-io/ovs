@@ -449,7 +449,7 @@ class P4RuntimeClient:
                  election_id=(1, 0)):
         self.device_id = device_id
         self.election_id = election_id
-
+        grpc_addr = str(grpc_cl)
         try:
             self.channel = grpc.insecure_channel(grpc_addr)
         except Exception as e:
@@ -953,24 +953,35 @@ def validate_args(argv, command, expected_nr):
         raise Exception("ovs-p4ctl: '{}' command requires at least {} "
                         "arguments".format(command, expected_nr))
 
-
+grpc_cl = ""
 def main():
+    global grpc_cl
     if len(sys.argv) < 2:
         print("ovs-p4ctl: missing command name; use --help for help")
         sys.exit(1)
+
     parser = argparse.ArgumentParser(usage=USAGE)
-    parser.add_argument('command', help='Subcommand to run')
-
-    args = parser.parse_args(sys.argv[1:2])
-    if args.command not in all_commands.keys():
+    parser.add_argument('-g', '--grpcaddr', required=False, type=str, help="Grpc server ip:port xxx.xxx.xxx.xxx:yyyy")
+    parser.add_argument('command', nargs='*', help='Subcommand to run')
+    args = parser.parse_args()
+    if args.grpcaddr is None:
+        grpc_cl = 'localhost:9559'
+    else:
+        aa=re.match(r'[0-9]+(?:\.[0-9]+){3}:[0-9]+',args.grpcaddr)
+        if aa:
+            grpc_cl = str(args.grpcaddr)
+        else:
+            print("Invalid IP address")
+            system.exit(1)
+    if args.command[0] not in all_commands.keys():
         usage()
-
     try:
         # use dispatch pattern to invoke method with same name
         # but first validate number of arguments
-        validate_args(sys.argv, command=args.command,
-                      expected_nr=all_commands[args.command][1])
-        all_commands[args.command][0](*sys.argv[2:])
+
+        validate_args(sys.argv, command=args.command[0],
+                      expected_nr=all_commands[args.command[0]][1])
+        all_commands[args.command[0]][0](*args.command[1:])
     except Exception as e:
         print("Error:", str(e))
         sys.exit(1)
