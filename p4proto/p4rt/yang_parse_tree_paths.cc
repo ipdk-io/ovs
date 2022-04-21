@@ -2312,7 +2312,6 @@ void SetUpInterfacesInterfaceConfigQemuVMNetdevId(const char *default_netdev_id,
     }
 
     auto vm_netdev_id = typed_val->string_val();
-
     // Set the value.
     SetRequest req;
     auto* request = req.add_requests()->mutable_port();
