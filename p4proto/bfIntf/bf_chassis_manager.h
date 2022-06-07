@@ -29,6 +29,18 @@
 #define GNMI_CONFIG_MEMPOOL_NAME 0x40
 #define GNMI_CONFIG_MTU_VALUE 0x80
 
+#define GNMI_CONFIG_HOTPLUG_SOCKET_IP 0x200
+#define GNMI_CONFIG_HOTPLUG_SOCKET_PORT 0x400
+#define GNMI_CONFIG_HOTPLUG_VAL 0x800
+#define GNMI_CONFIG_HOTPLUG_VM_MAC 0x1000
+#define GNMI_CONFIG_HOTPLUG_VM_NETDEV_ID 0x2000
+#define GNMI_CONFIG_HOTPLUG_VM_CHARDEV_ID 0x4000
+#define GNMI_CONFIG_NATIVE_SOCKET_PATH 0x8000
+#define GNMI_CONFIG_HOTPLUG_VM_DEVICE_ID 0x10000
+
+#define GNMI_CONFIG_PORT_DONE 0x10000000
+#define GNMI_CONFIG_HOTPLUG_DONE 0x20000000
+
 #define GNMI_CONFIG_VHOST (GNMI_CONFIG_PORT_TYPE | GNMI_CONFIG_DEVICE_TYPE | \
                            GNMI_CONFIG_QUEUE_COUNT | GNMI_CONFIG_SOCKET_PATH | \
                            GNMI_CONFIG_HOST_NAME)
@@ -40,19 +52,24 @@
 #define GNMI_CONFIG_UNSUPPORTED_MASK_TAP (GNMI_CONFIG_DEVICE_TYPE | GNMI_CONFIG_QUEUE_COUNT | \
                                           GNMI_CONFIG_SOCKET_PATH | GNMI_CONFIG_HOST_NAME)
 
+#define GNMI_CONFIG_HOTPLUG_ADD (GNMI_CONFIG_HOTPLUG_SOCKET_IP | GNMI_CONFIG_HOTPLUG_SOCKET_PORT | \
+                                 GNMI_CONFIG_HOTPLUG_VAL | GNMI_CONFIG_HOTPLUG_VM_MAC | \
+                                 GNMI_CONFIG_HOTPLUG_VM_NETDEV_ID | GNMI_CONFIG_HOTPLUG_VM_CHARDEV_ID | \
+                                 GNMI_CONFIG_NATIVE_SOCKET_PATH | GNMI_CONFIG_HOTPLUG_VM_DEVICE_ID)
+
 #define DEFAULT_PIPELINE "pipe"
 #define DEFAULT_MEMPOOL  "MEMPOOL0"
 #define DEFAULT_MTU      1500
 
-#define GNMI_CONFIG_HOTPLUG (GNMI_CONFIG_HOTPLUG_SOCKET_IP | GNMI_CONFIG_HOTPLUG_SOCKET_PORT | \
-                             GNMI_CONFIG_HOTPLUG_STATUS | GNMI_CONFIG_HOTPLUG_VM_MAC | \
-                             GNMI_CONFIG_HOTPLUG_VM_NETDEV_ID | GNMI_CONFIG_HOTPLUG_VM_CHARDEV_ID)
 
 typedef enum qemu_cmd_type {
    CHARDEV_ADD,
    NETDEV_ADD,
-   DEVICE_ADD
-}qemu_cmd_type;
+   DEVICE_ADD,
+   CHARDEV_DEL,
+   NETDEV_DEL,
+   DEVICE_DEL
+} qemu_cmd_type;
 
 namespace stratum {
 namespace hal {
@@ -119,6 +136,11 @@ class BfChassisManager {
                                 const SingletonPort& singleton_port,
                                 SetRequest::Request::Port::ValueCase change_field);
 
+  ::util::Status HotplugValidateAndAdd(uint64 node_id, uint32 port_id,
+                                       const SingletonPort& singleton_port,
+                                       SetRequest::Request::Port::ValueCase change_field,
+                                       SWBackendHotplugParams params);
+
   // BfChassisManager is neither copyable nor movable.
   BfChassisManager(const BfChassisManager&) = delete;
   BfChassisManager& operator=(const BfChassisManager&) = delete;
@@ -136,6 +158,21 @@ class BfChassisManager {
   struct ReaderArgs {
     BfChassisManager* manager;
     std::unique_ptr<ChannelReader<T>> reader;
+  };
+
+  struct HotplugConfig {
+    uint32 qemu_socket_port;
+    uint64 qemu_vm_mac_address;
+    std::string qemu_socket_ip;
+    std::string qemu_vm_netdev_id;
+    std::string qemu_vm_chardev_id;
+    std::string qemu_vm_device_id;
+    std::string native_socket_path;
+    SWBackendQemuHotplugStatus qemu_hotplug;
+
+    HotplugConfig() : qemu_socket_port(0),
+                      qemu_vm_mac_address(0),
+                      qemu_hotplug(NO_HOTPLUG) {}
   };
 
   struct PortConfig {
@@ -157,6 +194,7 @@ class BfChassisManager {
     std::string host_name;
     std::string pipeline_name;
     std::string mempool_name;
+    HotplugConfig hotplug_config;
 
     PortConfig() : admin_state(ADMIN_STATE_UNKNOWN),
                    port_type(PORT_TYPE_NONE),
@@ -195,19 +233,16 @@ class BfChassisManager {
                                const SingletonPort& singleton_port,
                                PortConfig* config);
 
+  // helper to hotplug add / delete a port with BfSdeInterface
+  ::util::Status HotplugPortHelper(uint64 node_id, int unit, uint32 port_id,
+                                   const SingletonPort& singleton_port,
+                                   PortConfig* config);
+
   // helper to update port configuration with BfSdeInterface
   ::util::Status UpdatePortHelper(uint64 node_id, int unit, uint32 port_id,
                                   const SingletonPort& singleton_port,
                                   const PortConfig& config_old,
                                   PortConfig* config);
-
-  //helper to send qemu hotplug commands to qemu monitor socket
-  void SendQemuCmdsHelper(int sockfd, std::string cmd);
-
-  // helper to prepare qemu hotplug commands to qemu monitor socket
-  std::string PrepQemuCmdsHelper(qemu_cmd_type cmd, std::string chardev_id,
-                                 std::string netdev_id, std::string mac,
-                                 std::string socket_path);
 
   // Determines the mode of operation:
   // - OPERATION_MODE_STANDALONE: when Stratum stack runs independently and

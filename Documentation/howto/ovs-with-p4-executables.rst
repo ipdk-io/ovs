@@ -281,3 +281,58 @@ previously configured CONFIG params.
     sub-node which holds multiple ports like net_vhost0, net_vhost1,... Pass
     the key name for whose value need to be fetched. Each get can take ONLY
     one key, and fetches value for that previously configured KEY.
+
+5) VIRTIO-NET Device Hot plug for DPDK Target::
+
+    This feature will allow the user to hotplug the vhost-user ports to the running VM.
+    To hotplug the vhost-user port to qemu based VM, add monitor option when instantiating
+    qemu based VM and specify the telnet port and ip for qemu monitor socket.
+    Example of qemu command:
+      qemu-system-x86_64 -enable-kvm -smp 4 -m 1024M \
+      -boot c -cpu host -enable-kvm -nographic \
+      -L /root/pc-bios -name VM1_TAP_DEV \
+      -hda /root/VM/vm1.qcow2 \
+      -object memory-backend-file,id=mem,size=1024M,mem-path=/dev/hugepages,share=on \
+      -mem-prealloc \
+      -numa node,memdev=mem \
+      -monitor telnet::6555,server,nowait \
+      -serial telnet::6551,server &
+
+    Boot up the VM and login to console using telnet port (in the above example port 6551).
+    This VM will have 1 default port. To hotplug the vhost-user port, issue the following
+    gnmi-cli command:
+
+      $ gnmi-cli set PARAMS
+      $ Command to hotplug add the port. Example:
+      $ gnmi-cli set "device:virtual-device,name:net_vhost0,hotplug:add,
+                      qemu-socket-ip:127.0.0.1,qemu-socket-port:6555,
+                      qemu-vm-mac:00:e8:ca:11:aa:01,qemu-vm-netdev-id:netdev0,
+                      qemu-vm-chardev-id:char1,native-socket-path:/tmp/intf/vhost-user-0,
+                      qemu-vm-device-id:dev0"
+      $ Command to hotplug delete the port. Example:
+      $ gnmi-cli set "device:virtual-device,name:net_vhost0,hotplug:del"
+.. note::
+
+   ``PARAMS``: These params are key:value pairs. Here virtual-device is a
+    sub-node which holds multiple ports like net_vhost0, net_vhost1,... and
+    each port accepts multiple config params. These config params are again a
+    key:value pair, either can be passed in single CLI command or multiple
+    CLI commands.
+    name: can take values defined in chassis config file. Refer to file
+    dpdk_port_config.pb.txt for port names.
+    hotplug: Specify if the device needs to be hotplugged (add/ADD for hotplug
+    add, del/DEL for hotplug delete)
+    qemu-socket-ip: Specify IP of the host where qemu monitor socket resides.
+    qemu-socket-port: Specify qemu monitor socket port
+    qemu-vm_mac: Specify MAC address for port hotplugged to qemu VM
+    qemu-vm_netdev-id: Specify netdev ID for port hotplugged to qemu VM
+    qemu-vm_chardev-id: Specify chardev ID for port hotplugged to qemu VM
+    native-socket-path: Specify the native path for vhost-user socket on host
+    qemu-vm-device-id: Specify device ID for port hotplugged to qemu VM
+
+   Port can be hotplug added once and hotplug deleted once. Re-adding or
+   deleting the port is not supported in older qemu versions due to qemu bug
+   reporting false duplicate IDs. This bug is fixed in qemu version 6.1.0 and
+   re-adding and re-deleting the hotplug port is supported from qemu version
+   6.1.0
+
