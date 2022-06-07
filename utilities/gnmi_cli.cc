@@ -161,7 +161,7 @@ void build_gnmi_path(std::string path_str, ::gnmi::Path* path) {
   return sub_req;
 }
 
-bool extract_interface_node(char **path, char *node_path) {
+bool extract_interface_node(char **path, char *node_path, bool *vhost_dev) {
   char *key =  NULL;
   char *value =  NULL;
   int found_node = 0;
@@ -171,6 +171,14 @@ bool extract_interface_node(char **path, char *node_path) {
           snprintf(node_path+strlen(node_path),
                    strlen(FLAGS_device_type_virtual_interface.c_str())+1, "%s",
                    FLAGS_device_type_virtual_interface.c_str());
+          //Validate the device value
+          if (strcmp(value,"virtual-device") != 0) {
+              return -1;
+          }
+          if(strcmp(value,"virtual-device") == 0) {
+              std::cout << "setting vhost_dev = true.";
+              *vhost_dev = true;
+          }
           found_node += 1;
       }
       if (strcmp(key, FLAGS_name_key.c_str()) == 0) {
@@ -215,6 +223,7 @@ void traverse_params(char **path, char *node_path, char *config_value, bool &fla
     ::gnmi::SubscribeRequest, ::gnmi::SubscribeResponse>* stream_reader_writer;
 
 int Main(int argc, char** argv) {
+  bool vhost_device = false;
   if (argc < 2) {
     std::cout << kUsage << std::endl;
     std::cout << "Invalid number of arguments.";
@@ -247,8 +256,8 @@ int Main(int argc, char** argv) {
   bool params = true;
 
   ovs_strzcpy(buffer, FLAGS_root_node.c_str(), MAX_STR_LENGTH);
-  if (extract_interface_node(&path, buffer)) {
-    std::cout << "Couldnt extract device and name information";
+  if (extract_interface_node(&path, buffer, &vhost_device)) {
+    std::cout << "Invalid device and name information";
     return 0;
   }
 
@@ -271,6 +280,11 @@ int Main(int argc, char** argv) {
 
       strcpy(path1, buffer);
       traverse_params(&path, path1, config_value, params);
+      //If device is 'virtual-device' and port type is 'link', consider it as 'vhost' type.
+      if(((strcmp(config_value,"link") == 0) || (strcmp(config_value,"LINK") == 0))
+          &&(vhost_device == true)) {
+           strcpy(config_value, "vhost");
+      }
       if (params) {
         auto stub = ::gnmi::gNMI::NewStub(channel);
         ::grpc::ClientContext ctx;

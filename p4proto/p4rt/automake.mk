@@ -16,7 +16,7 @@ EXTRA_DIST += p4proto/p4rt
 EXTRA_DIST += external/googleapis
 EXTRA_DIST += external/gnmi/gnmi.proto
 EXTRA_DIST += external/gnmi_ext/gnmi_ext.proto
-EXTRA_DIST += external/dpdk_vhost_config.pb.txt
+EXTRA_DIST += external/dpdk_port_config.pb.txt
 
 p4rt_PROTOBUF_GEN_FILES = \
     stratum/stratum/public/proto/error.pb.cc \

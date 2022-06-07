@@ -42,9 +42,9 @@ echo "Manually copy the target_skip_p4_no_bsp.conf file"
 cp $WORKSPACE_DIR/stratum/stratum/hal/bin/barefoot/tofino_skip_p4_no_bsp.conf \
 /usr/share/stratum/target_skip_p4_no_bsp.conf
 
-echo "Manually copy the dpdk_vhost_config.pb.txt file"
-cp $WORKSPACE_DIR/external/dpdk_vhost_config.pb.txt \
-/usr/share/stratum/dpdk_vhost_config.pb.txt
+echo "Manually copy the dpdk_port_config.pb.txt file"
+cp $WORKSPACE_DIR/external/dpdk_port_config.pb.txt \
+/usr/share/stratum/dpdk_port_config.pb.txt
 
 mkdir -p /usr/share/target_sys
 echo "Manually copy the zlog-cfg file"

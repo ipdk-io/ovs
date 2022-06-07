@@ -25,7 +25,7 @@
 #include "gnmi_publisher.h"
 #include "bfIntf/bf_interface.h"
 
-DEFINE_string(openconfig_chassis_config_file, "/usr/share/stratum/dpdk_vhost_config.pb.txt",
+DEFINE_string(openconfig_chassis_config_file, "/usr/share/stratum/dpdk_port_config.pb.txt",
               "The latest verified ChassisConfig proto pushed to the switch. "
               "This proto is (re-)generated based on the pushed YANG proto and "
               "includes the overall running config at any point of time. "

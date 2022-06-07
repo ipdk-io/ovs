@@ -620,7 +620,7 @@ AC_DEFUN([OVS_CHECK_P4TDI], [
         ])
     else
       AC_LINK_IFELSE(
-        [AC_LANG_PROGRAM([#include <target_sys/bf_sal/bf_sys_intf.h>
+        [AC_LANG_PROGRAM([#include <target-sys/bf_sal/bf_sys_intf.h>
                           #include <bf_switchd/lib/bf_switchd_lib_init.h>],
                          [bf_switchd_context_t *switchd_ctx;
                           bf_switchd_lib_init(switchd_ctx);])],

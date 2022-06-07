@@ -25,16 +25,24 @@
 #define GNMI_CONFIG_QUEUE_COUNT 0x04
 #define GNMI_CONFIG_SOCKET_PATH 0x08
 #define GNMI_CONFIG_HOST_NAME 0x10
-#define GNMI_CONFIG_HOTPLUG_SOCKET_IP 0x20
-#define GNMI_CONFIG_HOTPLUG_SOCKET_PORT 0x40
-#define GNMI_CONFIG_HOTPLUG_STATUS 0x80
-#define GNMI_CONFIG_HOTPLUG_VM_MAC 0x100
-#define GNMI_CONFIG_HOTPLUG_VM_NETDEV_ID 0x200
-#define GNMI_CONFIG_HOTPLUG_VM_CHARDEV_ID 0x400
+#define GNMI_CONFIG_PIPELINE_NAME 0x20
+#define GNMI_CONFIG_MEMPOOL_NAME 0x40
+#define GNMI_CONFIG_MTU_VALUE 0x80
 
-#define GNMI_CONFIG_TDI (GNMI_CONFIG_PORT_TYPE | GNMI_CONFIG_DEVICE_TYPE | \
-                         GNMI_CONFIG_QUEUE_COUNT | GNMI_CONFIG_SOCKET_PATH | \
-                         GNMI_CONFIG_HOST_NAME)
+#define GNMI_CONFIG_VHOST (GNMI_CONFIG_PORT_TYPE | GNMI_CONFIG_DEVICE_TYPE | \
+                           GNMI_CONFIG_QUEUE_COUNT | GNMI_CONFIG_SOCKET_PATH | \
+                           GNMI_CONFIG_HOST_NAME)
+
+
+#define GNMI_CONFIG_TAP (GNMI_CONFIG_PORT_TYPE)
+
+// Independant TAP ports shouldn't have the below params.
+#define GNMI_CONFIG_UNSUPPORTED_MASK_TAP (GNMI_CONFIG_DEVICE_TYPE | GNMI_CONFIG_QUEUE_COUNT | \
+                                          GNMI_CONFIG_SOCKET_PATH | GNMI_CONFIG_HOST_NAME)
+
+#define DEFAULT_PIPELINE "pipe"
+#define DEFAULT_MEMPOOL  "MEMPOOL0"
+#define DEFAULT_MTU      1500
 
 #define GNMI_CONFIG_HOTPLUG (GNMI_CONFIG_HOTPLUG_SOCKET_IP | GNMI_CONFIG_HOTPLUG_SOCKET_PORT | \
                              GNMI_CONFIG_HOTPLUG_STATUS | GNMI_CONFIG_HOTPLUG_VM_MAC | \
@@ -147,12 +155,8 @@ class BfChassisManager {
     int32 queues;
     std::string socket_path;
     std::string host_name;
-    std::string qemu_socket_ip;
-    int32 qemu_socket_port;
-    SWBackendQemuHotplugStatus qemu_hotplug_status;
-    uint64 qemu_vm_mac_address;
-    std::string qemu_vm_netdev_id;
-    std::string qemu_vm_chardev_id;
+    std::string pipeline_name;
+    std::string mempool_name;
 
     PortConfig() : admin_state(ADMIN_STATE_UNKNOWN),
                    port_type(PORT_TYPE_NONE),
