@@ -18,9 +18,9 @@
 namespace stratum {
 namespace hal {
 
-GnmiPublisher::GnmiPublisher(BfChassisManager *bf_chassis_manager)
-    : bf_chassis_manager_(ABSL_DIE_IF_NULL(bf_chassis_manager)),
-      parse_tree_(ABSL_DIE_IF_NULL(bf_chassis_manager)),
+GnmiPublisher::GnmiPublisher(TdiChassisManager *tdi_chassis_manager)
+    : tdi_chassis_manager_(ABSL_DIE_IF_NULL(tdi_chassis_manager)),
+      parse_tree_(ABSL_DIE_IF_NULL(tdi_chassis_manager)),
       event_channel_(nullptr),
       on_config_pushed_(
           new EventHandlerRecord(on_config_pushed_func_, nullptr)) {
@@ -265,12 +265,12 @@ void* GnmiPublisher::ThreadReadGnmiEvents(void* arg) {
   absl::WriterMutexLock l(&access_lock_);
   // If we have not done that yet, create notification event Channel, register
   // it, and create Reader thread.
-  if (event_channel_ == nullptr && bf_chassis_manager_ != nullptr) {
+  if (event_channel_ == nullptr && tdi_chassis_manager_ != nullptr) {
     event_channel_ = Channel<GnmiEventPtr>::Create(kMaxGnmiEventDepth);
     // Create and register writer to channel with the BcmSdkInterface.
     auto writer = std::make_shared<ChannelWriterWrapper<GnmiEventPtr>>(
         ChannelWriter<GnmiEventPtr>::Create(event_channel_));
-    RETURN_IF_ERROR(bf_chassis_manager_->RegisterEventNotifyWriter(writer));
+    RETURN_IF_ERROR(tdi_chassis_manager_->RegisterEventNotifyWriter(writer));
     RETURN_IF_ERROR(parse_tree_.RegisterEventNotifyWriter(writer));
     // Create and hand-off Reader to new reader thread.
     pthread_t event_reader_tid;
@@ -298,9 +298,9 @@ void* GnmiPublisher::ThreadReadGnmiEvents(void* arg) {
   absl::WriterMutexLock l(&access_lock_);
   ::util::Status status = ::util::OkStatus();
   // Unregister the Event Notify Channel from the SwitchInterface.
-  if (event_channel_ == nullptr && bf_chassis_manager_ != nullptr) {
+  if (event_channel_ == nullptr && tdi_chassis_manager_ != nullptr) {
     APPEND_STATUS_IF_ERROR(status,
-                           bf_chassis_manager_->UnregisterEventNotifyWriter());
+                           tdi_chassis_manager_->UnregisterEventNotifyWriter());
     APPEND_STATUS_IF_ERROR(status, parse_tree_.UnregisterEventNotifyWriter());
     // Close Channel.
     if (!event_channel_->Close()) {

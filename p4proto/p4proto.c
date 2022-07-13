@@ -26,7 +26,7 @@
 #include "p4proto.h"
 
 #ifdef P4SAI
-#include "switchlink/switchlink.h"
+#include "p4proto/kctrl/switchlink/switchlink.h"
 #endif
 
 #include "p4proto-provider.h"
@@ -43,7 +43,7 @@ const bool bf_switchd_background = true;
 VLOG_DEFINE_THIS_MODULE(p4proto);
 
 /*TODO: Define SWITCHLINK_ENABLE flag?*/
-//extern int switchlink_init(void);
+extern void *switchlink_main(void *);
 
 /* This URL is used by external gNMI, gNOI and P4Runtime clients.
  * TCP port 9339 is an IANA-reserved port for gNMI and gNOI.
@@ -79,6 +79,11 @@ p4proto_init(void)
     int rc;
     int status = 0;
 
+    status = bf_p4_init(bf_sde_install, bf_switchd_cfg, bf_switchd_background);
+    if (status != 0){
+        VLOG_ERR("Not able to initialize the bf_switchd_lib, error %d", status);
+    }
+
     /* TODO:
       1. Maintain with_switchlink, with_switchsai and with_p4proto in
          configure script and pass flags via Makefile/CLI
@@ -89,33 +94,29 @@ p4proto_init(void)
       3. Figure out steps required to configure adapter-specific
          initializations before switchlink calls, if any?
     */
-   #ifdef P4SAI
+#ifdef P4SAI
+
    bool with_switchlink =true;
 
     /* TODO: Conditional check - ifdef SWITCHLINK_ENABLE? */
    if (with_switchlink) {
-        rc = pthread_create(&switchlink_tid, NULL, switchlink_init, NULL);
+        rc = pthread_create(&switchlink_tid, NULL, switchlink_main, NULL);
         if (rc) {
-            VLOG_DBG("Switchlink thread creation failed, error %d", rc);
+            VLOG_ERR("Switchlink thread creation failed, error %d", rc);
             return;
         }
 
-        pthread_setname_np(switchlink_tid, "switchlink_init");
+        pthread_setname_np(switchlink_tid, "switchlink_main");
         VLOG_DBG("Switchlink thread with ID %lu spawned", switchlink_tid);
     }
-    #endif
-
+#endif
     unixctl_command_register("p4device/dump-cache", "[p4-device-id/all]", 1, 1,
                              p4proto_dump_cache, NULL);
 
-    status = bf_p4_init(bf_sde_install, bf_switchd_cfg, bf_switchd_background);
-    if (status != 0){
-        VLOG_ERR("Not able to initialize the bf_switchd_lib, error %d", status);
-    }
 
     rc = pthread_create(&p4_server_tid, NULL, p4_server_start, NULL);
     if (rc) {
-        VLOG_DBG("P4 Server thread creation failed, error %d", rc);
+        VLOG_ERR("P4 Server thread creation failed, error %d", rc);
         return;
     }
 

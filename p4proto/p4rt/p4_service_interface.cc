@@ -40,7 +40,7 @@ std::unique_ptr<::stratum::hal::ConfigMonitoringService>
                                     config_monitoring_service_ = NULL;
 
 using namespace ::stratum::barefoot;
-BfInterface* bfIntf;
+TdiInterface* tdiIntf;
 
 /* Set the channel arguments to match the defualt keep-alive parameters set by
  * the google3 side net/grpc clients. */
@@ -88,15 +88,15 @@ enum status_code p4_server_init(const char* port_details)
 }
 
 /* An API that does  P4 service registration and starts the P4 server.
- * This API also instantiates the BfInterface singletion class for
+ * This API also instantiates the TdiInterface singletion class for
  * interacting with the southbond interface of the Bfnode C wrapper library. */
 enum status_code p4_server_run(void)
 {
     enum status_code status = SUCCESS;
 
-    // Assumption: BfInterface is already created and Init() by P4-proto module.
-    bfIntf = ::stratum::barefoot::BfInterface::GetSingleton();
-    if(bfIntf == nullptr) {
+    // Assumption: TdiInterface is already created and Init() by P4-proto module.
+    tdiIntf = ::stratum::barefoot::TdiInterface::GetSingleton();
+    if(tdiIntf == nullptr) {
        return  NULL_BFINTF;
     }
 
@@ -119,7 +119,7 @@ enum status_code p4_server_run(void)
     config_monitoring_service_ =
                               absl::make_unique<::stratum::hal::ConfigMonitoringService>(
                                         stratum::hal::OPERATION_MODE_STANDALONE,
-                                        BfInterface::GetSingleton()->bf_chassis_manager_.get(),
+                                        TdiInterface::GetSingleton()->tdi_chassis_manager_.get(),
                                         auth_policy_checker.get(),
                                         error_buffer);
     if (config_monitoring_service_ == nullptr) {

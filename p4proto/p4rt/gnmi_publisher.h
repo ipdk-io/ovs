@@ -77,7 +77,7 @@ class GnmiPublisher {
   static constexpr int kMaxGnmiEventDepth = 256;
 
   // Constructor.
-  explicit GnmiPublisher(BfChassisManager*);
+  explicit GnmiPublisher(TdiChassisManager*);
 
   virtual ~GnmiPublisher();
 
@@ -182,7 +182,7 @@ class GnmiPublisher {
 
   // A pointer to implementation of the Switch Interface - the API used to
   // communicate with the switch.
-  BfChassisManager* bf_chassis_manager_ GUARDED_BY(access_lock_);
+  TdiChassisManager* tdi_chassis_manager_ GUARDED_BY(access_lock_);
 
   // A Mutex used to guard access to the list of pointers to handlers.
   mutable absl::Mutex access_lock_;

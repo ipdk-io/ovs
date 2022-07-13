@@ -150,9 +150,9 @@ AC_CONFIG_FILES([
     p4proto/libp4proto.sym
     p4proto/p4rt/libp4rt.sym
     p4proto/bfIntf/libbfIntf.sym
-    switchlink/libswitchlink.sym
-    switchsai/libswitchsai.sym
-    switchapi/libswitchapi.sym
+    p4proto/kctrl/switchlink/libswitchlink.sym
+    p4proto/kctrl/switchsai/libswitchsai.sym
+    p4proto/kctrl/switchapi/libswitchapi.sym
     lib/libsflow.sym
     lib/libopenvswitch.sym
     vtep/libvtep.sym])
@@ -219,9 +219,9 @@ AC_CONFIG_FILES(ofproto/libofproto.pc)
 AC_CONFIG_FILES(p4proto/libp4proto.pc)
 AC_CONFIG_FILES(p4proto/p4rt/libp4rt.pc)
 AC_CONFIG_FILES(p4proto/bfIntf/libbfIntf.pc)
-AC_CONFIG_FILES(switchlink/libswitchlink.pc)
-AC_CONFIG_FILES(switchsai/libswitchsai.pc)
-AC_CONFIG_FILES(switchapi/libswitchapi.pc)
+AC_CONFIG_FILES(p4proto/kctrl/switchlink/libswitchlink.pc)
+AC_CONFIG_FILES(p4proto/kctrl/switchsai/libswitchsai.pc)
+AC_CONFIG_FILES(p4proto/kctrl/switchapi/libswitchapi.pc)
 AC_CONFIG_FILES(ovsdb/libovsdb.pc)
 AC_CONFIG_FILES(include/openvswitch/version.h)
 

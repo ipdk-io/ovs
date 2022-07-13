@@ -10,7 +10,10 @@ lib_LTLIBRARIES += lib/libopenvswitch.la
 lib_libopenvswitch_la_LIBADD = $(SSL_LIBS)
 lib_libopenvswitch_la_LIBADD += $(CAPNG_LDADD)
 lib_libopenvswitch_la_LIBADD += $(LIBBPF_LDADD)
-
+#if P4SAI
+lib_libopenvswitch_la_LIBADD += p4proto/kctrl/switchlink/libswitchlink.la
+lib_libopenvswitch_la_LIBADD += p4proto/kctrl/switchsai/libswitchsai.la
+#endif
 
 if WIN32
 lib_libopenvswitch_la_LIBADD += ${PTHREAD_LIBS}

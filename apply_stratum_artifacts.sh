@@ -1,4 +1,3 @@
-#!/bin/bash
 # Copyright (c) 2021 Intel Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#! /bin/bash
 
 if [ -z "$1" ]
 then
     echo "- Missing mandatory argument:"
-    echo " - Usage: . apply_stratum_artifacts.sh <SDE_INSTALL> "
+    echo " - Usage: source apply_stratum_artifacts.sh <SDE_INSTALL> "
     exit 1
 fi
 

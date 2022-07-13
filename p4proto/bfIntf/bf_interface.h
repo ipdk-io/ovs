@@ -5,13 +5,22 @@
 #ifndef STRATUM_LIB_BAREFOOT_BF_INTERFACE_H_
 #define STRATUM_LIB_BAREFOOT_BF_INTERFACE_H_
 
-// Define C functions to access BfInterface C++ class.
+// Define C functions to access TdiInterface C++ class.
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include <stdbool.h>
 #include <stddef.h>
+
+#include "osdep/p4_sde_osdep.h"
+#include "bf_types/bf_types.h"
+#ifdef P4TOFINO
+#include "tofino/bf_pal/bf_pal_port_intf.h"
+#else
+#include "bf_pal/bf_pal_port_intf.h"
+#endif
+
 #define PORT_NAME_LEN 64
 #define MAC_STRING_LEN 32
 
@@ -45,7 +54,7 @@ int bf_p4_add_port(uint64_t device, int64_t port,
 }  // extern "C"
 #endif
 
-// Define BfInterface C++ class.
+// Define TdiInterface C++ class.
 
 #ifdef __cplusplus
 
@@ -72,9 +81,9 @@ namespace barefoot {
 using namespace ::stratum::hal;
 using namespace ::stratum::hal::barefoot;
 
-// TODO(bocon): The "BfSdeInterface" class in HAL implements a shim layer
+// TODO(bocon): The "TdiSdeInterface" class in HAL implements a shim layer
 // around the Barefoot
-class BfInterface {
+class TdiInterface {
  public:
   ::absl::Status InitSde(const std::string& bf_sde_install,
                          const std::string& bf_switchd_cfg,
@@ -82,22 +91,22 @@ class BfInterface {
 
   // Creates the singleton instance. Expected to be called once to initialize
   // the instance.
-  static BfInterface* CreateSingleton() LOCKS_EXCLUDED(init_lock_);
+  static TdiInterface* CreateSingleton() LOCKS_EXCLUDED(init_lock_);
 
   // Return the singleton instance to be used in the SDE callbacks.
-  static BfInterface* GetSingleton() LOCKS_EXCLUDED(init_lock_);
+  static TdiInterface* GetSingleton() LOCKS_EXCLUDED(init_lock_);
 
-  // BfRt Managers.
-  std::unique_ptr<BfrtTableManager> bfrt_table_manager_;
-  std::unique_ptr<BfrtActionProfileManager> bfrt_action_profile_manager_;
-  std::unique_ptr<BfrtPacketioManager> bfrt_packetio_manager_;
-  std::unique_ptr<BfrtPreManager> bfrt_pre_manager_;
-  std::unique_ptr<BfrtCounterManager> bfrt_counter_manager_;
-  // TODO: We are going to extend bfrt_node[] as an array
-  std::unique_ptr<BfrtNode> bfrt_node_;
-  //TODO: Linking device_id_to_bfrt_node_ to point to proper bfrt_node_.
-  std::map<int, BfrtNode*> device_id_to_bfrt_node_;
-  std::unique_ptr<BfChassisManager> bf_chassis_manager_;
+  // TdiRt Managers.
+  std::unique_ptr<TdiTableManager> tdi_table_manager_;
+  std::unique_ptr<TdiActionProfileManager> tdi_action_profile_manager_;
+  std::unique_ptr<TdiPacketioManager> tdi_packetio_manager_;
+  std::unique_ptr<TdiPreManager> tdi_pre_manager_;
+  std::unique_ptr<TdiCounterManager> tdi_counter_manager_;
+  // TODO: We are going to extend tdi_node[] as an array
+  std::unique_ptr<TdiNode> tdi_node_;
+  //TODO: Linking device_id_to_tdi_node_ to point to proper tdi_node_.
+  std::map<int, TdiNode*> device_id_to_tdi_node_;
+  std::unique_ptr<TdiChassisManager> tdi_chassis_manager_;
 
  protected:
 
@@ -108,7 +117,7 @@ class BfInterface {
   static absl::Mutex init_lock_;
 
   // The singleton instance.
-  static BfInterface* singleton_ GUARDED_BY(init_lock_);
+  static TdiInterface* singleton_ GUARDED_BY(init_lock_);
 };
 
 }  // namespace barefoot

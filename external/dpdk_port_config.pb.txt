@@ -584,3 +584,99 @@ singleton_ports {
   }
   node: 1
 }
+singleton_ports {
+  id: 1300
+  name: "PORT0"
+  slot: 1
+  port: 13
+  channel: 1
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1301
+  name: "PORT1"
+  slot: 1
+  port: 13
+  channel: 2
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1302
+  name: "PORT2"
+  slot: 1
+  port: 13
+  channel: 3
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1303
+  name: "PORT3"
+  slot: 1
+  port: 13
+  channel: 4
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1400
+  name: "PORT4"
+  slot: 1
+  port: 14
+  channel: 1
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1401
+  name: "PORT5"
+  slot: 1
+  port: 14
+  channel: 2
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1402
+  name: "PORT6"
+  slot: 1
+  port: 1
+  channel: 3
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}
+singleton_ports {
+  id: 1403
+  name: "PORT7"
+  slot: 1
+  port: 14
+  channel: 4
+  speed_bps: 10000000000
+  config_params {
+    admin_state: ADMIN_STATE_ENABLED
+  }
+  node: 1
+}

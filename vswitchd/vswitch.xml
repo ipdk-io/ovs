@@ -2527,6 +2527,10 @@
         seamless integration with protocols such as SNMP and sFlow.
       </column>
 
+      <column name="target_dp_index">
+        A positive target datapath interface index, if the interface has one, otherwise 0.
+      </column>
+
       <column name="mac_in_use">
         The MAC address in use by this interface.
       </column>

@@ -453,8 +453,13 @@ lswitch_choose_destination(struct lswitch *sw, const struct flow *flow)
     if (sw->ml) {
         ovs_rwlock_wrlock(&sw->ml->rwlock);
         if (mac_learning_may_learn(sw->ml, flow->dl_src, 0)) {
+#if P4SAI
+            struct mac_entry *mac = mac_learning_insert(sw->ml, flow->dl_src,
+                                                        0, NULL);
+#else
             struct mac_entry *mac = mac_learning_insert(sw->ml, flow->dl_src,
                                                         0);
+#endif
             if (get_mac_entry_ofp_port(sw->ml, mac)
                 != flow->in_port.ofp_port) {
                 VLOG_DBG_RL(&rl, "%016llx: learned that "ETH_ADDR_FMT" is on "

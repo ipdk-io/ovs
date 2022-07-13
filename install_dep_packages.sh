@@ -82,6 +82,26 @@ make "$NUM_THREADS"
 sudo make "$NUM_THREADS" install
 sudo ldconfig
 
+#gtest source code Repo checkout, Build and Install
+MODULE="googletest"
+echo "####  Cloning, Building and Installing the '$MODULE' module ####"
+mkdir -p "${SRC_DIR}"/"$MODULE"
+git clone  https://github.com/google/googletest.git -b release-1.11.0 "${SRC_DIR}"/"$MODULE"
+cd "$SRC_DIR"/"$MODULE"
+mkdir -p "$SRC_DIR"/"$MODULE"/build
+cd "$SRC_DIR"/"$MODULE"/build
+cmake -DBUILD_SHARED_LIBS=ON "$CMAKE_PREFIX" ..
+make "$NUM_THREADS"
+sudo make "$NUM_THREADS" install
+sudo ldconfig
+
+#gmock-global source code Repo checkout, Build and Install
+MODULE="gmock-global"
+echo "####  Cloning, Building and Installing the '$MODULE' module ####"
+mkdir -p "${SRC_DIR}"/"$MODULE"
+git clone  https://github.com/apriorit/gmock-global-sample.git "${SRC_DIR}"/"$MODULE"
+sudo ldconfig
+
 #glog source code Repo checkout, Build and Install
 MODULE="glog"
 echo "####  Cloning, Building and Installing the '$MODULE' module ####"
@@ -91,7 +111,7 @@ cd "$SRC_DIR"/"$MODULE"
 git checkout 503e3dec8d1fe071376befc62119a837c26612a3
 mkdir -p "$SRC_DIR"/"$MODULE/"build
 cd "$SRC_DIR"/"$MODULE"/build
-cmake "$CMAKE_PREFIX" ..
+cmake $CMAKE_PREFIX -Dgflags_DIR:PATH="$INSTALL_DIR"/lib/cmake/gflags ..
 make "$NUM_THREADS"
 sudo make "$NUM_THREADS" install
 sudo ldconfig

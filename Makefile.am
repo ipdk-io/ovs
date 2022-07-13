@@ -90,7 +90,7 @@ EXTRA_DIST = \
 	LICENSE \
 	MAINTAINERS.rst \
 	README.rst \
-	NOTICE \
+    NOTICE \
 	.ci/linux-build.sh \
 	.ci/linux-prepare.sh \
 	.ci/osx-build.sh \
@@ -100,6 +100,7 @@ EXTRA_DIST = \
 	.travis.yml \
 	appveyor.yml \
 	boot.sh \
+	run_ovs.sh \
 	poc/builders/Vagrantfile \
 	poc/playbook-centos-builder.yml \
 	poc/playbook-fedora-builder.yml \
@@ -118,10 +119,149 @@ EXTRA_DIST = \
 	build-p4ovs.sh \
 	component.sh \
 	fix_sde_libs.sh \
-        OVS-WITH-P4-BUILD-README \
-	external/PATCH-01-TOFINO \
 	OVS_WITH_P4_ARCH.rst \
 	CONTRIBUTING_P4OVS.rst \
+	OVS-WITH-P4-BUILD-README \
+	external/PATCH-01-TOFINO \
+	external/PATCH-01-GRPC-BORINGSSL \
+        ptf_tests/p4runtime_test/run_p4_tests.sh \
+        ptf_tests/p4runtime_test/run_ptf_tests.py \
+        ptf_tests/p4runtime_test/simple_l3/README \
+        ptf_tests/p4runtime_test/simple_l3/simple_l3.py \
+	ptf_tests/p4runtime_test/simple_l3/simple_l3.p4 \
+	ptf_tests/p4runtime_test/simple_l3/port_info.json \
+	ptf_tests/ovs_p4ctl/README \
+	ptf_tests/ovs_p4ctl/ctl_module_setup.sh \
+	ptf_tests/ovs_p4ctl/run_p4_tests.sh \
+	ptf_tests/ovs_p4ctl/run_ptf_tests.py \
+	ptf_tests/ovs_p4ctl/ovsp4ctl/LICENSE.txt \
+	ptf_tests/ovs_p4ctl/ovsp4ctl/README.rst \
+	ptf_tests/ovs_p4ctl/ovsp4ctl/setup.py \
+	ptf_tests/ovs_p4ctl/ovsp4ctl/ovsp4ctl/__init__.py \
+	ptf_tests/ovs_p4ctl/ovsp4ctl/ovsp4ctl/ovs_p4ctl.py \
+	ptf_tests/ovs_p4ctl/simple_l3_ovsctl/README \
+	ptf_tests/ovs_p4ctl/simple_l3_ovsctl/__init__.py \
+	ptf_tests/ovs_p4ctl/simple_l3_ovsctl/port_info.json \
+	ptf_tests/ovs_p4ctl/simple_l3_ovsctl/simplel3.py \
+	ptf_tests/requirements.txt \
+	ptf_tests/__init__.py \
+	ptf_tests/README.md \
+	ptf_tests/pre_test.sh \
+	ptf_tests/p4ovs_test_runner.py \
+	ptf_tests/tests_to_run.txt \
+	ptf_tests/common/__init__.py \
+	ptf_tests/common/config/l3_exact_match_with_tap.json \
+	ptf_tests/common/config/l3_action_selector_with_tap_test2.json \
+	ptf_tests/common/config/l2_exact_match_with_tap.json \
+	ptf_tests/common/config/l3_action_profile_with_tap_ports.json \
+	ptf_tests/common/config/l3_action_selector_with_tap_test1.json \
+	ptf_tests/common/config/l3_wcm_with_tap_test.json \
+	ptf_tests/common/config/port_dump_link_port_only.json \
+	ptf_tests/common/config/port_dump_mixed_no_default_val.json \
+	ptf_tests/common/config/port_dump_tap_only_out_order.json \
+	ptf_tests/common/config/port_dump_vhost_only_in_order.json \
+	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.p4 \
+	ptf_tests/common/config/l3_exact_match_with_vhost.json \
+	ptf_tests/common/config/l3_exact_match_with_vhost_add_del.json \
+	ptf_tests/common/config/l2_exact_match_with_link.json \
+	ptf_tests/common/config/DPDK_Hot_Plug.json \
+	ptf_tests/common/config/DPDK_Hot_Plug_multi_port_test.json \
+	ptf_tests/common/config/DPDK_Hot_Plug_Remove.json \
+	ptf_tests/common/config/DPDK_Hot_Plug_Remove_Multi_port.json \
+	ptf_tests/common/config/DPDK_Hot_Plug_Add_Remove_multiple_times.json \
+	ptf_tests/common/config/show_tap_port_mtu.json \
+	ptf_tests/common/config/l3_wcm_with_link_port.json \
+	ptf_tests/common/config/max_tap_port.json \
+	ptf_tests/common/config/max_vhost_port.json \
+        ptf_tests/common/config/l3_action_profile_with_vhost_test1.json \
+        ptf_tests/common/config/l3_action_selector_with_vhost_test1.json \
+        ptf_tests/common/config/l3_action_profile_with_link_test1.json \
+        ptf_tests/common/config/l3_action_selector_with_link_test1.json \
+	ptf_tests/common/config/mtu_config_test_with_tap.json \
+        ptf_tests/common/config/port_tap_link_counter.json \
+	ptf_tests/common/config/l2_dpdk_port_flapping_with_tap.json \
+	ptf_tests/common/config/l3_dpdk_port_flapping_with_vhost.json \
+	ptf_tests/common/config/ctrl_port_counter_with_vhost.json \
+	ptf_tests/common/config/l3_wcm_del_add_test.json \
+	ptf_tests/common/config/lnt_4vm_on_same_host.json \
+	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.p4 \
+	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.conf \
+	ptf_tests/common/p4c_artifacts/l3_action_selector/l3_action_selector.p4 \
+	ptf_tests/common/p4c_artifacts/l3_action_selector/l3_action_selector.conf \
+	ptf_tests/common/p4c_artifacts/l3_exact_match/l3_exact_match.conf \
+	ptf_tests/common/p4c_artifacts/l3_exact_match/l3_exact_match.p4 \
+	ptf_tests/common/p4c_artifacts/l2_exact_match/l2_exact_match.conf \
+	ptf_tests/common/p4c_artifacts/l2_exact_match/l2_exact_match.p4 \
+	ptf_tests/common/p4c_artifacts/simple_l2l3_wcm/simple_l2l3_wcm.conf \
+	ptf_tests/common/p4c_artifacts/simple_l2l3_wcm/simple_l2l3_wcm.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/headers.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/linux_networking.conf \
+    ptf_tests/common/p4c_artifacts/linux_networking/linux_networking.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/lnw_ct.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/metadata.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/parser.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/pipe/.gitkeep \
+    ptf_tests/common/p4c_artifacts/linux_networking/routing.p4 \
+    ptf_tests/common/p4c_artifacts/linux_networking/tunnel.p4 \
+	ptf_tests/common/lib/__init__.py \
+	ptf_tests/common/lib/local_connection.py \
+	ptf_tests/common/lib/ovs_p4ctl.py \
+	ptf_tests/common/lib/exceptions.py \
+	ptf_tests/common/lib/port_config.py \
+	ptf_tests/common/lib/telnet_connection.py \
+	ptf_tests/common/lib/ovs.py \
+	ptf_tests/common/lib/ssh.py \
+	ptf_tests/common/utils/ovsp4ctl_utils.py \
+	ptf_tests/common/utils/__init__.py \
+	ptf_tests/common/utils/test_utils.py \
+	ptf_tests/common/utils/config_file_utils.py \
+	ptf_tests/common/utils/gnmi_cli_utils.py \
+	ptf_tests/common/utils/ovs_utils.py \
+	ptf_tests/tests/l2_exact_match_with_tap_port.py \
+	ptf_tests/tests/__init.py__ \
+	ptf_tests/tests/l3_action_profile_with_tap_ports.py \
+	ptf_tests/tests/l3_exact_match_with_tap_port.py \
+	ptf_tests/tests/l3_action_selector_with_tap_ports.py \
+	ptf_tests/tests/l3_wcm_with_tap_ports.py \
+	ptf_tests/tests/port_dump_link_port_only.py \
+	ptf_tests/tests/port_dump_mixed_no_default_val.py \
+	ptf_tests/tests/port_dump_tap_only_out_order.py \
+	ptf_tests/tests/port_dump_vhost_only_in_order.py \
+	ptf_tests/tests/l3_exact_match_with_vhost.py \
+	ptf_tests/tests/l3_exact_match_with_vhost_add_del.py \
+	ptf_tests/tests/l2_exact_match_with_link_port.py \
+	ptf_tests/tests/DPDK_Hot_Plug.py \
+	ptf_tests/tests/DPDK_Hot_Plug_multi_port_test.py \
+	ptf_tests/tests/DPDK_Hot_Plug_Remove_Multi_port.py \
+	ptf_tests/tests/DPDK_Hot_Plug_Remove.py \
+	ptf_tests/tests/DPDK_Hot_Plug_Add_Remove_multiple_times.py \
+	ptf_tests/tests/show_tap_port_mtu.py \
+	ptf_tests/tests/l3_wcm_with_link_port.py \
+	ptf_tests/tests/l2_dpdk_port_flapping_with_tap_ports.py \
+	ptf_tests/tests/l3_dpdk_port_flapping_with_vhost_ports.py \
+	ptf_tests/tests/max_tap_port.py \
+	ptf_tests/tests/ctrl_port_counter_with_vhost.py \
+	ptf_tests/tests/max_vhost_port.py \
+	ptf_tests/tests/l3_wcm_del_add.py \
+        ptf_tests/tests/lnt_4vm_on_same_host.py \
+	ptf_tests/common/lib/tcpdump.py \
+        ptf_tests/common/utils/tcpdump_utils.py \
+	ptf_tests/tests/mtu_config_test_with_tap.py \
+        ptf_tests/tests/port_tap_link_counter.py \
+	ptf_tests/tests/l3_action_profile_with_vhost_ports.py \
+        ptf_tests/tests/l3_action_selector_with_vhost_ports.py \
+	ptf_tests/tests/l3_action_profile_with_link_ports.py \
+        ptf_tests/tests/l3_action_selector_with_link_ports.py \
+	ptf_tests/p4runtime_test/run_p4_tests.sh \
+	ptf_tests/p4runtime_test/run_ptf_tests.py \
+	ptf_tests/p4runtime_test/simple_l3/simple_l3.p4 \
+	ptf_tests/p4runtime_test/simple_l3/simple_l3.py \
+	ptf_tests/p4runtime_test/simple_l3/README \
+	ptf_tests/p4runtime_test/simple_l3/port_info.json \
+	unit_test/CMakeLists.txt\
+        unit_test/gtest_main.cpp\
+        unit_test/test_switchlink_sai.cpp\
+        unit_test/vlog_mock.c\
 	.mailmap
 bin_PROGRAMS =
 sbin_PROGRAMS =
@@ -328,7 +468,7 @@ check-endian:
 	@if test -e $(srcdir)/.git && (git --version) >/dev/null 2>&1 && \
 	  (cd $(srcdir) && git --no-pager grep -l -E \
 	   -e 'BIG_ENDIAN|LITTLE_ENDIAN' --and --not -e 'BYTE_ORDER' | \
-	  $(EGREP) -v '^switchlink/|^datapath/|^include/sparse/rte_'); \
+	  $(EGREP) -v '^p4proto/kctrl/switchlink/|^datapath/|^include/sparse/rte_'); \
 	then \
 	  echo "See above for list of files that misuse LITTLE""_ENDIAN"; \
 	  echo "or BIG""_ENDIAN.  Please use WORDS_BIGENDIAN instead."; \
@@ -518,9 +658,9 @@ include p4proto/automake.mk
 endif
 
 if P4SAI
-include switchapi/automake.mk
-include switchsai/automake.mk
-include switchlink/automake.mk
+include p4proto/kctrl/switchapi/automake.mk
+include p4proto/kctrl/switchsai/automake.mk
+include p4proto/kctrl/switchlink/automake.mk
 endif
 
 include utilities/automake.mk

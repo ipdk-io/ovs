@@ -77,7 +77,10 @@ p4proto_bfIntf_libbfIntf_la_SOURCES += \
     stratum/stratum/hal/lib/p4/p4_info_manager.cc \
     stratum/stratum/lib/timer_daemon.cc \
     stratum/stratum/hal/lib/common/utils.cc \
-    stratum/stratum/hal/lib/barefoot/bfrt_switch.cc
+    stratum/stratum/hal/lib/barefoot/bfrt_switch.cc \
+    stratum/stratum/hal/lib/barefoot/bfrt_action_profile_manager.h \
+    stratum/stratum/hal/lib/barefoot/bfrt_action_profile_manager.cc \
+    stratum/stratum/hal/lib/barefoot/bfrt_constants.h
 
 BUILT_SOURCES += $(bfIntf_PROTOBUF_GENFILES)
 

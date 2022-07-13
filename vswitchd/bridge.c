@@ -479,6 +479,7 @@ bridge_init(const char *remote)
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_link_resets);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_mac_in_use);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_ifindex);
+    ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_target_dp_index);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_mtu);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_ofport);
     ovsdb_idl_omit_alert(idl, &ovsrec_interface_col_statistics);
@@ -2118,7 +2119,9 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     int error;
 #ifdef P4OVS
     uint64_t device_id = 0;
-    struct port_properties_t port_props;
+    int sdk_port_id = 0;
+    int64_t target_port_id = 0;
+    struct port_info_t *port_info = NULL;
 #endif
 
     /* Do the bits that can fail up front. */
@@ -2155,17 +2158,21 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     iface_refresh_netdev_status(iface);
 
 #ifdef P4OVS
-    /* Make sure attributes structure is initialized to empty values */
-    memset((void*)&port_props, 0, sizeof(port_properties_t));
-
-    port_attrs_prepare(&port_props, iface_cfg);
-    device_id = get_device_id_from_bridge_name(br->name);
+    if(!(device_id = get_device_id_from_bridge_name(br->name))) {
+        VLOG_ERR("device_id = 0; Not a valid device");
+        return false;
+    }
 
     /* Add Port config to target through P4 SDE, iff Port is not internal */
     if (!(iface_is_internal(iface_cfg, br->cfg))) {
-        VLOG_INFO("bridge %s: device-id:%"PRIu64" added with interface " \
-              "index:%"PRIu64, br->name, device_id, *iface_cfg->ifindex);
-        bf_p4_add_port(device_id, *iface_cfg->ifindex, &port_props);
+        bf_pal_get_port_id_from_name(device_id, iface_cfg->name, &sdk_port_id);
+        bf_pal_port_info_get(device_id, sdk_port_id, &port_info);
+        target_port_id = port_info->port_attrib.port_out_id;
+        ovsrec_interface_set_target_dp_index(iface_cfg, &target_port_id, 1);
+        VLOG_INFO("bridge %s - device-id:%"PRIu64" added with interface:%s "
+                  "having sdk_port_id:%"PRIu32" and target_dp_index:%"PRIu64,
+                   br->name, device_id, iface_cfg->name, sdk_port_id,
+                  *iface_cfg->target_dp_index);
     }
 #endif
 

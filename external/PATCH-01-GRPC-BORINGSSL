@@ -1,0 +1,31 @@
+diff --git a/crypto/x509/x509_test.cc b/crypto/x509/x509_test.cc
+index 0c5fc2d7f..e3d2f49e5 100644
+--- a/crypto/x509/x509_test.cc
++++ b/crypto/x509/x509_test.cc
+@@ -709,7 +709,7 @@ TEST(X509Test, ZeroLengthsWithX509PARAM) {
+
+   std::vector<X509_CRL *> empty_crls;
+
+-  struct Test {
++  struct X509Test {
+     const char *correct_value;
+     size_t correct_value_len;
+     const char *incorrect_value;
+@@ -717,7 +717,7 @@ TEST(X509Test, ZeroLengthsWithX509PARAM) {
+     int (*func)(X509_VERIFY_PARAM *, const char *, size_t);
+     int mismatch_error;
+   };
+-  const std::vector<Test> kTests = {
++  const std::vector<X509Test> kTests = {
+       {kHostname, strlen(kHostname), kWrongHostname, strlen(kWrongHostname),
+        X509_VERIFY_PARAM_set1_host, X509_V_ERR_HOSTNAME_MISMATCH},
+       {kEmail, strlen(kEmail), kWrongEmail, strlen(kWrongEmail),
+@@ -726,7 +726,7 @@ TEST(X509Test, ZeroLengthsWithX509PARAM) {
+
+   for (size_t i = 0; i < kTests.size(); i++) {
+     SCOPED_TRACE(i);
+-    const Test &test = kTests[i];
++    const X509Test &test = kTests[i];
+
+     // The correct value should work.
+     ASSERT_EQ(X509_V_OK,

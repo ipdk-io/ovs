@@ -29,6 +29,16 @@
 #include "unaligned.h"
 #include "util.h"
 #include "vlan-bitmap.h"
+#if P4SAI
+#include <net/if.h>
+#include <sai.h>
+#include <saifdb.h>
+#include <saitypes.h>
+#include <saistatus.h>
+#include "p4proto/kctrl/switchlink/switchlink_db.h"
+#include "p4proto/kctrl/switchlink/switchlink.h"
+#include "p4proto/kctrl/switchsai/saiinternal.h"
+#endif
 
 COVERAGE_DEFINE(mac_learning_learned);
 COVERAGE_DEFINE(mac_learning_expired);
@@ -320,6 +330,60 @@ mac_learning_may_learn(const struct mac_learning *ml,
     return ml && is_learning_vlan(ml, vlan) && !eth_addr_is_multicast(src_mac);
 }
 
+#if P4SAI
+static void
+mac_learning_configure_target(const struct eth_addr src_mac,
+                             mac_info_t *value,
+                             switchlink_handle_t *tnl_intf_h,
+                             switchlink_entry_type_e entry_type) {
+    sai_fdb_entry_t fdb_entry;
+    sai_fdb_api_t *ovs_fdb_api = NULL;
+
+    if (sai_api_query(SAI_API_FDB, (void **)&ovs_fdb_api) != SAI_STATUS_SUCCESS)
+        return;
+
+    if (entry_type >= SWITCHLINK_FDB_MAX)
+        return;
+
+    memset(&fdb_entry, 0, sizeof(fdb_entry));
+    memcpy(&fdb_entry.mac_address, &src_mac.ea, sizeof(sai_mac_t));
+
+    if (entry_type == SWITCHLINK_FDB_ADD && value && value->is_tunnel_port) {
+        uint32_t ac = 0;
+        sai_attribute_t attr_list[2];
+
+        memset(&attr_list, 0, sizeof(attr_list));
+        attr_list[ac].id = SAI_FDB_ENTRY_ATTR_BRIDGE_PORT_ID;
+        attr_list[ac].value.oid = *tnl_intf_h;
+        ac++;
+        attr_list[ac].id = SAI_FDB_ENTRY_ATTR_META_DATA;
+        attr_list[ac].value.u16 = SAI_L2_FWD_LEARN_TUNNEL_INTERFACE;
+        ac++;
+
+        ovs_fdb_api->create_fdb_entry(&fdb_entry, ac, attr_list);
+    } else if (entry_type == SWITCHLINK_FDB_ADD && value) {
+        uint32_t ac = 0;
+        sai_attribute_t attr_list[2];
+
+        memset(&attr_list, 0, sizeof(attr_list));
+        attr_list[ac].id = SAI_FDB_ENTRY_ATTR_BRIDGE_PORT_ID;
+        attr_list[ac].value.oid = value->data.port_id - 1;
+        ac++;
+        attr_list[ac].id = SAI_FDB_ENTRY_ATTR_META_DATA;
+        attr_list[ac].value.u16 = SAI_L2_FWD_LEARN_VLAN_INTERFACE;
+        ac++;
+
+        ovs_fdb_api->create_fdb_entry(&fdb_entry, ac, attr_list);
+    } else if (entry_type == SWITCHLINK_FDB_DEL) {
+        ovs_fdb_api->remove_fdb_entry(&fdb_entry);
+    } else {
+        return;
+    }
+
+    return;
+}
+#endif
+
 /* Searches 'ml' for and returns a MAC learning entry for 'src_mac' in 'vlan',
  * inserting a new entry if necessary.  If entry being added is a
  *  1. cache entry: caller must have already verified, by calling
@@ -330,10 +394,16 @@ mac_learning_may_learn(const struct mac_learning *ml,
  * If the returned MAC entry is new (that is, if it has a NULL client-provided
  * port, as returned by mac_entry_get_port()), then the caller must initialize
  * the new entry's port to a nonnull value with mac_entry_set_port(). */
+#if P4SAI
+static struct mac_entry *
+mac_learning_insert__(struct mac_learning *ml, const struct eth_addr src_mac,
+                      uint16_t vlan, bool is_static, mac_info_t *value)
+    OVS_REQ_WRLOCK(ml->rwlock)
+#else
 static struct mac_entry *
 mac_learning_insert__(struct mac_learning *ml, const struct eth_addr src_mac,
                       uint16_t vlan, bool is_static)
-    OVS_REQ_WRLOCK(ml->rwlock)
+#endif
 {
     struct mac_entry *e;
 
@@ -379,31 +449,74 @@ mac_learning_insert__(struct mac_learning *ml, const struct eth_addr src_mac,
         e->expires = time_now() + ml->idle_time;
     }
 
+#if P4SAI
+    switchlink_db_tunnel_interface_info_t tnl_intf;
+
+    if (!value) {
+        return e;
+    }
+
+    if (value->is_tunnel_port) {
+        if (switchlink_db_tunnel_interface_get_info(value->data.ifindex,
+                                                    &tnl_intf) ==
+            SWITCHLINK_DB_STATUS_SUCCESS) {
+            mac_learning_configure_target(src_mac, value, &tnl_intf.orif_h,
+                                         SWITCHLINK_FDB_ADD);
+        }
+    } else {
+        mac_learning_configure_target(src_mac, value, 0, SWITCHLINK_FDB_ADD);
+    }
+#endif
+
     return e;
 }
 
 /* Adds a new dynamic mac entry to fdb. */
+#if P4SAI
+struct mac_entry *
+mac_learning_insert(struct mac_learning *ml,
+                    const struct eth_addr src_mac, uint16_t vlan,
+                    mac_info_t *value)
+    OVS_REQ_WRLOCK(ml->rwlock)
+{
+    return mac_learning_insert__(ml, src_mac, vlan, false, value);
+}
+#else
 struct mac_entry *
 mac_learning_insert(struct mac_learning *ml,
                     const struct eth_addr src_mac, uint16_t vlan)
+    OVS_REQ_WRLOCK(ml->rwlock)
 {
     return mac_learning_insert__(ml, src_mac, vlan, false);
 }
+#endif
 
 /* Adds a new static mac entry to fdb.
  *
  * Returns 'true' if  mac entry is inserted, 'false' otherwise. */
+#if P4SAI
+bool
+mac_learning_add_static_entry(struct mac_learning *ml,
+                              const struct eth_addr src_mac, uint16_t vlan,
+                              void *in_port, mac_info_t *value)
+    OVS_EXCLUDED(ml->rwlock)
+#else
 bool
 mac_learning_add_static_entry(struct mac_learning *ml,
                               const struct eth_addr src_mac, uint16_t vlan,
                               void *in_port)
     OVS_EXCLUDED(ml->rwlock)
+#endif
 {
     struct mac_entry *mac = NULL;
     bool inserted = false;
 
     ovs_rwlock_wrlock(&ml->rwlock);
+#if P4SAI
+    mac = mac_learning_insert__(ml, src_mac, vlan, true, value);
+#else
     mac = mac_learning_insert__(ml, src_mac, vlan, true);
+#endif
     if (mac) {
         mac_entry_set_port(ml, mac, in_port);
         inserted = true;
@@ -510,11 +623,19 @@ is_mac_learning_update_needed(const struct mac_learning *ml,
  *
  * Keep the code here synchronized with that in is_mac_learning_update_needed()
  * above. */
+#if P4SAI
+static bool
+update_learning_table__(struct mac_learning *ml, struct eth_addr src,
+                        int vlan, bool is_gratuitous_arp, bool is_bond,
+                        void *in_port, mac_info_t *value)
+    OVS_REQ_WRLOCK(ml->rwlock)
+#else
 static bool
 update_learning_table__(struct mac_learning *ml, struct eth_addr src,
                         int vlan, bool is_gratuitous_arp, bool is_bond,
                         void *in_port)
     OVS_REQ_WRLOCK(ml->rwlock)
+#endif
 {
     struct mac_entry *mac;
 
@@ -522,7 +643,11 @@ update_learning_table__(struct mac_learning *ml, struct eth_addr src,
         return false;
     }
 
+#if P4SAI
+    mac = mac_learning_insert(ml, src, vlan, value);
+#else
     mac = mac_learning_insert(ml, src, vlan);
+#endif
     if (is_gratuitous_arp) {
         /* Gratuitous ARP packets received over non-bond interfaces could be
          * reflected back over bond members.  We don't want to learn from these
@@ -556,11 +681,20 @@ update_learning_table__(struct mac_learning *ml, struct eth_addr src,
  * 'is_bond' is 'true'.
  *
  * Returns 'true' if 'ml' was updated, 'false' otherwise. */
+
+#if P4SAI
+bool
+mac_learning_update(struct mac_learning *ml, struct eth_addr src,
+                    int vlan, bool is_gratuitous_arp, bool is_bond,
+                    void *in_port, mac_info_t *value)
+    OVS_EXCLUDED(ml->rwlock)
+#else
 bool
 mac_learning_update(struct mac_learning *ml, struct eth_addr src,
                     int vlan, bool is_gratuitous_arp, bool is_bond,
                     void *in_port)
     OVS_EXCLUDED(ml->rwlock)
+#endif
 {
     bool need_update;
     bool updated = false;
@@ -577,8 +711,13 @@ mac_learning_update(struct mac_learning *ml, struct eth_addr src,
         if (need_update) {
             /* Slow path: MAC learning table might need an update. */
             ovs_rwlock_wrlock(&ml->rwlock);
+#if P4SAI
+            updated = update_learning_table__(ml, src, vlan, is_gratuitous_arp,
+                                              is_bond, in_port, value);
+#else
             updated = update_learning_table__(ml, src, vlan, is_gratuitous_arp,
                                               is_bond, in_port);
+#endif
             ovs_rwlock_unlock(&ml->rwlock);
         }
     }
@@ -611,6 +750,10 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
     mac_entry_set_port(ml, e, NULL);
     hmap_remove(&ml->table, &e->hmap_node);
     ovs_list_remove(&e->lru_node);
+#if P4SAI
+    mac_learning_configure_target(e->mac, NULL, 0, SWITCHLINK_FDB_DEL);
+#endif
+
     free(e);
 }
 

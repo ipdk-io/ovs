@@ -40,13 +40,13 @@ namespace hal {
 using namespace ::stratum::barefoot;
 
 ConfigMonitoringService::ConfigMonitoringService(
-    OperationMode mode, BfChassisManager* bf_chassis_manager,
+    OperationMode mode, TdiChassisManager* tdi_chassis_manager,
     AuthPolicyChecker* auth_policy_checker, ErrorBuffer* error_buffer)
     : running_chassis_config_(nullptr),
       mode_(mode),
       auth_policy_checker_(ABSL_DIE_IF_NULL(auth_policy_checker)),
       error_buffer_(ABSL_DIE_IF_NULL(error_buffer)),
-      gnmi_publisher_(bf_chassis_manager) {
+      gnmi_publisher_(tdi_chassis_manager) {
   if (TimerDaemon::Start() != ::util::OkStatus()) {
     LOG(ERROR) << "Could not start the timer subsystem.";
   }
@@ -60,7 +60,7 @@ ConfigMonitoringService::~ConfigMonitoringService() {
 
 ::util::Status ConfigMonitoringService::Setup(bool warmboot) {
   ::util::Status status = gnmi_publisher_.RegisterEventWriter();
-                       //bf_chassis_manager_->RegisterEventNotifyWriter(writer);
+                       //tdi_chassis_manager_->RegisterEventNotifyWriter(writer);
   if (!status.ok()) {
     error_buffer_->AddError(
         status, "Could not start the gNMI notification subsystem: ", GTL_LOC);
@@ -122,14 +122,14 @@ ConfigMonitoringService::~ConfigMonitoringService() {
   // Push the config to hardware only if it is a coltboot setup.
   if (!warmboot) {
 
-    ::util::Status status = BfInterface::GetSingleton()->bf_chassis_manager_->PushChassisConfig(*config);
+    ::util::Status status = TdiInterface::GetSingleton()->tdi_chassis_manager_->PushChassisConfig(*config);
     if (!status.ok()) {
       error_buffer_->AddError(status,
                               "Pushing saved chassis config failed: ", GTL_LOC);
       return status;
     }
 
-    status = BfInterface::GetSingleton()->bfrt_node_->PushChassisConfig(*config, BfInterface::GetSingleton()->bfrt_node_->node_id_);
+    status = TdiInterface::GetSingleton()->tdi_node_->PushChassisConfig(*config, TdiInterface::GetSingleton()->tdi_node_->node_id_);
     if (!status.ok()) {
       error_buffer_->AddError(status,
                               "Pushing saved chassis config failed: ", GTL_LOC);
@@ -265,7 +265,7 @@ bool ContainsUniqueNames(const T& values) {
 
 #if 0
     // TODO, check when we support config reply
-    status = BfInterface::GetSingleton()->bf_chassis_manager_->PushChassisConfig(*config);
+    status = TdiInterface::GetSingleton()->tdi_chassis_manager_->PushChassisConfig(*config);
     if (!status.ok()) {
       error_buffer_->AddError(status,
                               "Pushing saved chassis config failed: ", GTL_LOC);
@@ -273,7 +273,7 @@ bool ContainsUniqueNames(const T& values) {
                             status.error_message());
     }
 #endif
-    status = BfInterface::GetSingleton()->bfrt_node_->PushChassisConfig(*config,BfInterface::GetSingleton()->bfrt_node_->node_id_);
+    status = TdiInterface::GetSingleton()->tdi_node_->PushChassisConfig(*config,TdiInterface::GetSingleton()->tdi_node_->node_id_);
     if (!status.ok()) {
       error_buffer_->AddError(status,
                               "Pushing chassis config failed: ", GTL_LOC);

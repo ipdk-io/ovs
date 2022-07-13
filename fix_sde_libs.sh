@@ -7,7 +7,7 @@ then
     exit 1
 fi
 SDE_INSTALL_PATH=$1
-la_files=("$SDE_INSTALL_PATH"/lib/*.la)
+la_files=($1/lib/*.la)
 for i in "${la_files[@]}"; do
     echo $i
     libdir=$(awk -F "=" '/libdir/ {print $2}' $i)

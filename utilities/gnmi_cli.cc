@@ -172,7 +172,8 @@ bool extract_interface_node(char **path, char *node_path, bool *vhost_dev) {
                    strlen(FLAGS_device_type_virtual_interface.c_str())+1, "%s",
                    FLAGS_device_type_virtual_interface.c_str());
           //Validate the device value
-          if (strcmp(value,"virtual-device") != 0) {
+          if((strcmp(value,"virtual-device") != 0) &&
+             (strcmp(value,"physical-device") != 0)) {
               return -1;
           }
           if(strcmp(value,"virtual-device") == 0) {

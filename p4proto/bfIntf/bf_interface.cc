@@ -32,15 +32,6 @@ defined [-Wundef] #if !GOOGLE_BASE_HAS_INITGOOGLE
 #include "stratum/hal/lib/common/common.pb.h"
 #include "stratum/lib/utils.h"
 #include <string>
-extern "C" {
-#include "bf_types/bf_types.h"
-#include "bf_types/bf_types.h"
-#ifdef P4TOFINO
-#include "tofino/bf_pal/bf_pal_port_intf.h"
-#else
-#include "bf_pal/bf_pal_port_intf.h"
-#endif
-}
 
 #if 0
 DEFINE_string(chassis_config_file, "/root/dpdk_chassis_config.pb.txt",
@@ -69,14 +60,14 @@ namespace {
 
 }  // namespace
 
-::absl::Status BfInterface::InitSde(const std::string& bf_sde_install,
+::absl::Status TdiInterface::InitSde(const std::string& bf_sde_install,
                                     const std::string& bf_switchd_cfg,
                                     bool bf_switchd_background) {
 
   util::Status status = ::util::OkStatus();
 
-  auto bf_sde_wrapper = BfSdeWrapper::CreateSingleton();
-  bf_sde_wrapper->InitializeSde(bf_sde_install,
+  auto tdi_sde_wrapper = TdiSdeWrapper::CreateSingleton();
+  tdi_sde_wrapper->InitializeSde(bf_sde_install,
   bf_switchd_cfg, bf_switchd_background);
   if (!status.ok()) {
       return absl::InternalError(
@@ -87,7 +78,7 @@ namespace {
   // components with "device_id" instead of "node_id".
   int device_id = 0;
 
-  auto result = bf_sde_wrapper->IsSoftwareModel(device_id);
+  auto result = tdi_sde_wrapper->IsSoftwareModel(device_id);
   bool is_sw_model;
   if (result.ok())
     is_sw_model = result.ValueOrDie();
@@ -96,40 +87,40 @@ namespace {
   const OperationMode mode =
       is_sw_model ? OPERATION_MODE_SIM : OPERATION_MODE_STANDALONE;
   LOG(INFO) << "Detected is_sw_model: " << is_sw_model;
-  LOG(INFO) << "SDE version: " << bf_sde_wrapper->GetSdeVersion();
+  LOG(INFO) << "SDE version: " << tdi_sde_wrapper->GetSdeVersion();
 
-  bfrt_table_manager_ =
-      BfrtTableManager::CreateInstance(mode, bf_sde_wrapper, device_id);
-  bfrt_action_profile_manager_ =
-      BfrtActionProfileManager::CreateInstance(bf_sde_wrapper, device_id);
-  bfrt_packetio_manager_ =
-      BfrtPacketioManager::CreateInstance(bf_sde_wrapper, device_id);
-  bfrt_pre_manager_ = BfrtPreManager::CreateInstance(bf_sde_wrapper, device_id);
-  bfrt_counter_manager_ =
-      BfrtCounterManager::CreateInstance(bf_sde_wrapper, device_id);
-  bfrt_node_ = BfrtNode::CreateInstance(
-      bfrt_table_manager_.get(), bfrt_action_profile_manager_.get(),
-      bfrt_packetio_manager_.get(), bfrt_pre_manager_.get(),
-      bfrt_counter_manager_.get(), bf_sde_wrapper, device_id);
-  bf_chassis_manager_ =
-      BfChassisManager::CreateInstance(mode, bf_sde_wrapper);
+  tdi_table_manager_ =
+      TdiTableManager::CreateInstance(mode, tdi_sde_wrapper, device_id);
+  tdi_action_profile_manager_ =
+      TdiActionProfileManager::CreateInstance(tdi_sde_wrapper, device_id);
+  tdi_packetio_manager_ =
+      TdiPacketioManager::CreateInstance(tdi_sde_wrapper, device_id);
+  tdi_pre_manager_ = TdiPreManager::CreateInstance(tdi_sde_wrapper, device_id);
+  tdi_counter_manager_ =
+      TdiCounterManager::CreateInstance(tdi_sde_wrapper, device_id);
+  tdi_node_ = TdiNode::CreateInstance(
+      tdi_table_manager_.get(), tdi_action_profile_manager_.get(),
+      tdi_packetio_manager_.get(), tdi_pre_manager_.get(),
+      tdi_counter_manager_.get(), tdi_sde_wrapper, device_id);
+  tdi_chassis_manager_ =
+      TdiChassisManager::CreateInstance(mode, tdi_sde_wrapper);
 
   return absl::OkStatus();
 }
 
-BfInterface* BfInterface::singleton_ = nullptr;
-ABSL_CONST_INIT absl::Mutex BfInterface::init_lock_(absl::kConstInit);
+TdiInterface* TdiInterface::singleton_ = nullptr;
+ABSL_CONST_INIT absl::Mutex TdiInterface::init_lock_(absl::kConstInit);
 
-BfInterface* BfInterface::CreateSingleton() {
+TdiInterface* TdiInterface::CreateSingleton() {
   absl::WriterMutexLock l(&init_lock_);
   if (!singleton_) {
-    singleton_ = new BfInterface();
+    singleton_ = new TdiInterface();
   }
 
   return singleton_;
 }
 
-BfInterface* BfInterface::GetSingleton() {
+TdiInterface* TdiInterface::GetSingleton() {
   absl::ReaderMutexLock l(&init_lock_);
   return singleton_;
 }
@@ -137,7 +128,7 @@ BfInterface* BfInterface::GetSingleton() {
 }  // namespace barefoot
 }  // namespace stratum
 
-using ::stratum::barefoot::BfInterface;
+using ::stratum::barefoot::TdiInterface;
 
 // A macro that converts an absl::Status to an int and returns it.
 #define RETURN_STATUS(status) return static_cast<int>(status.code())
@@ -146,8 +137,8 @@ int bf_p4_init(const char* bf_sde_install, const char* bf_switchd_cfg,
                bool bf_switchd_background) {
   // Check if the SDE has already been initialized; presumably if the singleton
   // has been created.
-  if (BfInterface::GetSingleton() != nullptr) return -1;
-  RETURN_STATUS(BfInterface::CreateSingleton()->InitSde(
+  if (TdiInterface::GetSingleton() != nullptr) return -1;
+  RETURN_STATUS(TdiInterface::CreateSingleton()->InitSde(
       bf_sde_install, bf_switchd_cfg, bf_switchd_background));
   return 0;
 }

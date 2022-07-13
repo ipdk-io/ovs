@@ -565,13 +565,13 @@ AC_DEFUN([OVS_CHECK_P4TDI], [
                 [libbfutils libbfsys libdriver],
                 [P4TDI_INCLUDE="$P4TDI_CFLAGS"],
                 [P4TDI_INCLUDE="-I/usr/local/include -I/usr/include"
-                 P4TDI_LIB="-lbfsys -lbfutils -ldriver -lpython3.8 -lstdc++"])
+                 P4TDI_LIB="-lbfsys -lbfutils -ldriver -lpython3.8 -lstdc++ -lcjson"])
         else
             PKG_CHECK_MODULES([P4TDI],
                 [libtarget_utils libtarget_sys libdriver libbf_switchd_lib libdpdk_infra],
                 [P4TDI_INCLUDE="$P4TDI_CFLAGS"],
                 [P4TDI_INCLUDE="-I/usr/local/include -I/usr/include"
-                 P4TDI_LIB="-lbf_switchd_lib -ltarget_sys -ltarget_utils -ldriver -lstdc++ -ldpdk_infra"])
+                 P4TDI_LIB="-lbf_switchd_lib -ltarget_sys -ltarget_utils -ldriver -lstdc++ -ldpdk_infra -lcjson -ltdi -ltdi_json_parser"])
         fi
         ;;
       *)
@@ -588,9 +588,9 @@ AC_DEFUN([OVS_CHECK_P4TDI], [
     save_LIBS=$LIBS
 
     if test "$with_tofino" = yes; then
-        P4TDI_LIB="-lbfsys -lbfutils -ldriver -lpython3.8 -lstdc++"
+        P4TDI_LIB="-lbfsys -lbfutils -ldriver -lpython3.8 -lstdc++ -lcjson"
     else
-        P4TDI_LIB="-lbf_switchd_lib -ltarget_sys -ltarget_utils -ldriver -lpython3.8 -lstdc++ -ldpdk_infra"
+        P4TDI_LIB="-lbf_switchd_lib -ltarget_sys -ltarget_utils -ldriver -lpython3.8 -lstdc++ -ldpdk_infra -lcjson -ltdi -ltdi_json_parser"
     fi
     CFLAGS="$CFLAGS $P4TDI_INCLUDE"
     LIBS="$P4TDI_LIB $save_LIBS"

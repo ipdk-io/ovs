@@ -28,21 +28,63 @@
 #define GNMI_CONFIG_PIPELINE_NAME 0x20
 #define GNMI_CONFIG_MEMPOOL_NAME 0x40
 #define GNMI_CONFIG_MTU_VALUE 0x80
+#define GNMI_CONFIG_PCI_BDF_VALUE 0x100
+#define GNMI_CONFIG_HOTPLUG_SOCKET_IP 0x200
+#define GNMI_CONFIG_HOTPLUG_SOCKET_PORT 0x400
+#define GNMI_CONFIG_HOTPLUG_VAL 0x800
+#define GNMI_CONFIG_HOTPLUG_VM_MAC 0x1000
+#define GNMI_CONFIG_HOTPLUG_VM_NETDEV_ID 0x2000
+#define GNMI_CONFIG_HOTPLUG_VM_CHARDEV_ID 0x4000
+#define GNMI_CONFIG_NATIVE_SOCKET_PATH 0x8000
+#define GNMI_CONFIG_HOTPLUG_VM_DEVICE_ID 0x10000
+#define GNMI_CONFIG_PACKET_DIR 0x20000
+
+#define GNMI_CONFIG_PORT_DONE 0x10000000
+#define GNMI_CONFIG_HOTPLUG_DONE 0x20000000
 
 #define GNMI_CONFIG_VHOST (GNMI_CONFIG_PORT_TYPE | GNMI_CONFIG_DEVICE_TYPE | \
                            GNMI_CONFIG_QUEUE_COUNT | GNMI_CONFIG_SOCKET_PATH | \
                            GNMI_CONFIG_HOST_NAME)
 
+#define GNMI_CONFIG_LINK (GNMI_CONFIG_PORT_TYPE | GNMI_CONFIG_PCI_BDF_VALUE)
 
 #define GNMI_CONFIG_TAP (GNMI_CONFIG_PORT_TYPE)
 
+// VHOST ports shouldn't be configured with PCI BDF value.
+#define GNMI_CONFIG_UNSUPPORTED_MASK_VHOST (GNMI_CONFIG_PCI_BDF_VALUE)
+
+// Independant LINK ports shouldn't have the below params.
+#define GNMI_CONFIG_UNSUPPORTED_MASK_LINK (GNMI_CONFIG_DEVICE_TYPE | GNMI_CONFIG_QUEUE_COUNT | \
+                                           GNMI_CONFIG_SOCKET_PATH | GNMI_CONFIG_HOST_NAME)
+
 // Independant TAP ports shouldn't have the below params.
 #define GNMI_CONFIG_UNSUPPORTED_MASK_TAP (GNMI_CONFIG_DEVICE_TYPE | GNMI_CONFIG_QUEUE_COUNT | \
-                                          GNMI_CONFIG_SOCKET_PATH | GNMI_CONFIG_HOST_NAME)
+                                          GNMI_CONFIG_SOCKET_PATH | GNMI_CONFIG_HOST_NAME | \
+                                          GNMI_CONFIG_PCI_BDF_VALUE)
+
+#define GNMI_CONFIG_HOTPLUG_ADD (GNMI_CONFIG_HOTPLUG_SOCKET_IP | GNMI_CONFIG_HOTPLUG_SOCKET_PORT | \
+                                 GNMI_CONFIG_HOTPLUG_VAL | GNMI_CONFIG_HOTPLUG_VM_MAC | \
+                                 GNMI_CONFIG_HOTPLUG_VM_NETDEV_ID | GNMI_CONFIG_HOTPLUG_VM_CHARDEV_ID | \
+                                 GNMI_CONFIG_NATIVE_SOCKET_PATH | GNMI_CONFIG_HOTPLUG_VM_DEVICE_ID)
+
+/* SDK_PORT_CONTROL_BASE is used as CONTOL BASE offset to define
+ * reserved port range for the control ports.
+ */
+#define SDK_PORT_CONTROL_BASE 256
 
 #define DEFAULT_PIPELINE "pipe"
 #define DEFAULT_MEMPOOL  "MEMPOOL0"
 #define DEFAULT_MTU      1500
+#define DEFAULT_PACKET_DIR DIRECTION_HOST
+
+typedef enum qemu_cmd_type {
+   CHARDEV_ADD,
+   NETDEV_ADD,
+   DEVICE_ADD,
+   CHARDEV_DEL,
+   NETDEV_DEL,
+   DEVICE_DEL
+} qemu_cmd_type;
 
 namespace stratum {
 namespace hal {
@@ -54,9 +96,9 @@ using namespace ::stratum::hal::barefoot;
 // Lock which protects chassis state across the entire switch.
 extern absl::Mutex chassis_lock;
 
-class BfChassisManager {
+class TdiChassisManager {
  public:
-  virtual ~BfChassisManager();
+  virtual ~TdiChassisManager();
 
   virtual ::util::Status PushChassisConfig(const ChassisConfig& config)
       EXCLUSIVE_LOCKS_REQUIRED(chassis_lock);
@@ -98,9 +140,9 @@ class BfChassisManager {
       SHARED_LOCKS_REQUIRED(chassis_lock);
 
   // Factory function for creating the instance of the class.
-  static std::unique_ptr<BfChassisManager> CreateInstance(
+  static std::unique_ptr<TdiChassisManager> CreateInstance(
       OperationMode mode,
-      BfSdeInterface* bf_sde_interface);
+      TdiSdeInterface* tdi_sde_interface);
 
   bool ValidateOnetimeConfig(uint64 node_id, uint32 port_id,
                              SetRequest::Request::Port::ValueCase config);
@@ -109,23 +151,43 @@ class BfChassisManager {
                                 const SingletonPort& singleton_port,
                                 SetRequest::Request::Port::ValueCase change_field);
 
-  // BfChassisManager is neither copyable nor movable.
-  BfChassisManager(const BfChassisManager&) = delete;
-  BfChassisManager& operator=(const BfChassisManager&) = delete;
-  BfChassisManager(BfChassisManager&&) = delete;
-  BfChassisManager& operator=(BfChassisManager&&) = delete;
+  ::util::Status HotplugValidateAndAdd(uint64 node_id, uint32 port_id,
+                                       const SingletonPort& singleton_port,
+                                       SetRequest::Request::Port::ValueCase change_field,
+                                       SWBackendHotplugParams params);
+
+  // TdiChassisManager is neither copyable nor movable.
+  TdiChassisManager(const TdiChassisManager&) = delete;
+  TdiChassisManager& operator=(const TdiChassisManager&) = delete;
+  TdiChassisManager(TdiChassisManager&&) = delete;
+  TdiChassisManager& operator=(TdiChassisManager&&) = delete;
 
 
  protected:
   // Default constructor. To be called by the Mock class instance only.
-  BfChassisManager();
+  TdiChassisManager();
 
  private:
   // ReaderArgs encapsulates the arguments for a Channel reader thread.
   template <typename T>
   struct ReaderArgs {
-    BfChassisManager* manager;
+    TdiChassisManager* manager;
     std::unique_ptr<ChannelReader<T>> reader;
+  };
+
+  struct HotplugConfig {
+    uint32 qemu_socket_port;
+    uint64 qemu_vm_mac_address;
+    std::string qemu_socket_ip;
+    std::string qemu_vm_netdev_id;
+    std::string qemu_vm_chardev_id;
+    std::string qemu_vm_device_id;
+    std::string native_socket_path;
+    SWBackendQemuHotplugStatus qemu_hotplug;
+
+    HotplugConfig() : qemu_socket_port(0),
+                      qemu_vm_mac_address(0),
+                      qemu_hotplug(NO_HOTPLUG) {}
   };
 
   struct PortConfig {
@@ -142,16 +204,21 @@ class BfChassisManager {
 
     SWBackendPortType port_type;
     SWBackendDeviceType device_type;
+    SWBackendPktDirType packet_dir;
     int32 queues;
     std::string socket_path;
     std::string host_name;
     std::string pipeline_name;
     std::string mempool_name;
+    std::string control_port;
+    std::string pci_bdf;
+    HotplugConfig hotplug_config;
 
     PortConfig() : admin_state(ADMIN_STATE_UNKNOWN),
                    port_type(PORT_TYPE_NONE),
                    device_type(DEVICE_TYPE_NONE),
-                   queues(0) {}
+                   queues(0),
+                   packet_dir (DIRECTION_HOST) {}
   };
 
   // Maximum depth of port status change event channel.
@@ -160,8 +227,8 @@ class BfChassisManager {
 
   // Private constructor. Use CreateInstance() to create an instance of this
   // class.
-  BfChassisManager(OperationMode mode,
-                   BfSdeInterface* bf_sde_interface);
+  TdiChassisManager(OperationMode mode,
+                   TdiSdeInterface* tdi_sde_interface);
 
   ::util::StatusOr<const PortConfig*> GetPortConfig(uint64 node_id,
                                                     uint32 port_id) const
@@ -176,16 +243,26 @@ class BfChassisManager {
   ::util::StatusOr<uint32> GetSdkPortId(uint64 node_id, uint32 port_id) const
       SHARED_LOCKS_REQUIRED(chassis_lock);
 
+  // Returns the port in id and port out id required to configure pipeline
+  ::util::Status GetTargetDatapathId(uint64 node_id, uint32 port_id,
+                                     TargetDatapathId* target_dp_id)
+      SHARED_LOCKS_REQUIRED(chassis_lock);
+
   // Cleans up the internal state. Resets all the internal port maps and
   // deletes the pointers.
   void CleanupInternalState() EXCLUSIVE_LOCKS_REQUIRED(chassis_lock);
 
-  // helper to add / configure / enable a port with BfSdeInterface
+  // helper to add / configure / enable a port with TdiSdeInterface
   ::util::Status AddPortHelper(uint64 node_id, int unit, uint32 port_id,
                                const SingletonPort& singleton_port,
                                PortConfig* config);
 
-  // helper to update port configuration with BfSdeInterface
+  // helper to hotplug add / delete a port with TdiSdeInterface
+  ::util::Status HotplugPortHelper(uint64 node_id, int unit, uint32 port_id,
+                                   const SingletonPort& singleton_port,
+                                   PortConfig* config);
+
+  // helper to update port configuration with TdiSdeInterface
   ::util::Status UpdatePortHelper(uint64 node_id, int unit, uint32 port_id,
                                   const SingletonPort& singleton_port,
                                   const PortConfig& config_old,
@@ -225,8 +302,8 @@ class BfChassisManager {
       node_id_to_port_id_to_time_last_changed_ GUARDED_BY(chassis_lock);
 
   // Map from node ID to another map from port ID to port configuration.
-  // We may change this once missing "get" methods get added to BfSdeInterface,
-  // as we would be able to rely on BfSdeInterface to query config parameters,
+  // We may change this once missing "get" methods get added to TdiSdeInterface,
+  // as we would be able to rely on TdiSdeInterface to query config parameters,
   // instead of maintaining a "consistent" view in this map.
   std::map<uint64, std::map<uint32, PortConfig>>
       node_id_to_port_id_to_port_config_ GUARDED_BY(chassis_lock);
@@ -253,10 +330,10 @@ class BfChassisManager {
   std::map<uint64, std::map<uint32, uint32>> node_id_port_id_to_backend_
       GUARDED_BY(chassis_lock);
 
-  // Pointer to a BfSdeInterface implementation that wraps all the SDE calls.
-  BfSdeInterface* bf_sde_interface_;  // not owned by this class.
+  // Pointer to a TdiSdeInterface implementation that wraps all the SDE calls.
+  TdiSdeInterface* tdi_sde_interface_;  // not owned by this class.
 
-  friend class BfChassisManagerTest;
+  friend class TdiChassisManagerTest;
 };
 
 //}  // namespace barefoot

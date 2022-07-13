@@ -375,7 +375,7 @@ class TreeNode {
 // work with the tree.
 class YangParseTree {
  public:
-  explicit YangParseTree(BfChassisManager* bf_chassis_manager)
+  explicit YangParseTree(TdiChassisManager* tdi_chassis_manager)
       LOCKS_EXCLUDED(root_access_lock_);
   virtual ~YangParseTree() {}
 
@@ -440,10 +440,10 @@ class YangParseTree {
   // an action on all nodes is needed.
   const TreeNode* GetRoot() const LOCKS_EXCLUDED(root_access_lock_);
 
-  BfChassisManager* GetBfChassisManager() LOCKS_EXCLUDED(root_access_lock_) {
+  TdiChassisManager* GetTdiChassisManager() LOCKS_EXCLUDED(root_access_lock_) {
     absl::WriterMutexLock r(&root_access_lock_);
 
-    return bf_chassis_manager_;
+    return tdi_chassis_manager_;
   }
 
   // A getter providing a functor setting TARGET_DEFINED mode of a leaf to be
@@ -486,7 +486,7 @@ class YangParseTree {
       const std::function<::util::Status(const TreeNode& leaf)>& action) const
       EXCLUSIVE_LOCKS_REQUIRED(root_access_lock_);
 
-  BfChassisManager* bf_chassis_manager_ GUARDED_BY(root_access_lock_);
+  TdiChassisManager* tdi_chassis_manager_ GUARDED_BY(root_access_lock_);
 
   // A channel between YangParseTree object and GnmiPublisher objest.
   // It is used to send notifications that a leaf has changed.

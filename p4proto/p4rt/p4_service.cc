@@ -94,7 +94,7 @@ P4Service::~P4Service() {}
         absl::WriterMutexLock l(&stream_response_thread_lock_);
         // Unregister writers and close PacketIn Channels.
         for (const auto& pair : stream_response_channels_) {
-            auto status = BfInterface::GetSingleton()->bfrt_node_->
+            auto status = TdiInterface::GetSingleton()->tdi_node_->
                                  UnregisterStreamMessageResponseWriter();
             if (!status.ok()) {
                LOG(ERROR) << status;
@@ -155,7 +155,7 @@ P4Service::~P4Service() {}
     if (!warmboot) {
         for (const auto& e : configs.node_id_to_config()) {
             ::util::Status error =
-                BfInterface::GetSingleton()->bfrt_node_->
+                TdiInterface::GetSingleton()->tdi_node_->
                                   PushForwardingPipelineConfig(e.second);
             if (!error.ok()) {
                 error_buffer_->AddError(
@@ -315,7 +315,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
 
     std::vector<::util::Status> results = {};
     absl::Time timestamp = absl::Now();
-    ::util::Status status = BfInterface::GetSingleton()->bfrt_node_->
+    ::util::Status status = TdiInterface::GetSingleton()->tdi_node_->
                                   WriteForwardingEntries(*req, &results);
     if (!status.ok()) {
         LOG(ERROR) << "Failed to write forwarding entries to node " << node_id
@@ -342,7 +342,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
     ServerWriterWrapper<::p4::v1::ReadResponse> wrapper(writer);
     std::vector<::util::Status> details = {};
     absl::Time timestamp = absl::Now();
-    ::util::Status status = BfInterface::GetSingleton()->bfrt_node_->
+    ::util::Status status = TdiInterface::GetSingleton()->tdi_node_->
                               ReadForwardingEntries(*req, &wrapper, &details);
     if (!status.ok()) {
         LOG(ERROR) << "Failed to read forwarding entries from node "
@@ -403,7 +403,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
     switch (req->action()) {
       case ::p4::v1::SetForwardingPipelineConfigRequest::VERIFY:
           APPEND_STATUS_IF_ERROR(status,
-                                 BfInterface::GetSingleton()->bfrt_node_->
+                                 TdiInterface::GetSingleton()->tdi_node_->
                                  VerifyForwardingPipelineConfig(req->config()));
         break;
       case ::p4::v1::SetForwardingPipelineConfigRequest::VERIFY_AND_COMMIT:
@@ -423,10 +423,10 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
           if (req->action() ==
               ::p4::v1::SetForwardingPipelineConfigRequest::VERIFY_AND_COMMIT) {
 
-           error = BfInterface::GetSingleton()->bfrt_node_->
+           error = TdiInterface::GetSingleton()->tdi_node_->
                           PushForwardingPipelineConfig(req->config());
           } else {  // VERIFY_AND_SAVE
-           error = BfInterface::GetSingleton()->bfrt_node_->
+           error = TdiInterface::GetSingleton()->tdi_node_->
                            SaveForwardingPipelineConfig(req->config());
           }
           APPEND_STATUS_IF_ERROR(status, error);
@@ -451,7 +451,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
       }
       case ::p4::v1::SetForwardingPipelineConfigRequest::COMMIT: {
           ::util::Status error =
-              BfInterface::GetSingleton()->bfrt_node_->
+              TdiInterface::GetSingleton()->tdi_node_->
                                            CommitForwardingPipelineConfig();
           APPEND_STATUS_IF_ERROR(status, error);
           break;
@@ -609,7 +609,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
                            << " is not a master";
                 } else {
                     // If master, try to transmit the packet.
-                    status = BfInterface::GetSingleton()->bfrt_node_->
+                    status = TdiInterface::GetSingleton()->tdi_node_->
                                                   HandleStreamMessageRequest(req);
                 }
                 if (!status.ok()) {
@@ -631,7 +631,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
                            << " is not a master";
                 } else {
                     // If master, try to ack the digest.
-                    status = BfInterface::GetSingleton()->bfrt_node_->
+                    status = TdiInterface::GetSingleton()->tdi_node_->
                                                 HandleStreamMessageRequest(req);
                 }
                 if (!status.ok()) {
@@ -702,7 +702,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
             std::make_shared<ChannelWriterWrapper<::p4::v1::StreamMessageResponse>>(
                 ChannelWriter<::p4::v1::StreamMessageResponse>::Create(channel));
 
-        BfInterface::GetSingleton()->bfrt_node_->
+        TdiInterface::GetSingleton()->tdi_node_->
                               RegisterStreamMessageResponseWriter(writer);
         // Create the reader and pass it to a new thread.
         auto reader =
@@ -714,7 +714,7 @@ void LogReadRequest(uint64 node_id, const ::p4::v1::ReadRequest& req,
         if (ret) {
             // Clean up state and return error.
             RETURN_IF_ERROR(
-                BfInterface::GetSingleton()->bfrt_node_->
+                TdiInterface::GetSingleton()->tdi_node_->
                                        UnregisterStreamMessageResponseWriter());
             return MAKE_ERROR(ERR_INTERNAL)
                    << "Failed to create packet-in receiver thread for node "

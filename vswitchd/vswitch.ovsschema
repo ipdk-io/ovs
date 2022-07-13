@@ -1,6 +1,6 @@
 {"name": "Open_vSwitch",
  "version": "8.3.0",
- "cksum": "2334774277 27445",
+ "cksum": "3465857819 27559",
  "tables": {
    "Open_vSwitch": {
      "columns": {
@@ -361,6 +361,9 @@
          "type": {"key": {"type": "string",
                           "enum": ["set", ["half", "full"]]},
                   "min": 0, "max": 1},
+         "ephemeral": true},
+       "target_dp_index": {
+         "type": {"key": "integer", "min": 0, "max": 1},
          "ephemeral": true},
        "mtu": {
          "type": {"key": "integer", "min": 0, "max": 1},

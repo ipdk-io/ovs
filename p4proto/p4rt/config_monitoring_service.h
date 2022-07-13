@@ -36,7 +36,7 @@ using ServerSubscribeReaderWriterInterface =
 // (gNMI) which are in charge of configuration and monitoring/telemetry.
 class ConfigMonitoringService final : public ::gnmi::gNMI::Service {
  public:
-  ConfigMonitoringService(OperationMode mode, BfChassisManager* bf_chassis_manager,
+  ConfigMonitoringService(OperationMode mode, TdiChassisManager* tdi_chassis_manager,
                           AuthPolicyChecker* auth_policy_checker,
                           ErrorBuffer* error_buffer);
   ~ConfigMonitoringService() override;

@@ -66,6 +66,8 @@
 #include "unaligned.h"
 #include "unixctl.h"
 #include "util.h"
+#include "p4proto/p4proto.h"
+#include "bf_interface.h"
 
 VLOG_DEFINE_THIS_MODULE(ofproto);
 
@@ -4220,6 +4222,7 @@ send_table_status(struct ofproto *ofproto, uint8_t table_id)
     }
 }
 
+#ifndef P4OVS
 static void
 append_port_stat(struct ofport *port, struct ovs_list *replies)
 {
@@ -4238,6 +4241,54 @@ append_port_stat(struct ofport *port, struct ovs_list *replies)
 
     netdev_free_custom_stats_counters(&ops.custom_stats);
 }
+#else
+static void
+populate_ofp_stats_from_hw_stats(uint64_t hw_stats[], struct netdev_stats *ops_stats)
+{
+    ops_stats->rx_packets = hw_stats[RX_PACKETS];
+    ops_stats->tx_packets = hw_stats[TX_PACKETS];
+    ops_stats->rx_bytes = hw_stats[RX_BYTES];
+    ops_stats->tx_bytes = hw_stats[TX_BYTES];
+    ops_stats->rx_errors = hw_stats[RX_ERRORS];
+    ops_stats->tx_errors = hw_stats[TX_ERRORS];
+    ops_stats->rx_dropped = hw_stats[RX_DISCARDS];
+    ops_stats->tx_dropped = hw_stats[TX_DISCARDS];
+    ops_stats->rx_over_errors = 0;
+    ops_stats->rx_crc_errors = 0;
+    ops_stats->rx_frame_errors = 0;
+}
+
+static void
+append_p4port_stat(struct ofport *port, struct ovs_list *replies)
+{
+    struct ofputil_port_stats ops = { .port_no = port->pp.port_no };
+    uint64_t port_stats[BF_PORT_NUM_COUNTERS] = {0};
+    uint32_t dev_id = 0;
+    uint32_t sde_port_id = 0;
+
+    calc_duration(port->created, time_msec(),
+                  &ops.duration_sec, &ops.duration_nsec);
+
+    if(!(dev_id = get_device_id_from_bridge_name(port->ofproto->name))) {
+        VLOG_ERR("dev_id = 0; Not a valid device");
+        return;
+    }
+
+    // Get the 'SDE port ID' from the 'Port name' and retrieve the 'Port stats'.
+    bf_pal_get_port_id_from_name(dev_id, (char*)netdev_get_name(port->netdev),
+                                 &sde_port_id);
+    bf_pal_port_all_stats_get(dev_id, sde_port_id, port_stats);
+
+    VLOG_INFO("PORT stats retrieved for ofp_port:%d having dev_id:%d "
+              "sde_port_id:%d netdev_name:%s and bridge_name:%s\n",
+              port->ofp_port, dev_id, sde_port_id,
+              netdev_get_name(port->netdev),port->ofproto->name);
+
+    populate_ofp_stats_from_hw_stats(port_stats, &ops.stats);
+    ofputil_append_port_stat(replies, &ops);
+
+}
+#endif
 
 static void
 handle_port_request(struct ofconn *ofconn,
@@ -4272,7 +4323,11 @@ handle_port_stats_request(struct ofconn *ofconn,
 
     error = ofputil_decode_port_stats_request(request, &port_no);
     if (!error) {
+#ifndef P4OVS
         handle_port_request(ofconn, request, port_no, append_port_stat);
+#else
+        handle_port_request(ofconn, request, port_no, append_p4port_stat);
+#endif
     }
     return error;
 }

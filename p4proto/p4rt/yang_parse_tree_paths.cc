@@ -155,7 +155,7 @@ bool HasConfigBeenPushed(const GnmiEvent& event) {
       case DataRequest::Request::kFrontPanelPortInfo:
       case DataRequest::Request::kLoopbackStatus:
       case DataRequest::Request::kSdnPortId: {
-        auto port_data = tree->GetBfChassisManager()->GetPortData(req);
+        auto port_data = tree->GetTdiChassisManager()->GetPortData(req);
         if (!port_data.ok()) {
           status.Update(port_data.status());
         } else {
@@ -163,18 +163,27 @@ bool HasConfigBeenPushed(const GnmiEvent& event) {
         }
         break;
       }
+      case DataRequest::Request::kTargetDpId: {
+        auto target_dp_data = tree->GetTdiChassisManager()->GetPortData(req);
+        if (!target_dp_data.ok()) {
+          status.Update(target_dp_data.status());
+        } else {
+          resp = target_dp_data.ConsumeValueOrDie();
+        }
+        break;
+      }
 // TODO P4-OVS openconfig
 #if 0
       case DataRequest::Request::kNodeInfo: {
         auto device_id =
-            tree->GetBfChassisManager()->GetUnitFromNodeId(req.node_info().node_id());
+            tree->GetTdiChassisManager()->GetUnitFromNodeId(req.node_info().node_id());
         if (!device_id.ok()) {
           status.Update(device_id.status());
         } else {
           auto* node_info = resp.mutable_node_info();
           node_info->set_vendor_name("Barefoot");
           node_info->set_chip_name(
-              bf_sde_interface_->GetBfChipType(device_id.ValueOrDie()));
+              tdi_sde_interface_->GetBfChipType(device_id.ValueOrDie()));
         }
         break;
       }
@@ -995,8 +1004,8 @@ void SetUpInterfacesInterfaceStateLastChange(uint64 node_id, uint32 port_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/ifindex
-void SetUpInterfacesInterfaceStateIfindex(uint32 node_id, uint32 port_id,
+// /interfaces/virtual-interface[name=<name>]/config/ifindex
+void SetUpInterfacesInterfaceConfigIfindex(uint32 node_id, uint32 port_id,
                                           TreeNode* node, YangParseTree* tree) {
   // Returns the port ID for the interface to be used by P4Runtime.
   auto on_poll_functor = GetOnPollFunctor(
@@ -1224,7 +1233,7 @@ void SetUpInterfacesInterfaceConfigHost(const char *host_val,
 
     auto host_name_str = typed_val->string_val();
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id,
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id,
                                                            SetRequest::Request::Port::ValueCase::kHostConfig)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "Host is either already set (or) the PORT is already configured";
     }
@@ -1242,17 +1251,17 @@ void SetUpInterfacesInterfaceConfigHost(const char *host_val,
         singleton_port.mutable_config_params()->set_host_name((const char*)host_name_str.c_str());
 
           // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kHostConfig));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kHostConfig));
         break;
       }
     }
 
     // Update the YANG parse tree.
     auto poll_functor = [host_name_str](const GnmiEvent& event,
-                                        const ::gnmi::Path& path,
-                                        GnmiSubscribeStream* stream) {
+                                           const ::gnmi::Path& path,
+                                           GnmiSubscribeStream* stream) {
       // This leaf represents configuration data. Return what was known when
       // it was configured!
       return SendResponse(GetResponse(path, host_name_str), stream);
@@ -1291,7 +1300,7 @@ void SetUpInterfacesInterfaceConfigPorttype(uint64 type,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kPortType)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kPortType)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "port-type is either already set (or) the PORT is already configured";
     }
 
@@ -1299,6 +1308,8 @@ void SetUpInterfacesInterfaceConfigPorttype(uint64 type,
     SWBackendPortType port_type = PORT_TYPE_NONE;
     if (port_type_string == "vhost" || port_type_string == "VHOST") {
         port_type = SWBackendPortType::PORT_TYPE_VHOST;
+    } else if (port_type_string == "link" || port_type_string == "LINK") {
+        port_type = SWBackendPortType::PORT_TYPE_LINK;
     } else if (port_type_string == "tap" || port_type_string == "TAP") {
         port_type = SWBackendPortType::PORT_TYPE_TAP;
     } else if (port_type_string == "source" || port_type_string == "SOURCE") {
@@ -1324,9 +1335,9 @@ void SetUpInterfacesInterfaceConfigPorttype(uint64 type,
         singleton_port.mutable_config_params()->set_type(port_type);
 
         // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kPortType));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kPortType));
         break;
       }
     }
@@ -1373,7 +1384,7 @@ void SetUpInterfacesInterfaceConfigDevicetype(uint64 type,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kDeviceType)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kDeviceType)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "device-type is either already set (or) the PORT is already configured";
     }
 
@@ -1403,17 +1414,17 @@ void SetUpInterfacesInterfaceConfigDevicetype(uint64 type,
         singleton_port.mutable_config_params()->set_device_type(device_type);
 
         // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kDeviceType));
-        break;
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kDeviceType));
+          break;
       }
     }
 
     // Update the YANG parse tree.
     auto poll_functor = [device_type_string](const GnmiEvent& event,
-                                             const ::gnmi::Path& path,
-                                             GnmiSubscribeStream* stream) {
+                                           const ::gnmi::Path& path,
+                                           GnmiSubscribeStream* stream) {
       // This leaf represents configuration data. Return what was known when
       // it was configured!
       return SendResponse(GetResponse(path, device_type_string), stream);
@@ -1437,7 +1448,7 @@ void SetUpInterfacesInterfaceConfigPipelinename(const char *pipeline_name,
                                                 TreeNode* node,
                                                 YangParseTree* tree) {
   auto poll_functor = [pipeline_name](const GnmiEvent& event, const ::gnmi::Path& path,
-                                      GnmiSubscribeStream* stream) {
+                              GnmiSubscribeStream* stream) {
     // This leaf represents configuration data. Return what was known when it
     // was configured!
     return SendResponse(GetResponse(path, pipeline_name), stream);
@@ -1452,7 +1463,7 @@ void SetUpInterfacesInterfaceConfigPipelinename(const char *pipeline_name,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kPipelineName)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kPipelineName)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "pipeline-name is either already set (or) the PORT is already configured";
     }
 
@@ -1473,17 +1484,17 @@ void SetUpInterfacesInterfaceConfigPipelinename(const char *pipeline_name,
         singleton_port.mutable_config_params()->set_pipeline((const char*)pipeline_name.c_str());
 
         // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kPipelineName));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kPipelineName));
         break;
       }
     }
 
     // Update the YANG parse tree.
     auto poll_functor = [pipeline_name](const GnmiEvent& event,
-                                        const ::gnmi::Path& path,
-                                        GnmiSubscribeStream* stream) {
+                                           const ::gnmi::Path& path,
+                                           GnmiSubscribeStream* stream) {
       // This leaf represents configuration data. Return what was known when
       // it was configured!
       return SendResponse(GetResponse(path, pipeline_name), stream);
@@ -1502,12 +1513,12 @@ void SetUpInterfacesInterfaceConfigPipelinename(const char *pipeline_name,
 // /interfaces/virtual-interface[name=<name>]/config/mempool-name
 //
 void SetUpInterfacesInterfaceConfigMempoolname(const char *mempool_name,
-                                               uint64 node_id,
-                                               uint64 port_id,
-                                               TreeNode* node,
-                                               YangParseTree* tree) {
+                                                uint64 node_id,
+                                                uint64 port_id,
+                                                TreeNode* node,
+                                                YangParseTree* tree) {
   auto poll_functor = [mempool_name](const GnmiEvent& event, const ::gnmi::Path& path,
-                                     GnmiSubscribeStream* stream) {
+                              GnmiSubscribeStream* stream) {
     // This leaf represents configuration data. Return what was known when it
     // was configured!
     return SendResponse(GetResponse(path, mempool_name), stream);
@@ -1522,7 +1533,7 @@ void SetUpInterfacesInterfaceConfigMempoolname(const char *mempool_name,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kMempoolName)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kMempoolName)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "mempool-name is either already set (or) the PORT is already configured";
     }
 
@@ -1543,20 +1554,237 @@ void SetUpInterfacesInterfaceConfigMempoolname(const char *mempool_name,
         singleton_port.mutable_config_params()->set_mempool((const char*)mempool_name.c_str());
 
         // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kMempoolName));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kMempoolName));
         break;
       }
     }
 
     // Update the YANG parse tree.
     auto poll_functor = [mempool_name](const GnmiEvent& event,
-                                       const ::gnmi::Path& path,
-                                       GnmiSubscribeStream* stream) {
+                                           const ::gnmi::Path& path,
+                                           GnmiSubscribeStream* stream) {
       // This leaf represents configuration data. Return what was known when
       // it was configured!
       return SendResponse(GetResponse(path, mempool_name), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/packet-dir
+//
+void SetUpInterfacesInterfaceConfigPacketDir(uint64 packet_dir,
+                                              uint64 node_id,
+                                              uint64 port_id,
+                                              TreeNode* node,
+                                              YangParseTree* tree) {
+  auto poll_functor = [packet_dir](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, packet_dir), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kPacketDir)) {
+        return MAKE_ERROR(ERR_INVALID_PARAM) << "packet-dir is either already set (or) the PORT is already configured";
+    }
+
+    std::string packet_dir_string = typed_val->string_val();
+    SWBackendPktDirType direction = DIRECTION_NONE;
+    if (packet_dir_string == "network" || packet_dir_string == "NETWORK") {
+        direction = SWBackendPktDirType::DIRECTION_NETWORK;
+    } else if (packet_dir_string == "host" || packet_dir_string == "HOST") {
+        direction = SWBackendPktDirType::DIRECTION_HOST;
+    } else {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "wrong value for packet-direction, accepted values are case in-sensitivie network or host";
+    }
+
+    // Set the value.
+    auto status = SetValue(node_id, port_id, tree,
+                           &SetRequest::Request::Port::mutable_packet_dir,
+                           &SWBackendPktDirStatus::set_packet_dir, direction);
+    if (status != ::util::OkStatus()) {
+      return status;
+    }
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->set_packet_dir(direction);
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kPacketDir));
+          break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [packet_dir_string](const GnmiEvent& event,
+                                           const ::gnmi::Path& path,
+                                           GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, packet_dir_string), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/control-port
+//
+void SetUpInterfacesInterfaceConfigControlport(const char *control_port,
+                                               uint64 node_id,
+                                               uint64 port_id,
+                                               TreeNode* node,
+                                               YangParseTree* tree) {
+  auto poll_functor = [control_port](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, control_port), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kControlPort)) {
+        return MAKE_ERROR(ERR_INVALID_PARAM) << "control-port is either already set (or) the PORT is already configured";
+    }
+
+    auto ctl_port = typed_val->string_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_control_port()->ControlPortConfigured::set_control_port((const char*)ctl_port.c_str());
+
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->set_control((const char*)ctl_port.c_str());
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kControlPort));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [ctl_port](const GnmiEvent& event,
+                                   const ::gnmi::Path& path,
+                                   GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, ctl_port), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/pci-bdf
+//
+void SetUpInterfacesInterfaceConfigPcibdf(const char *pci_bdf,
+                                          uint64 node_id,
+                                          uint64 port_id,
+                                          TreeNode* node,
+                                          YangParseTree* tree) {
+  auto poll_functor = [pci_bdf](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, pci_bdf), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kPciBdf)) {
+        return MAKE_ERROR(ERR_INVALID_PARAM) << "pci-bdf is either already set (or) the PORT is already configured";
+    }
+
+    auto bdf_val = typed_val->string_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_pci_bdf()->PciBdfConfigured::set_pci_bdf((const char*)bdf_val.c_str());
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->set_pci((const char*)bdf_val.c_str());
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kPciBdf));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [bdf_val](const GnmiEvent& event,
+                                  const ::gnmi::Path& path,
+                                  GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, bdf_val), stream);
     };
     node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
 
@@ -1577,7 +1805,7 @@ void SetUpInterfacesInterfaceConfigMtuValue(uint64 mtu,
                                             TreeNode* node,
                                             YangParseTree* tree) {
   auto poll_functor = [mtu](const GnmiEvent& event, const ::gnmi::Path& path,
-                             GnmiSubscribeStream* stream) {
+                              GnmiSubscribeStream* stream) {
     // This leaf represents configuration data. Return what was known when it
     // was configured!
     return SendResponse(GetResponse(path, mtu), stream);
@@ -1592,7 +1820,7 @@ void SetUpInterfacesInterfaceConfigMtuValue(uint64 mtu,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kMtuValue)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kMtuValue)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "MTU is either already set (or) the PORT is already configured";
     }
 
@@ -1613,9 +1841,9 @@ void SetUpInterfacesInterfaceConfigMtuValue(uint64 mtu,
         singleton_port.mutable_config_params()->set_mtu(mtu_val);
 
         // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kMtuValue));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kMtuValue));
         break;
       }
     }
@@ -1662,7 +1890,7 @@ void SetUpInterfacesInterfaceConfigQueues(uint64 queues_count,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kQueueCount)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kQueueCount)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "Queues is either already set (or) the PORT is already configured";
     }
 
@@ -1683,9 +1911,9 @@ void SetUpInterfacesInterfaceConfigQueues(uint64 queues_count,
         singleton_port.mutable_config_params()->set_queues(queues_configured);
 
         // Validate if all mandatory params are set and call SDE API
-         RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                     singleton_port,
-                                                                     SetRequest::Request::Port::ValueCase::kQueueCount));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kQueueCount));
         break;
       }
     }
@@ -1733,7 +1961,7 @@ void SetUpInterfacesInterfaceConfigSocket(const char *default_path,
       return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
     }
 
-    if (tree->GetBfChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kSockPath)) {
+    if (tree->GetTdiChassisManager()->ValidateOnetimeConfig(node_id, port_id, SetRequest::Request::Port::ValueCase::kSockPath)) {
         return MAKE_ERROR(ERR_INVALID_PARAM) << "Socket is either already set (or) the PORT is already configured";
     }
 
@@ -1753,9 +1981,9 @@ void SetUpInterfacesInterfaceConfigSocket(const char *default_path,
         singleton_port.mutable_config_params()->set_socket((const char*)socket_path.c_str());
 
           // Validate if all mandatory params are set and call SDE API
-        RETURN_IF_ERROR(tree->GetBfChassisManager()->ValidateAndAdd(node_id, port_id,
-                                                                    singleton_port,
-                                                                    SetRequest::Request::Port::ValueCase::kSockPath));
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->ValidateAndAdd(node_id, port_id,
+                                                    singleton_port,
+                                                    SetRequest::Request::Port::ValueCase::kSockPath));
         break;
       }
     }
@@ -1778,6 +2006,581 @@ void SetUpInterfacesInterfaceConfigSocket(const char *default_path,
       ->SetOnUpdateHandler(on_set_functor)
       ->SetOnReplaceHandler(on_set_functor);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/qemu_socket_ip
+//
+void SetUpInterfacesInterfaceConfigQemuSocketIp(const char *default_socket_ip,
+                                                uint64 node_id,
+                                                uint64 port_id,
+                                                TreeNode* node,
+                                                YangParseTree* tree) {
+  auto poll_functor = [default_socket_ip](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, default_socket_ip), stream);
+  };
+
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    auto socket_ip = typed_val->string_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_socket_ip((const char*)socket_ip.c_str());
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_socket_ip((const char*)socket_ip.c_str());
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_SOCK_IP));
+        break;
+      }
+    }
+
+
+    // Update the YANG parse tree.
+    auto poll_functor = [socket_ip](const GnmiEvent& event,
+                                    const ::gnmi::Path& path,
+                                    GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, socket_ip), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/qemu_socket_port
+//
+void SetUpInterfacesInterfaceConfigQemuSocketPort(uint64 default_socket_port,
+                                                  uint64 node_id,
+                                                  uint64 port_id,
+                                                  TreeNode* node,
+                                                  YangParseTree* tree) {
+  auto poll_functor = [default_socket_port](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, default_socket_port), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    auto socket_port = typed_val->int_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_socket_port(socket_port);
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_socket_port(socket_port);
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_SOCK_PORT));
+
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [socket_port](const GnmiEvent& event,
+                                      const ::gnmi::Path& path,
+                                      GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, socket_port), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/hotplug
+//
+void SetUpInterfacesInterfaceConfigHotplug(uint64 status,
+                                           uint64 node_id,
+                                           uint64 port_id,
+                                           TreeNode* node,
+                                           YangParseTree* tree) {
+  auto poll_functor = [status](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, status), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    std::string status_configured_string = typed_val->string_val();
+    SWBackendQemuHotplugStatus hotplug_status = NO_HOTPLUG;
+    if (status_configured_string == "add" || status_configured_string == "ADD") {
+        hotplug_status = SWBackendQemuHotplugStatus::HOTPLUG_ADD;
+    } else if (status_configured_string == "del" || status_configured_string == "DEL") {
+        hotplug_status = SWBackendQemuHotplugStatus::HOTPLUG_DEL;
+    } else {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "wrong value for qemu hotplug, supported values are add/ADD, del/DEL!";
+    }
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_hotplug(hotplug_status);
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_hotplug(hotplug_status);
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_HOTPLUG));
+
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [status_configured_string](const GnmiEvent& event,
+                                            const ::gnmi::Path& path,
+                                            GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, status_configured_string), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/ethernet/config/qemu_vm_mac_address
+void SetUpInterfacesInterfaceConfigQemuVmMacAddress(uint64 node_id,
+                                                    uint32 port_id,
+                                                    uint64 mac_address,
+                                                    TreeNode* node,
+                                                    YangParseTree* tree) {
+  auto poll_functor = [mac_address](const GnmiEvent& event,
+                                    const ::gnmi::Path& path,
+                                    GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, MacAddressToYangString(mac_address)),
+                        stream);
+  };
+
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+    std::string mac_address_string = typed_val->string_val();
+    if (!IsMacAddressValid(mac_address_string)) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "wrong value!";
+    }
+
+    uint64 mac_address = YangStringToMacAddress(mac_address_string);
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_vm_mac_address(mac_address);
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_vm_mac_address(mac_address);
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_VM_MAC));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [mac_address](const GnmiEvent& event,
+                                      const ::gnmi::Path& path,
+                                      GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when it
+      // was configured!
+      return SendResponse(
+          GetResponse(path, MacAddressToYangString(mac_address)), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/qemu_vm_netdev_id
+//
+void SetUpInterfacesInterfaceConfigQemuVMNetdevId(const char *default_netdev_id,
+                                                  uint64 node_id,
+                                                  uint64 port_id,
+                                                  TreeNode* node,
+                                                  YangParseTree* tree) {
+  auto poll_functor = [default_netdev_id](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, default_netdev_id), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    auto vm_netdev_id = typed_val->string_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_vm_netdev_id((const char*)vm_netdev_id.c_str());
+
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_vm_netdev_id((const char*)vm_netdev_id.c_str());
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_NETDEV_ID));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [vm_netdev_id](const GnmiEvent& event,
+                                       const ::gnmi::Path& path,
+                                       GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, vm_netdev_id), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/qemu_vm_chardev_id
+//
+void SetUpInterfacesInterfaceConfigQemuVMChardevId(const char *default_chardev_id,
+                                                   uint64 node_id,
+                                                   uint64 port_id,
+                                                   TreeNode* node,
+                                                   YangParseTree* tree) {
+  auto poll_functor = [default_chardev_id](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, default_chardev_id), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    auto vm_chardev_id = typed_val->string_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_vm_chardev_id((const char*)vm_chardev_id.c_str());
+
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_vm_chardev_id((const char*)vm_chardev_id.c_str());
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_CHARDEV_ID));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [vm_chardev_id](const GnmiEvent& event,
+                                        const ::gnmi::Path& path,
+                                        GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, vm_chardev_id), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/qemu_vm_device_id
+//
+void SetUpInterfacesInterfaceConfigQemuVMDeviceId(const char *default_device_id,
+                                                  uint64 node_id,
+                                                  uint64 port_id,
+                                                  TreeNode* node,
+                                                  YangParseTree* tree) {
+  auto poll_functor = [default_device_id](const GnmiEvent& event, const ::gnmi::Path& path,
+                              GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, default_device_id), stream);
+  };
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    auto vm_device_id = typed_val->string_val();
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_qemu_vm_device_id((const char*)vm_device_id.c_str());
+
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_qemu_vm_device_id((const char*)vm_device_id.c_str());
+
+        // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_DEVICE_ID));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [vm_device_id](const GnmiEvent& event,
+                                        const ::gnmi::Path& path,
+                                        GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, vm_device_id), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/native-socket-path
+//
+void SetUpInterfacesInterfaceConfigNativeSocket(const char *default_native_path,
+                                                uint64 node_id,
+                                                uint64 port_id,
+                                                TreeNode* node,
+                                                YangParseTree* tree) {
+  auto poll_functor = [default_native_path](const GnmiEvent& event, const ::gnmi::Path& path,
+                                     GnmiSubscribeStream* stream) {
+    // This leaf represents configuration data. Return what was known when it
+    // was configured!
+    return SendResponse(GetResponse(path, default_native_path), stream);
+  };
+
+  auto on_set_functor =
+      [node_id, port_id, node, tree](
+          const ::gnmi::Path& path, const ::google::protobuf::Message& val,
+          CopyOnWriteChassisConfig* config) -> ::util::Status {
+    const gnmi::TypedValue* typed_val =
+        dynamic_cast<const gnmi::TypedValue*>(&val);
+    if (typed_val == nullptr) {
+      return MAKE_ERROR(ERR_INVALID_PARAM) << "not a TypedValue message!";
+    }
+
+    auto native_socket_path = typed_val->string_val();
+
+    // Set the value.
+    SetRequest req;
+    auto* request = req.add_requests()->mutable_port();
+    request->set_node_id(node_id);
+    request->set_port_id(port_id);
+    request->SetRequest::Request::Port::mutable_hotplug_config()->HotplugConfig::set_native_socket_path((const char*)native_socket_path.c_str());
+
+    // Update the chassis config
+    ChassisConfig* new_config = config->writable();
+    for (auto& singleton_port : *new_config->mutable_singleton_ports()) {
+      if (singleton_port.node() == node_id && singleton_port.id() == port_id) {
+        singleton_port.mutable_config_params()->mutable_hotplug_config()->set_native_socket_path((const char*)native_socket_path.c_str());
+
+          // Validate if all mandatory params are set and call SDE API
+        RETURN_IF_ERROR(tree->GetTdiChassisManager()->HotplugValidateAndAdd(node_id, port_id,
+                                                                           singleton_port,
+                                                                           SetRequest::Request::Port::ValueCase::kHotplugConfig, PARAM_NATIVE_SOCK_PATH));
+        break;
+      }
+    }
+
+    // Update the YANG parse tree.
+    auto poll_functor = [native_socket_path](const GnmiEvent& event,
+                                             const ::gnmi::Path& path,
+                                             GnmiSubscribeStream* stream) {
+      // This leaf represents configuration data. Return what was known when
+      // it was configured!
+      return SendResponse(GetResponse(path, native_socket_path), stream);
+    };
+    node->SetOnTimerHandler(poll_functor)->SetOnPollHandler(poll_functor);
+
+    return ::util::OkStatus();
+  };
+
+  node->SetOnTimerHandler(poll_functor)
+      ->SetOnPollHandler(poll_functor)
+      ->SetOnUpdateHandler(on_set_functor)
+      ->SetOnReplaceHandler(on_set_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/tdi_portin_id
+void SetUpInterfacesInterfaceConfigPortInId(uint32 node_id, uint32 port_id,
+                                            TreeNode* node, YangParseTree* tree) {
+  // Returns the Target Dp Index(tdi_portin_id) for the interface to be used by P4Runtime.
+  auto on_poll_functor = GetOnPollFunctor(
+      node_id, port_id, tree, &DataResponse::target_dp_id,
+      &DataResponse::has_target_dp_id,
+      &DataRequest::Request::mutable_target_dp_id, &TargetDatapathId::tdi_portin_id);
+  auto on_change_functor = UnsupportedFunc();
+  node->SetOnTimerHandler(on_poll_functor)
+      ->SetOnPollHandler(on_poll_functor)
+      ->SetOnChangeHandler(on_change_functor);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// /interfaces/virtual-interface[name=<name>]/config/tdi_portout_id
+void SetUpInterfacesInterfaceConfigPortOutId(uint32 node_id, uint32 port_id,
+                                             TreeNode* node, YangParseTree* tree) {
+  // Returns the Target Dp Index(tdi_portout_id) for the interface to be used by P4Runtime.
+  auto on_poll_functor = GetOnPollFunctor(
+      node_id, port_id, tree, &DataResponse::target_dp_id,
+      &DataResponse::has_target_dp_id,
+      &DataRequest::Request::mutable_target_dp_id, &TargetDatapathId::tdi_portout_id);
+  auto on_change_functor = UnsupportedFunc();
+  node->SetOnTimerHandler(on_poll_functor)
+      ->SetOnPollHandler(on_poll_functor)
+      ->SetOnChangeHandler(on_change_functor);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // /interfaces/virtual-interface[name=<name>]/config/enabled
 //
@@ -2357,8 +3160,8 @@ TreeNodeEventHandler GetPollCounterFunctor(uint64 node_id, uint32 port_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-octets
-void SetUpInterfacesInterfaceStateCountersInOctets(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-octets
+void SetUpInterfacesInterfaceConfigCountersInOctets(uint64 node_id,
                                                    uint32 port_id,
                                                    TreeNode* node,
                                                    YangParseTree* tree) {
@@ -2380,8 +3183,8 @@ void SetUpInterfacesInterfaceStateCountersInOctets(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/out-octets
-void SetUpInterfacesInterfaceStateCountersOutOctets(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/out-octets
+void SetUpInterfacesInterfaceConfigCountersOutOctets(uint64 node_id,
                                                     uint32 port_id,
                                                     TreeNode* node,
                                                     YangParseTree* tree) {
@@ -2403,8 +3206,8 @@ void SetUpInterfacesInterfaceStateCountersOutOctets(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-unicast-pkts
-void SetUpInterfacesInterfaceStateCountersInUnicastPkts(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-unicast-pkts
+void SetUpInterfacesInterfaceConfigCountersInUnicastPkts(uint64 node_id,
                                                         uint32 port_id,
                                                         TreeNode* node,
                                                         YangParseTree* tree) {
@@ -2426,8 +3229,8 @@ void SetUpInterfacesInterfaceStateCountersInUnicastPkts(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/out-unicast-pkts
-void SetUpInterfacesInterfaceStateCountersOutUnicastPkts(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/out-unicast-pkts
+void SetUpInterfacesInterfaceConfigCountersOutUnicastPkts(uint64 node_id,
                                                          uint32 port_id,
                                                          TreeNode* node,
                                                          YangParseTree* tree) {
@@ -2449,8 +3252,8 @@ void SetUpInterfacesInterfaceStateCountersOutUnicastPkts(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-broadcast-pkts
-void SetUpInterfacesInterfaceStateCountersInBroadcastPkts(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-broadcast-pkts
+void SetUpInterfacesInterfaceConfigCountersInBroadcastPkts(uint64 node_id,
                                                           uint32 port_id,
                                                           TreeNode* node,
                                                           YangParseTree* tree) {
@@ -2472,8 +3275,8 @@ void SetUpInterfacesInterfaceStateCountersInBroadcastPkts(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/out-broadcast-pkts
-void SetUpInterfacesInterfaceStateCountersOutBroadcastPkts(
+// /interfaces/virtual-interface[name=<name>]/config/counters/out-broadcast-pkts
+void SetUpInterfacesInterfaceConfigCountersOutBroadcastPkts(
     uint64 node_id, uint32 port_id, TreeNode* node, YangParseTree* tree) {
   auto poll_functor = GetPollCounterFunctor(
       node_id, port_id, &PortCounters::out_broadcast_pkts, tree);
@@ -2493,8 +3296,8 @@ void SetUpInterfacesInterfaceStateCountersOutBroadcastPkts(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-discards
-void SetUpInterfacesInterfaceStateCountersInDiscards(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-discards
+void SetUpInterfacesInterfaceConfigCountersInDiscards(uint64 node_id,
                                                      uint32 port_id,
                                                      TreeNode* node,
                                                      YangParseTree* tree) {
@@ -2516,8 +3319,8 @@ void SetUpInterfacesInterfaceStateCountersInDiscards(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/out-discards
-void SetUpInterfacesInterfaceStateCountersOutDiscards(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/out-discards
+void SetUpInterfacesInterfaceConfigCountersOutDiscards(uint64 node_id,
                                                       uint32 port_id,
                                                       TreeNode* node,
                                                       YangParseTree* tree) {
@@ -2539,8 +3342,8 @@ void SetUpInterfacesInterfaceStateCountersOutDiscards(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-unknown-protos
-void SetUpInterfacesInterfaceStateCountersInUnknownProtos(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-unknown-protos
+void SetUpInterfacesInterfaceConfigCountersInUnknownProtos(uint64 node_id,
                                                           uint32 port_id,
                                                           TreeNode* node,
                                                           YangParseTree* tree) {
@@ -2562,8 +3365,8 @@ void SetUpInterfacesInterfaceStateCountersInUnknownProtos(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-multicast-pkts
-void SetUpInterfacesInterfaceStateCountersInMulticastPkts(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-multicast-pkts
+void SetUpInterfacesInterfaceConfigCountersInMulticastPkts(uint64 node_id,
                                                           uint32 port_id,
                                                           TreeNode* node,
                                                           YangParseTree* tree) {
@@ -2585,8 +3388,8 @@ void SetUpInterfacesInterfaceStateCountersInMulticastPkts(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-errors
-void SetUpInterfacesInterfaceStateCountersInErrors(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-errors
+void SetUpInterfacesInterfaceConfigCountersInErrors(uint64 node_id,
                                                    uint32 port_id,
                                                    TreeNode* node,
                                                    YangParseTree* tree) {
@@ -2608,8 +3411,8 @@ void SetUpInterfacesInterfaceStateCountersInErrors(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/out-errors
-void SetUpInterfacesInterfaceStateCountersOutErrors(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/out-errors
+void SetUpInterfacesInterfaceConfigCountersOutErrors(uint64 node_id,
                                                     uint32 port_id,
                                                     TreeNode* node,
                                                     YangParseTree* tree) {
@@ -2631,8 +3434,8 @@ void SetUpInterfacesInterfaceStateCountersOutErrors(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/in-fcs-errors
-void SetUpInterfacesInterfaceStateCountersInFcsErrors(uint64 node_id,
+// /interfaces/virtual-interface[name=<name>]/config/counters/in-fcs-errors
+void SetUpInterfacesInterfaceConfigCountersInFcsErrors(uint64 node_id,
                                                       uint32 port_id,
                                                       TreeNode* node,
                                                       YangParseTree* tree) {
@@ -2654,8 +3457,8 @@ void SetUpInterfacesInterfaceStateCountersInFcsErrors(uint64 node_id,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// /interfaces/virtual-interface[name=<name>]/state/counters/out-multicast-pkts
-void SetUpInterfacesInterfaceStateCountersOutMulticastPkts(
+// /interfaces/virtual-interface[name=<name>]/config/counters/out-multicast-pkts
+void SetUpInterfacesInterfaceConfigCountersOutMulticastPkts(
     uint64 node_id, uint32 port_id, TreeNode* node, YangParseTree* tree) {
   auto poll_functor = GetPollCounterFunctor(
       node_id, port_id, &PortCounters::out_multicast_pkts, tree);
@@ -3962,13 +4765,15 @@ TreeNode* YangParseTreePaths::AddSubtreeInterface(
     const std::string& name, uint64 node_id, uint32 port_id,
     const NodeConfigParams& node_config, YangParseTree* tree) {
   // No need to lock the mutex - it is locked by method calling this one.
+  uint64 mac_address = kDummyMacAddress;
+
   TreeNode* node = tree->AddNode(
       GetPath("interfaces")("virtual-interface", name)("state")("last-change")());
   SetUpInterfacesInterfaceStateLastChange(node_id, port_id, node, tree);
 
   node = tree->AddNode(
-      GetPath("interfaces")("virtual-interface", name)("state")("ifindex")());
-  SetUpInterfacesInterfaceStateIfindex(node_id, port_id, node, tree);
+      GetPath("interfaces")("virtual-interface", name)("config")("ifindex")());
+  SetUpInterfacesInterfaceConfigIfindex(node_id, port_id, node, tree);
 
   node = tree->AddNode(
       GetPath("interfaces")("virtual-interface", name)("state")("name")());
@@ -4004,72 +4809,72 @@ TreeNode* YangParseTreePaths::AddSubtreeInterface(
   // realistic it is changed to SAMPLE with the period of 10s.
   // TODO(tmadejski) remove/update this functor once the support for reading
   // counters is implemented.
-  tree->AddNode(GetPath("interfaces")("virtual-interface", name)("state")("counters")())
+  tree->AddNode(GetPath("interfaces")("virtual-interface", name)("config")("counters")())
       ->SetTargetDefinedMode(tree->GetStreamSampleModeFunc());
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-octets")());
-  SetUpInterfacesInterfaceStateCountersInOctets(node_id, port_id, node, tree);
+      "virtual-interface", name)("config")("counters")("in-octets")());
+  SetUpInterfacesInterfaceConfigCountersInOctets(node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("out-octets")());
-  SetUpInterfacesInterfaceStateCountersOutOctets(node_id, port_id, node, tree);
+      "virtual-interface", name)("config")("counters")("out-octets")());
+  SetUpInterfacesInterfaceConfigCountersOutOctets(node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-unicast-pkts")());
-  SetUpInterfacesInterfaceStateCountersInUnicastPkts(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("in-unicast-pkts")());
+  SetUpInterfacesInterfaceConfigCountersInUnicastPkts(node_id, port_id, node,
                                                      tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("out-unicast-pkts")());
-  SetUpInterfacesInterfaceStateCountersOutUnicastPkts(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("out-unicast-pkts")());
+  SetUpInterfacesInterfaceConfigCountersOutUnicastPkts(node_id, port_id, node,
                                                       tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-broadcast-pkts")());
-  SetUpInterfacesInterfaceStateCountersInBroadcastPkts(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("in-broadcast-pkts")());
+  SetUpInterfacesInterfaceConfigCountersInBroadcastPkts(node_id, port_id, node,
                                                        tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("out-broadcast-pkts")());
-  SetUpInterfacesInterfaceStateCountersOutBroadcastPkts(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("out-broadcast-pkts")());
+  SetUpInterfacesInterfaceConfigCountersOutBroadcastPkts(node_id, port_id, node,
                                                         tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-multicast-pkts")());
-  SetUpInterfacesInterfaceStateCountersInMulticastPkts(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("in-multicast-pkts")());
+  SetUpInterfacesInterfaceConfigCountersInMulticastPkts(node_id, port_id, node,
                                                        tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("out-multicast-pkts")());
-  SetUpInterfacesInterfaceStateCountersOutMulticastPkts(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("out-multicast-pkts")());
+  SetUpInterfacesInterfaceConfigCountersOutMulticastPkts(node_id, port_id, node,
                                                         tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-discards")());
-  SetUpInterfacesInterfaceStateCountersInDiscards(node_id, port_id, node, tree);
+      "virtual-interface", name)("config")("counters")("in-discards")());
+  SetUpInterfacesInterfaceConfigCountersInDiscards(node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("out-discards")());
-  SetUpInterfacesInterfaceStateCountersOutDiscards(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("out-discards")());
+  SetUpInterfacesInterfaceConfigCountersOutDiscards(node_id, port_id, node,
                                                    tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-unknown-protos")());
-  SetUpInterfacesInterfaceStateCountersInUnknownProtos(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("in-unknown-protos")());
+  SetUpInterfacesInterfaceConfigCountersInUnknownProtos(node_id, port_id, node,
                                                        tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-errors")());
-  SetUpInterfacesInterfaceStateCountersInErrors(node_id, port_id, node, tree);
+      "virtual-interface", name)("config")("counters")("in-errors")());
+  SetUpInterfacesInterfaceConfigCountersInErrors(node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("out-errors")());
-  SetUpInterfacesInterfaceStateCountersOutErrors(node_id, port_id, node, tree);
+      "virtual-interface", name)("config")("counters")("out-errors")());
+  SetUpInterfacesInterfaceConfigCountersOutErrors(node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("state")("counters")("in-fcs-errors")());
-  SetUpInterfacesInterfaceStateCountersInFcsErrors(node_id, port_id, node,
+      "virtual-interface", name)("config")("counters")("in-fcs-errors")());
+  SetUpInterfacesInterfaceConfigCountersInFcsErrors(node_id, port_id, node,
                                                    tree);
 
   node = tree->AddNode(GetPath("lacp")("interfaces")(
@@ -4099,14 +4904,6 @@ TreeNode* YangParseTreePaths::AddSubtreeInterface(
   SetUpInterfacesInterfaceConfigDevicetype(/*SWBackendPortType*/ 0, node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("config")("queues")());
-  SetUpInterfacesInterfaceConfigQueues(0, node_id, port_id, node, tree);
-
-  node = tree->AddNode(GetPath("interfaces")(
-      "virtual-interface", name)("config")("socket-path")());
-  SetUpInterfacesInterfaceConfigSocket("/", node_id, port_id, node, tree);
-
-  node = tree->AddNode(GetPath("interfaces")(
       "virtual-interface", name)("config")("pipeline-name")());
   SetUpInterfacesInterfaceConfigPipelinename("", node_id, port_id, node, tree);
 
@@ -4115,8 +4912,69 @@ TreeNode* YangParseTreePaths::AddSubtreeInterface(
   SetUpInterfacesInterfaceConfigMempoolname("", node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("control-port")());
+  SetUpInterfacesInterfaceConfigControlport("", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("pci-bdf")());
+  SetUpInterfacesInterfaceConfigPcibdf("", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
       "virtual-interface", name)("config")("mtu")());
   SetUpInterfacesInterfaceConfigMtuValue(0, node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("queues")());
+  SetUpInterfacesInterfaceConfigQueues(0, node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("socket-path")());
+  SetUpInterfacesInterfaceConfigSocket("/", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("packet-dir")());
+  SetUpInterfacesInterfaceConfigPacketDir(/*SWBackendPktDirType*/ 2, node_id, port_id, node, tree);
+
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("qemu-socket-ip")());
+  SetUpInterfacesInterfaceConfigQemuSocketIp("/", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("qemu-socket-port")());
+  SetUpInterfacesInterfaceConfigQemuSocketPort(0, node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("hotplug")());
+  SetUpInterfacesInterfaceConfigHotplug(/*SWBackendQemuHotplugStatus*/ 0, node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("qemu-vm-mac")());
+  SetUpInterfacesInterfaceConfigQemuVmMacAddress(node_id, port_id, mac_address, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("qemu-vm-netdev-id")());
+  SetUpInterfacesInterfaceConfigQemuVMNetdevId("/", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("qemu-vm-chardev-id")());
+  SetUpInterfacesInterfaceConfigQemuVMChardevId("/", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("qemu-vm-device-id")());
+  SetUpInterfacesInterfaceConfigQemuVMDeviceId("/", node_id, port_id, node, tree);
+
+  node = tree->AddNode(GetPath("interfaces")(
+      "virtual-interface", name)("config")("native-socket-path")());
+  SetUpInterfacesInterfaceConfigNativeSocket("/", node_id, port_id, node, tree);
+
+  node = tree->AddNode(
+      GetPath("interfaces")("virtual-interface", name)("config")("tdi-portin-id")());
+  SetUpInterfacesInterfaceConfigPortInId(node_id, port_id, node, tree);
+
+  node = tree->AddNode(
+      GetPath("interfaces")("virtual-interface", name)("config")("tdi-portout-id")());
+  SetUpInterfacesInterfaceConfigPortOutId(node_id, port_id, node, tree);
 
   node = tree->AddNode(GetPath("interfaces")(
       "virtual-interface", name)("ethernet")("config")("forwarding-viable")());

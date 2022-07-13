@@ -213,8 +213,8 @@ bool YangParseTree::IsWildcard(const std::string& name) const {
   return ret;
 }
 
-YangParseTree::YangParseTree(BfChassisManager *bf_chassis_manager)
-     : bf_chassis_manager_(ABSL_DIE_IF_NULL(bf_chassis_manager)) {
+YangParseTree::YangParseTree(TdiChassisManager *tdi_chassis_manager)
+     : tdi_chassis_manager_(ABSL_DIE_IF_NULL(tdi_chassis_manager)) {
   // Add the minimum nodes:
   //   /interfaces/virtual-interface[name=*]/state/ifindex
   //   /interfaces/virtual-interface[name=*]/state/name

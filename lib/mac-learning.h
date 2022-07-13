@@ -191,6 +191,18 @@ struct mac_learning {
     struct heap ports_by_usage; /* struct mac_learning_port heap_nodes. */
 };
 
+#if P4SAI
+typedef union mac_data {
+    uint32_t ifindex;
+    uint32_t port_id;
+} mac_data_t;
+
+typedef struct mac_info {
+    bool is_tunnel_port;
+    mac_data_t data;
+} mac_info_t;
+#endif
+
 int mac_entry_age(const struct mac_learning *ml, const struct mac_entry *e)
     OVS_REQ_RDLOCK(ml->rwlock);
 
@@ -219,18 +231,42 @@ bool mac_learning_may_learn(const struct mac_learning *ml,
                             const struct eth_addr src_mac,
                             uint16_t vlan)
     OVS_REQ_RDLOCK(ml->rwlock);
+#if P4SAI
+struct mac_entry *mac_learning_insert(struct mac_learning *ml,
+                                      const struct eth_addr src,
+                                      uint16_t vlan, mac_info_t *value)
+    OVS_REQ_WRLOCK(ml->rwlock);
+#else
 struct mac_entry *mac_learning_insert(struct mac_learning *ml,
                                       const struct eth_addr src,
                                       uint16_t vlan)
     OVS_REQ_WRLOCK(ml->rwlock);
+#endif
+
+#if P4SAI
+bool mac_learning_update(struct mac_learning *ml, struct eth_addr src,
+                         int vlan, bool is_gratuitous_arp, bool is_bond,
+                         void *in_port, mac_info_t *value)
+    OVS_EXCLUDED(ml->rwlock);
+#else
 bool mac_learning_update(struct mac_learning *ml, struct eth_addr src,
                          int vlan, bool is_gratuitous_arp, bool is_bond,
                          void *in_port)
     OVS_EXCLUDED(ml->rwlock);
+#endif
+
+#if P4SAI
+bool mac_learning_add_static_entry(struct mac_learning *ml,
+                                   const struct eth_addr src,
+                                   uint16_t vlan, void *in_port,
+                                   mac_info_t *value)
+    OVS_EXCLUDED(ml->rwlock);
+#else
 bool mac_learning_add_static_entry(struct mac_learning *ml,
                                    const struct eth_addr src,
                                    uint16_t vlan, void *in_port)
     OVS_EXCLUDED(ml->rwlock);
+#endif
 bool mac_learning_del_static_entry(struct mac_learning *ml,
                                    const struct eth_addr src,
                                    uint16_t vlan)

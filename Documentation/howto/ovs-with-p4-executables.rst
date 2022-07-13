@@ -164,6 +164,149 @@ services that are available for a p4runtime client.
     internally.
     ``TABLE``: Refers to table_name present in p4info.txt file.
 
+8. Add action profile member entry for an action selector table ::
+
+    $ ovs-p4ctl add-action-profile-member SWITCH ACTION_PROFILE FLOW
+    $ Example: ovs-p4ctl add-action-profile-member br0 ingress.as_sl3
+               "action=ingress.send(0),member_id=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``ACTION_PROFILE``: Refers to action profile name from the p4 file.
+    ``FLOW``: Refers to action of the table for which the mentioned
+    ACTION_PROFILE is referring to.
+    Format "action=action_name(value),member_id=<number>"
+
+9. Delete action profile member entry from an action selector table ::
+
+    $ ovs-p4ctl delete-action-profile-member SWITCH ACTION_PROFILE FLOW
+    $ Example: ovs-p4ctl delete-action-profile-member br0 ingress.as_sl3
+               "member_id=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``ACTION_PROFILE``: Refers to action profile name from the p4 file.
+    ``FLOW``: Refers to the member ID which was earlier configured via add
+    action profile member. Format "member_id=<number>"
+
+10. Get action profile member details for an action selector table ::
+
+    $ ovs-p4ctl get-action-profile-member SWITCH ACTION_PROFILE FLOW
+    $ Example: ovs-p4ctl get-action-profile-member br0 ingress.as_sl3 "member_id=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``ACTION_PROFILE``: Refers to action profile name from the p4 file.
+    ``FLOW``: Refers to the member ID which was earlier configured via add
+    action profile member. Format "member_id=<number>"
+
+11. Add action profile group entry for an action selector table ::
+
+    $ ovs-p4ctl add-action-profile-group SWITCH ACTION_PROFILE FLOW
+    $ Example: ovs-p4ctl add-action-profile-group br0 ingress.as_sl3 "group_id=1,reference_members=(1),max_size=128"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``ACTION_PROFILE``: Refers to action profile name from the p4 file.
+    ``FLOW``: Maps group with list of members.
+    Format "group_id=<group number>,reference_members=<member1,member2,..>,max_size=<maxsize of members this group can have>"
+
+12. Delete action profile group entry from an action selector table ::
+
+    $ ovs-p4ctl delete-action-profile-group SWITCH ACTION_PROFILE FLOW
+    $ Example: ovs-p4ctl delete-action-profile-group br0 ingress.as_sl3 "group_id=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``ACTION_PROFILE``: Refers to action profile name from the p4 file.
+    ``FLOW``: Refers to the group ID which was earlier configured via add
+    action profile group. Format ""group_id=<number>"
+
+13. Get action profile group details for an action selector table ::
+
+    $ ovs-p4ctl get-action-profile-group SWITCH ACTION_PROFILE FLOW
+    $ Example: ovs-p4ctl get-action-profile-group br0 ingress.as_sl3 "group_id=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``ACTION_PROFILE``: Refers to action profile name from the p4 file.
+    ``FLOW``: Refers to the group ID which was earlier configured via add
+    action profile group. Format "group_id=<number>"
+
+14. Rule to program ternary match_type ::
+
+    $ ovs-p4ctl add-entry SWITCH TABLE FLOW
+    $ Example: ovs-p4ctl add-entry br0 filter "src_ip=192.168.15.0/255.255.255.0,priority=100,action=drop"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``TABLE``: Refers to table_name present in p4info.txt file.
+    ``FLOW``: Refers to parameters for a the above mentioned TABLE. Since we
+    are programming a match_type ternary we expect user to provide priority
+    as well. 'priority' is a case sensitivity field expected from user.
+    Mask for ternary or WCM match field is expected in x.x.x.x format for IPv4
+    or an integer value or a hexa-decimal values.
+    match_filed_key=value,priority=value,action=action_name(value)
+
+15. Rule to delete ternary match_type ::
+
+    $ ovs-p4ctl del-entry SWITCH TABLE KEY
+    $ Example: ovs-p4ctl del-entry br0 ingress.ipv4_wcm "hdr.ipv4.dst_addr=192.168.1.0/255.255.255.0,priority=10"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``TABLE``: Refers to table_name present in p4info.txt file.
+    ``KEY``: Refers to match_filed_key parameters which are programmed for
+    the above mentioned TABLE. Since match_type is ternary, we expect user to
+    provide previously configured priority as well. 'priority' is a case
+    sensitivity field expected from user. Mask for ternary or WCM match field
+    is expected in x.x.x.x format for IPv4 or an integer value or a
+    hexa-decimal value. Format "match_filed_key=value,priority=value"
+
+16. Get indirect counter entry value ::
+
+    $ ovs-p4ctl get-counter SWITCH COUNTER_TABLE COUNTER_FLOW
+    $ Example: ovs-p4ctl get-counter br0 ingress.ipv4_host_counter "counter_id=308545543,index=1"
+    $ Example: ovs-p4ctl get-counter br0 ingress.ipv4_host_counter "counter_id=0,index=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``COUNTER_TABLE``: Refers to counter table entry from the p4 file.
+    ``COUNTER_FLOW``: Refers to the counter ID (generated ID by p4c, refer to bfrt.json file)
+    and the counter table index. Format "counter_id=<number>,index=<number>". A counter_id=0
+    will display value for all counters added up. For index=UNSET, all cells for specified
+    counter_id will be displayed.
+
+16. Reset indirect counter entry value ::
+
+    $ ovs-p4ctl reset-counter SWITCH COUNTER_TABLE COUNTER_FLOW
+    $ Example: ovs-p4ctl reset-counter br0 ingress.ipv4_host_counter "counter_id=308545543,index=1"
+
+  .. note::
+
+    ``SWITCH``: Referes to the bridge name, which maps to device name
+    internally.
+    ``COUNTER_TABLE``: Refers to counter table entry from the p4 file.
+    ``COUNTER_FLOW``: Refers to the counter ID (generated ID by p4c, refer to bfrt.json file)
+    and the counter table index. Format "counter_id=<number>,index=<number>"
 
 gnmi_cli executable
 -------------------
@@ -196,7 +339,7 @@ previously configured CONFIG params.
     gnmi-cli set "device:virtual-device,name:net_vhost0,host:host1,
                   device-type:VIRTIO_NET,queues:1,
                   pipeline-name:pipe,mempool-name:MEMPOOL0,mtu:2000,
-                  socket-path:/tmp/vhost-user-0,port-type:LINK"
+                  socket-path:/tmp/vhost-user-0,packet-dir:host,port-type:LINK"
 
   .. note::
 
@@ -219,9 +362,50 @@ previously configured CONFIG params.
     configured by the user it is considered as value `MEMPOOL0`
     mtu: this is a non-mandatory parameter, if not specifically configured
     by the user it is considered as value `1500`
+    packet-dir: this is a non-mandatory parameter. It accepts 2 values
+    `host` or `network`(case insensitive). The value 'host' indicates that
+    traffic via this port will be within the host. The value 'network' indicates
+    this port will be able to send/receive traffic to/from network. If not
+    specifically configured by the user, default value is `host`
 
+2) Set atrributes for a vhost port and a control port::
 
-2) Get attributes for vhost port::
+    $ gnmi-cli set PARAMS
+    $ Example:
+    gnmi-cli set "device:virtual-device,name:net_vhost0,host:host1,
+                  device-type:VIRTIO_NET,queues:1,
+                  pipeline-name:pipe,mempool-name:MEMPOOL0,control-port:TAP2,
+                  socket-path:/tmp/vhost-user-0,packet-dir:host,port-type:LINK"
+
+  .. note::
+
+    ``PARAMS``: These params are key:value pairs. Here virtual-device is a
+    sub-node which holds multiple ports like net_vhost0, net_vhost1,... and
+    each port accepts multiple config params. These config params are again a
+    key:value pair, either can be passed in single CLI command or multiple
+    CLI commands.
+    name: can take values defined in chassis config file. Refer to file
+    dpdk_port_config.pb.txt for port names.
+    host: can be any string.
+    queues: number of queues required by backend.
+    socket-path: socket path required by backend.
+    port-type: can take values defined in common.proto. Supported value is LINK.
+    device-type: can take values defined in common.proto. Supported values is
+    VIRTIO_NET.
+    pipeline-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `pipe`
+    mempool-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `MEMPOOL0`
+    mtu: this is a non-mandatory parameter, if not specifically configured
+    by the user it is considered as value `1500`
+    control-port: TAP port that need to be created for control packets.
+    packet-dir: this is a non-mandatory parameter. It accepts 2 values
+    `host` or `network`(case insensitive). The value 'host' indicates that
+    traffic via this port will be within the host. The value 'network' indicates
+    this port will be able to send/receive traffic to/from network. If not
+    specifically configured by the user, default value is `host`
+
+3) Get atrributes for a port::
 
     $ gnmi-cli get PARAMS
     $ Example:
@@ -243,13 +427,134 @@ previously configured CONFIG params.
 
   Example: export NO_PROXY=localhost,127.0.0.1
 
-3) Set atrributes for tap ports::
+4) VIRTIO-NET Device Hot plug for DPDK Target::
+
+    This feature will allow the user to hotplug the vhost-user ports to the running VM.
+    To hotplug the vhost-user port to qemu based VM, add monitor option when instantiating
+    qemu based VM and specify the telnet port and ip for qemu monitor socket.
+    Example of qemu command:
+      qemu-system-x86_64 -enable-kvm -smp 4 -m 1024M \
+      -boot c -cpu host -enable-kvm -nographic \
+      -L /root/pc-bios -name VM1_TAP_DEV \
+      -hda /root/VM/vm1.qcow2 \
+      -object memory-backend-file,id=mem,size=1024M,mem-path=/dev/hugepages,share=on \
+      -mem-prealloc \
+      -numa node,memdev=mem \
+      -monitor telnet::6555,server,nowait \
+      -serial telnet::6551,server &
+
+    Boot up the VM and login to console using telnet port (in the above example port 6551).
+    This VM will have 1 default port. To hotplug the vhost-user port, issue the following
+    gnmi-cli command:
+
+      $ gnmi-cli set PARAMS
+      $ Command to hotplug add the port. Example:
+      $ gnmi-cli set "device:virtual-device,name:net_vhost0,hotplug:add,
+                      qemu-socket-ip:127.0.0.1,qemu-socket-port:6555,
+                      qemu-vm-mac:00:e8:ca:11:aa:01,qemu-vm-netdev-id:netdev0,
+                      qemu-vm-chardev-id:char1,native-socket-path:/tmp/intf/vhost-user-0,
+                      qemu-vm-device-id:dev0"
+      $ Command to hotplug delete the port. Example:
+      $ gnmi-cli set "device:virtual-device,name:net_vhost0,hotplug:del"
+
+.. note::
+
+   ``PARAMS``: These params are key:value pairs. Here virtual-device is a
+    sub-node which holds multiple ports like net_vhost0, net_vhost1,... and
+    each port accepts multiple config params. These config params are again a
+    key:value pair, either can be passed in single CLI command or multiple
+    CLI commands.
+    name: can take values defined in chassis config file. Refer to file
+    dpdk_port_config.pb.txt for port names.
+    hotplug: Specify if the device needs to be hotplugged (add/ADD for hotplug
+    add, del/DEL for hotplug delete)
+    qemu-socket-ip: Specify IP of the host where qemu monitor socket resides.
+    qemu-socket-port: Specify qemu monitor socket port
+    qemu-vm_mac: Specify MAC address for port hotplugged to qemu VM
+    qemu-vm_netdev-id: Specify netdev ID for port hotplugged to qemu VM
+    qemu-vm_chardev-id: Specify chardev ID for port hotplugged to qemu VM
+    native-socket-path: Specify the native path for vhost-user socket on host
+    qemu-vm-device-id: Specify device ID for port hotplugged to qemu VM
+
+   Port can be hotplug added once and hotplug deleted once. Re-adding or 
+   deleting the port is not supported in older qemu versions due to qemu bug
+   reporting false duplicate IDs. This bug is fixed in qemu version 6.1.0 and
+   re-adding and re-deleting the hotplug port is supported from qemu version
+   6.1.0
+
+5) Set atrributes for link ports::
 
     $ gnmi-cli set PARAMS
     $ Example:
-    gnmi-cli set "device:virtual-device,name:TAP0,mtu:1500,port-type:TAP"
-    gnmi-cli set "device:virtual-device,name:TAP1,pipeline-name:pipe,
-                  mempool-name:MEMPOOL0,mtu:1500,port-type:TAP"
+    gnmi-cli set "device:physical-device,name:PORT1,pci-bdf:0000:00:05.0,
+                  port-type:link"
+    gnmi-cli set "device:physical-device,name:PORT0,pipeline-name:pipe,
+                  mempool-name:MEMPOOL0,mtu:1000,pci-bdf:0000:00:04.0,
+                  packet-dir:network,port-type:link"
+
+.. note::
+
+    ``PARAMS``: These params are key:value pairs. Here physical-device is a
+    sub-node which holds multiple ports like PORT0, PORT1,... and
+    each port accepts multiple config params. These config params are again a
+    key:value pair, either can be passed in single CLI command or multiple
+    CLI commands.
+    name: can take values defined in chassis config file. Refer to file
+    dpdk_port_config.pb.txt for port names.
+    pci-bdf: Should specify PCI BDF value
+    port-type: can take values defined in common.proto. Supported value is LINK.
+    pipeline-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `pipe`
+    mempool-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `MEMPOOL0`
+    mtu: this is a non-mandatory parameter, if not specifically configured
+    by the user it is considered as value `1500`
+    packet-dir: this is a non-mandatory parameter. It accepts 2 values
+    `host` or `network`(case insensitive). The value 'host' indicates that
+    traffic via this port will be within the host. The value 'network' indicates
+    this port will be able to send/receive traffic to/from network. If not
+    specifically configured by the user, default value is `host`
+
+
+6) Set atrributes for link ports and a control port::
+
+    $ gnmi-cli set PARAMS
+    $ Example:
+    gnmi-cli set "device:physical-device,name:PORT2,pipeline-name:pipe,
+                  mempool-name:MEMPOOL0,control-port:TAP1,mtu:1000,
+                  pci-bdf:0000:00:06.0,packet-dir:network,port-type:link"
+
+  .. note::
+
+    ``PARAMS``: These params are key:value pairs. Here physical-device is a
+    sub-node which holds multiple ports like PORT0, PORT1,... and
+    each port accepts multiple config params. These config params are again a
+    key:value pair, either can be passed in single CLI command or multiple
+    CLI commands.
+    name: can take values defined in chassis config file. Refer to file
+    dpdk_port_config.pb.txt for port names.
+    pci-bdf: Should specify PCI BDF value
+    port-type: can take values defined in common.proto. Supported value is LINK.
+    pipeline-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `pipe`
+    mempool-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `MEMPOOL0`
+    mtu: this is a non-mandatory parameter, if not specifically configured
+    by the user it is considered as value `1500`
+    control-port: TAP port that need to be created for control packets.
+    packet-dir: this is a non-mandatory parameter. It accepts 2 values
+    `host` or `network`(case insensitive). The value 'host' indicates that
+    traffic via this port will be within the host. The value 'network' indicates
+    this port will be able to send/receive traffic to/from network. If not
+    specifically configured by the user, default value is `host`
+
+7) Set atrributes for TAP ports::
+
+    $ gnmi-cli set PARAMS
+    $ Example:
+    gnmi-cli set "device:virtual-device,name:TAP1,mtu:1500,port-type:TAP"
+    gnmi-cli set "device:virtual-device,name:TAP0,pipeline-name:pipe,
+                  packet-dir:host,mempool-name:MEMPOOL0,mtu:1500,port-type:TAP"
 
   .. note::
 
@@ -267,13 +572,49 @@ previously configured CONFIG params.
     configured by the user it is considered as value `pipe`
     mempool-name: this is a non-mandatory parameter, if not specifically
     configured by the user it is considered as value `MEMPOOL0`
+    packet-dir: this is a non-mandatory parameter. It accepts 2 values
+    `host` or `network`(case insensitive). The value 'host' indicates that
+    traffic via this port will be within the host. The value 'network' indicates
+    this port will be able to send/receive traffic to/from network. If not
+    specifically configured by the user, default value is `host`
 
-4) Get attributes for tap ports::
+8) Set atrributes for TAP ports and a control port::
+
+    $ gnmi-cli set PARAMS
+    $ Example:
+    gnmi-cli set "device:virtual-device,name:TAP2,mtu:1000,
+                  pipeline-name:pipe,mempool-name:MEMPOOL0,control-port:TAP31,
+                  packet-dir:host,port-type:TAP"
+
+  .. note::
+
+    ``PARAMS``: These params are key:value pairs. Here virtual-device is a
+    sub-node which holds multiple ports like TAP0, TAP1,... and
+    each port accepts multiple config params. These config params are again a
+    key:value pair, either can be passed in single CLI command or multiple
+    CLI commands.
+    name: can take values defined in chassis config file. Refer to file
+    dpdk_port_config.pb.txt for port names.
+    port-type: can take values defined in common.proto. Supported value is LINK.
+    pipeline-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `pipe`
+    mempool-name: this is a non-mandatory parameter, if not specifically
+    configured by the user it is considered as value `MEMPOOL0`
+    mtu: this is a non-mandatory parameter, if not specifically configured
+    by the user it is considered as value `1500`
+    control-port: TAP port that need to be created for control packets.
+    packet-dir: this is a non-mandatory parameter. It accepts 2 values
+    `host` or `network`(case insensitive). The value 'host' indicates that
+    traffic via this port will be within the host. The value 'network' indicates
+    this port will be able to send/receive traffic to/from network. If not
+    specifically configured by the user, default value is `host`
+
+9) Get attributes for Pipelines Configuration::
 
     $ gnmi-cli get PARAMS
     $ Example:
-    gnmi-cli get "device:virtual-device,name:TAP0,port-type"
-    gnmi-cli get "device:virtual-device,name:TAP1,pipeline-name"
+    gnmi-cli get "device:virtual-device,name:net_vhost0,tdi-portin-id"
+    gnmi-cli get "device:virtual-device,name:net_vhost0,tdi-portout-id"
 
   .. note::
 
@@ -281,3 +622,40 @@ previously configured CONFIG params.
     sub-node which holds multiple ports like net_vhost0, net_vhost1,... Pass
     the key name for whose value need to be fetched. Each get can take ONLY
     one key, and fetches value for that previously configured KEY.
+    tdi-portin-id: Port ID for Pipeline in Input Direction
+    tdi-portin-id: Port ID for Pipeline in Output Direction
+
+Limitations/Note
+----------------
+
+    a) All the optional parameters(like mempool name , pipeline name, etc)
+    should be provided before the mandatory parameters (eg. port-type). The CLI
+    considers the parameters only till the last mandatory parameter; After the
+    last Mandatory parameter, rest all the optional parameters are ignored.
+
+    b) DPDK target doesn't support packet categorization for the purpose of
+    statistics. Hence all packets are reported under the same category as 
+    'unicast packets/bytes', and the rest of the other fields are displayed as zero.
+
+    c) When tunnel is enabled, it is expected to have total size of the tunnel
+    packet less than or equal to 1514 Bytes. To match this size, user need to
+    adjust overlay network interface MTU size not more than 1450 Bytes.
+
+    d) For any udp/tcp packets from overlay network, if checksum issues are
+    noticed on interfaces which are of type VIRTIO-NET, it is recommended to
+    disable checksum using below command.
+    $ ethtool --offload <netdev-name> rx off tx off
+
+
+Logs and Analysis
+------------------
+
+    a) If the user sees any ERROR logs while running 'ovs-p4ctl' or 'gnmi-cli' commands,
+    more details can be found in either 'ovs-vswitchd.log' or 'p4_driver.log' files.
+
+    b) ovs-vswitchd.log maintains the running logs and errors from the OVS submodules.
+    This file path is given as a '--log-file' parameter, while the 'ovs-vswitchd' process is run.
+    Ex:- ovs-vswitchd unix:$RUN_OVS/var/run/openvswitch/db.sock --log-file=/tmp/ovs-vswitchd.log
+
+    c) p4_driver.log maintains the running logs and errors from the P4-SDE and target submodule.
+    This file is usually created in the working directory, from where run_ovs.sh script is run.
