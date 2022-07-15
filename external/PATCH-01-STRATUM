@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 diff --git a/stratum/glue/status/status_macros.h b/stratum/glue/status/status_macros.h
 index cf8723d2..695a0365 100644
 --- a/stratum/glue/status/status_macros.h
@@ -2144,7 +2145,7 @@ index 4afa1532..d2e70214 100644
  };
  
 diff --git a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
-index 9f4bb3a9..a146753b 100644
+index 9f4bb3a9..e0154d94 100644
 --- a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 +++ b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 @@ -11,8 +11,10 @@
@@ -3825,29 +3826,32 @@ index 9f4bb3a9..a146753b 100644
 +}
 +
 +::util::Status TdiSdeWrapper::AddPort(int device, int port, uint64 speed_bps,
-+                                     FecMode fec_mode) {
-+  auto port_attrs = absl::make_unique<port_attributes_t>();
-+#ifdef P4SDE_DPDK_TARGET_STUB
-+  ASSIGN_OR_RETURN(auto bf_speed, PortSpeedHalToBf(speed_bps));
-+  ASSIGN_OR_RETURN(auto bf_fec_mode, FecModeHalToBf(fec_mode, speed_bps));
-+#endif
-+  RETURN_IF_TDI_ERROR(bf_pal_port_add(static_cast<bf_dev_id_t>(device),
-+                                       static_cast<bf_dev_port_t>(port),
-+                                       port_attrs.get()));
-+  return ::util::OkStatus();
-+}
-+
-+::util::Status TdiSdeWrapper::AddPort(int device, int port, uint64 speed_bps,
-+                                     PortConfigParams& config,
                                       FecMode fec_mode) {
-+  static int port_in;
-+  static int port_out;
-+
 +  auto port_attrs = absl::make_unique<port_attributes_t>();
 +#ifdef P4SDE_DPDK_TARGET_STUB
    ASSIGN_OR_RETURN(auto bf_speed, PortSpeedHalToBf(speed_bps));
    ASSIGN_OR_RETURN(auto bf_fec_mode, FecModeHalToBf(fec_mode, speed_bps));
 -  RETURN_IF_BFRT_ERROR(bf_pal_port_add(static_cast<bf_dev_id_t>(device),
++#endif
++  RETURN_IF_TDI_ERROR(bf_pal_port_add(static_cast<bf_dev_id_t>(device),
+                                        static_cast<bf_dev_port_t>(port),
+-                                       bf_speed, bf_fec_mode));
++                                       port_attrs.get()));
+   return ::util::OkStatus();
+ }
+ 
+-::util::Status BfSdeWrapper::DeletePort(int device, int port) {
+-  RETURN_IF_BFRT_ERROR(bf_pal_port_del(static_cast<bf_dev_id_t>(device),
++::util::Status TdiSdeWrapper::AddPort(int device, int port, uint64 speed_bps,
++                                     PortConfigParams& config,
++                                     FecMode fec_mode) {
++  static int port_in;
++  static int port_out;
++
++  auto port_attrs = absl::make_unique<port_attributes_t>();
++#ifdef P4SDE_DPDK_TARGET_STUB
++  ASSIGN_OR_RETURN(auto bf_speed, PortSpeedHalToBf(speed_bps));
++  ASSIGN_OR_RETURN(auto bf_fec_mode, FecModeHalToBf(fec_mode, speed_bps));
 +#endif
 +  strncpy(port_attrs->port_name, config.port_name.c_str(),
 +          sizeof(port_attrs->port_name));
@@ -3896,8 +3900,7 @@ index 9f4bb3a9..a146753b 100644
 +  }
 +
 +  auto bf_status = bf_pal_port_add(static_cast<bf_dev_id_t>(device),
-                                        static_cast<bf_dev_port_t>(port),
--                                       bf_speed, bf_fec_mode));
++                                       static_cast<bf_dev_port_t>(port),
 +                                       port_attrs.get());
 +  if (bf_status != BF_SUCCESS) {
 +      // Revert the port_in and port_out values
@@ -3906,11 +3909,9 @@ index 9f4bb3a9..a146753b 100644
 +      RETURN_IF_TDI_ERROR(bf_status);
 +  }
 +
-   return ::util::OkStatus();
- }
- 
--::util::Status BfSdeWrapper::DeletePort(int device, int port) {
--  RETURN_IF_BFRT_ERROR(bf_pal_port_del(static_cast<bf_dev_id_t>(device),
++  return ::util::OkStatus();
++}
++
 +::util::Status TdiSdeWrapper::DeletePort(int device, int port) {
 +  RETURN_IF_TDI_ERROR(bf_pal_port_del(static_cast<bf_dev_id_t>(device),
                                         static_cast<bf_dev_port_t>(port)));
@@ -4193,11 +4194,11 @@ index 9f4bb3a9..a146753b 100644
 -  // if (pipeline_initialized_) {
 -  // RETURN_IF_BFRT_ERROR(bf_device_remove(device));
 -  // }
-+  tdirt_id_mapper_.reset();
- 
+-
 -  bfrt_device_manager_ = &bfrt::BfRtDevMgr::getInstance();
 -  bfrt_id_mapper_.reset();
--
++  tdirt_id_mapper_.reset();
+ 
 -  RETURN_IF_BFRT_ERROR(bf_pal_device_warm_init_begin(
 -      device, BF_DEV_WARM_INIT_FAST_RECFG, BF_DEV_SERDES_UPD_NONE,
 +  RETURN_IF_TDI_ERROR(bf_pal_device_warm_init_begin(
@@ -4853,16 +4854,16 @@ index 9f4bb3a9..a146753b 100644
 +  tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
-+
-+  const tdi::Table* table;  // PRE node table.
-+  tdi_id_t table_id;
-+  RETURN_IF_TDI_ERROR(tdi_info_->tableFromNameGet(kPreNodeTable, &table));
-+  table_id = table->tableInfoGet()->idGet();
  
 -  std::unique_ptr<bfrt::BfRtTableKey> table_key;
 -  std::unique_ptr<bfrt::BfRtTableData> table_data;
 -  RETURN_IF_BFRT_ERROR(table->keyAllocate(&table_key));
 -  RETURN_IF_BFRT_ERROR(table->dataAllocate(&table_data));
++  const tdi::Table* table;  // PRE node table.
++  tdi_id_t table_id;
++  RETURN_IF_TDI_ERROR(tdi_info_->tableFromNameGet(kPreNodeTable, &table));
++  table_id = table->tableInfoGet()->idGet();
++
 +  std::unique_ptr<tdi::TableKey> table_key;
 +  std::unique_ptr<tdi::TableData> table_data;
 +  RETURN_IF_TDI_ERROR(table->keyAllocate(&table_key));
@@ -5371,7 +5372,7 @@ index 9f4bb3a9..a146753b 100644
                               &ucast_egress_port_valid));
      CHECK_RETURN_IF_FALSE(ucast_egress_port_valid)
          << "Found a unicase egress port that is not set valid.";
-@@ -2235,51 +2649,68 @@ namespace {
+@@ -2235,51 +2649,66 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -5410,46 +5411,42 @@ index 9f4bb3a9..a146753b 100644
 -    auto bf_status = table->dataFieldIdGet(kCounterBytes, &field_id);
 -    if (bf_status == BF_SUCCESS) {
 -      RETURN_IF_BFRT_ERROR(table_data->setValue(field_id, byte_count.value()));
--    }
 +    tdi_id_t field_id;
 +    dataFieldInfo = table->tableInfoGet()->dataFieldGet(kCounterBytes);
-+    RETURN_IF_NULL(dataFieldInfo);
-+    field_id = dataFieldInfo->idGet();
-+    RETURN_IF_TDI_ERROR(table_data->setValue(field_id, byte_count.value()));
++    if (dataFieldInfo) {
++      field_id = dataFieldInfo->idGet();
++      RETURN_IF_TDI_ERROR(table_data->setValue(field_id, byte_count.value()));
+     }
    }
++
    // Counter data: $COUNTER_SPEC_PKTS
    if (packet_count.has_value()) {
 -    bf_rt_id_t field_id;
 -    auto bf_status = table->dataFieldIdGet(kCounterPackets, &field_id);
 -    if (bf_status == BF_SUCCESS) {
 -      RETURN_IF_BFRT_ERROR(
+-          table_data->setValue(field_id, packet_count.value()));
 +    tdi_id_t field_id;
 +    dataFieldInfo = table->tableInfoGet()->dataFieldGet(kCounterPackets);
-+    RETURN_IF_NULL(dataFieldInfo);
-+    field_id = dataFieldInfo->idGet();
-+    RETURN_IF_TDI_ERROR(
-           table_data->setValue(field_id, packet_count.value()));
--    }
++    if (dataFieldInfo) {
++      field_id = dataFieldInfo->idGet();
++      RETURN_IF_TDI_ERROR(
++            table_data->setValue(field_id, packet_count.value()));
+     }
    }
 -  auto bf_dev_tgt = GetDeviceTarget(device);
 -  RETURN_IF_BFRT_ERROR(table->tableEntryMod(
 -      *real_session->bfrt_session_, bf_dev_tgt, *table_key, *table_data));
--
+ 
 +  const tdi::Device *device = nullptr;
 +  tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
 +
 +  tdi::Flags *flags = new tdi::Flags(0);
-+  tdi_status_t tdi_status;
-+  if(byte_count.value() == 0 && packet_count.value() == 0) {
-+    LOG(INFO) << "Resetting counters";
-+    tdi_status = table->clear(
-+      *real_session->tdirt_session_, *dev_tgt, *flags);
-+  } else {
-+    tdi_status = table->entryMod(
-+     *real_session->tdirt_session_, *dev_tgt, *flags, *table_key, *table_data);
-+  }
++  tdi_status_t tdi_status = table->entryMod(
++    *real_session->tdirt_session_, *dev_tgt, *flags, *table_key, *table_data);
++
 +  delete(flags);
 +  if (tdi_status != TDI_SUCCESS) {
 +     RETURN_ERROR(ERR_INTERNAL)
@@ -5465,7 +5462,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 counter_id, absl::optional<uint32> counter_index,
      std::vector<uint32>* counter_indices,
      std::vector<absl::optional<uint64>>* byte_counts,
-@@ -2292,29 +2723,41 @@ namespace {
+@@ -2292,29 +2721,41 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5520,7 +5517,7 @@ index 9f4bb3a9..a146753b 100644
                                    table, &keys, &datums));
    }
  
-@@ -2322,31 +2765,31 @@ namespace {
+@@ -2322,31 +2763,31 @@ namespace {
    byte_counts->resize(0);
    packet_counts->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5570,7 +5567,7 @@ index 9f4bb3a9..a146753b 100644
      }
      packet_counts->push_back(packet_count);
    }
-@@ -2362,87 +2805,122 @@ namespace {
+@@ -2362,87 +2803,122 @@ namespace {
  // Helper function to get the field ID of the "f1" register data field.
  // TODO(max): Maybe use table name and strip off "pipe." at the beginning?
  // std::string table_name;
@@ -5730,7 +5727,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 table_id, absl::optional<uint32> register_index,
      std::vector<uint32>* register_indices, std::vector<uint64>* register_datas,
      absl::Duration timeout) {
-@@ -2452,58 +2930,73 @@ namespace {
+@@ -2452,58 +2928,73 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5828,7 +5825,7 @@ index 9f4bb3a9..a146753b 100644
              << "Unsupported register data type " << static_cast<int>(data_type)
              << " for register in table " << table_id;
      }
-@@ -2515,21 +3008,21 @@ namespace {
+@@ -2515,21 +3006,21 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -5858,7 +5855,7 @@ index 9f4bb3a9..a146753b 100644
  
    // Meter data: $METER_SPEC_*
    if (in_pps) {
-@@ -2549,36 +3042,63 @@ namespace {
+@@ -2549,36 +3040,63 @@ namespace {
                               BytesPerSecondToKbits(pburst)));
    }
  
@@ -5937,7 +5934,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 table_id, absl::optional<uint32> meter_index,
      std::vector<uint32>* meter_indices, std::vector<uint64>* cirs,
      std::vector<uint64>* cbursts, std::vector<uint64>* pirs,
-@@ -2592,26 +3112,37 @@ namespace {
+@@ -2592,26 +3110,37 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5988,7 +5985,7 @@ index 9f4bb3a9..a146753b 100644
                                    table, &keys, &datums));
    }
  
-@@ -2622,55 +3153,58 @@ namespace {
+@@ -2622,55 +3151,58 @@ namespace {
    pbursts->resize(0);
    in_pps->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6064,7 +6061,7 @@ index 9f4bb3a9..a146753b 100644
              << "Unknown meter field " << field_name << " in meter with id "
              << table_id << ".";
        }
-@@ -2687,8 +3221,8 @@ namespace {
+@@ -2687,8 +3219,8 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6075,7 +6072,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 table_id, int member_id, const TableDataInterface* table_data,
      bool insert) {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
-@@ -2696,12 +3230,14 @@ namespace {
+@@ -2696,12 +3228,14 @@ namespace {
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6094,7 +6091,7 @@ index 9f4bb3a9..a146753b 100644
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
          DumpTableMetadata(table).ValueOr("<error reading table>"),
-@@ -2710,54 +3246,63 @@ namespace {
+@@ -2710,54 +3244,63 @@ namespace {
          DumpTableData(real_table_data->table_data_.get())
              .ValueOr("<error parsing data>"));
    };
@@ -6103,13 +6100,13 @@ index 9f4bb3a9..a146753b 100644
 -  RETURN_IF_ERROR(SetField(table_key.get(), kActionMemberId, member_id));
 +  RETURN_IF_ERROR(SetFieldExact(table_key.get(), kActionMemberId,
 +                                member_id));
- 
--  auto bf_dev_tgt = GetDeviceTarget(device);
++
 +  const tdi::Device *device = nullptr;
 +  tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
-+
+ 
+-  auto bf_dev_tgt = GetDeviceTarget(device);
 +  tdi::Flags *flags = new tdi::Flags(0);
 +  tdi_status_t tdi_status;
    if (insert) {
@@ -6182,7 +6179,7 @@ index 9f4bb3a9..a146753b 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -2767,18 +3312,28 @@ namespace {
+@@ -2767,18 +3310,28 @@ namespace {
    };
  
    // Key: $ACTION_MEMBER_ID
@@ -6219,7 +6216,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 table_id, int member_id, std::vector<int>* member_ids,
      std::vector<std::unique_ptr<TableDataInterface>>* table_datas) {
    CHECK_RETURN_IF_FALSE(member_ids);
-@@ -2787,24 +3342,34 @@ namespace {
+@@ -2787,24 +3340,34 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6266,7 +6263,7 @@ index 9f4bb3a9..a146753b 100644
                                    table, &keys, &datums));
    }
  
-@@ -2812,8 +3377,8 @@ namespace {
+@@ -2812,8 +3375,8 @@ namespace {
    table_datas->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
      // Key: $sid
@@ -6277,7 +6274,7 @@ index 9f4bb3a9..a146753b 100644
      member_ids->push_back(member_id);
  
      // Data: action params
-@@ -2827,21 +3392,21 @@ namespace {
+@@ -2827,21 +3390,21 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6307,7 +6304,7 @@ index 9f4bb3a9..a146753b 100644
  
    // We have to capture the std::unique_ptrs by reference [&] here.
    auto dump_args = [&]() -> std::string {
-@@ -2854,7 +3419,7 @@ namespace {
+@@ -2854,7 +3417,7 @@ namespace {
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6316,7 +6313,7 @@ index 9f4bb3a9..a146753b 100644
    // Data: $ACTION_MEMBER_ID
    RETURN_IF_ERROR(SetField(table_data.get(), kActionMemberId, member_ids));
    // Data: $ACTION_MEMBER_STATUS
-@@ -2864,53 +3429,63 @@ namespace {
+@@ -2864,53 +3427,63 @@ namespace {
    RETURN_IF_ERROR(
        SetField(table_data.get(), "$MAX_GROUP_SIZE", max_group_size));
  
@@ -6400,7 +6397,7 @@ index 9f4bb3a9..a146753b 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -2920,18 +3495,28 @@ namespace {
+@@ -2920,18 +3493,28 @@ namespace {
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6436,7 +6433,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 table_id, int group_id, std::vector<int>* group_ids,
      std::vector<int>* max_group_sizes,
      std::vector<std::vector<uint32>>* member_ids,
-@@ -2944,24 +3529,35 @@ namespace {
+@@ -2944,24 +3527,35 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6484,7 +6481,7 @@ index 9f4bb3a9..a146753b 100644
                                    table, &keys, &datums));
    }
  
-@@ -2970,27 +3566,26 @@ namespace {
+@@ -2970,27 +3564,26 @@ namespace {
    member_ids->resize(0);
    member_status->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6520,7 +6517,7 @@ index 9f4bb3a9..a146753b 100644
      member_status->push_back(member_enabled);
    }
  
-@@ -3002,10 +3597,11 @@ namespace {
+@@ -3002,10 +3595,11 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6534,7 +6531,7 @@ index 9f4bb3a9..a146753b 100644
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
-@@ -3014,8 +3610,8 @@ namespace {
+@@ -3014,8 +3608,8 @@ namespace {
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6545,7 +6542,7 @@ index 9f4bb3a9..a146753b 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -3027,19 +3623,33 @@ namespace {
+@@ -3027,19 +3621,33 @@ namespace {
              .ValueOr("<error parsing data>"));
    };
  
@@ -6558,11 +6555,11 @@ index 9f4bb3a9..a146753b 100644
 +  tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
- 
++
 +  /* Note: When multiple pipeline support is added, for device target
 +   * pipeline id also should be set
 +   */
-+
+ 
 +  tdi::Flags *flags = new tdi::Flags(0);
 +  tdi_status_t tdi_status = table->entryAdd(
 +      *real_session->tdirt_session_, *dev_tgt, *flags, *real_table_key->table_key_,
@@ -6586,7 +6583,7 @@ index 9f4bb3a9..a146753b 100644
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
-@@ -3047,8 +3657,9 @@ namespace {
+@@ -3047,8 +3655,9 @@ namespace {
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -6598,7 +6595,7 @@ index 9f4bb3a9..a146753b 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -3060,25 +3671,36 @@ namespace {
+@@ -3060,25 +3669,36 @@ namespace {
              .ValueOr("<error parsing data>"));
    };
  
@@ -6644,7 +6641,7 @@ index 9f4bb3a9..a146753b 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -3087,16 +3709,26 @@ namespace {
+@@ -3087,16 +3707,26 @@ namespace {
              .ValueOr("<error parsing key>"));
    };
  
@@ -6677,7 +6674,7 @@ index 9f4bb3a9..a146753b 100644
      uint32 table_id, const TableKeyInterface* table_key,
      TableDataInterface* table_data) {
    ::absl::ReaderMutexLock l(&data_lock_);
-@@ -3106,35 +3738,47 @@ namespace {
+@@ -3106,35 +3736,47 @@ namespace {
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -6741,7 +6738,7 @@ index 9f4bb3a9..a146753b 100644
    table_keys->resize(0);
    table_datas->resize(0);
  
-@@ -3148,111 +3792,147 @@ namespace {
+@@ -3148,111 +3790,147 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6793,15 +6790,15 @@ index 9f4bb3a9..a146753b 100644
 -  RETURN_IF_BFRT_ERROR(bfrt_info_->bfrtTableFromIdGet(table_id, &table));
 +  const tdi::Table* table;
 +  RETURN_IF_TDI_ERROR(tdi_info_->tableFromIdGet(table_id, &table));
- 
--  auto bf_dev_tgt = GetDeviceTarget(device);
--  RETURN_IF_BFRT_ERROR(
--      table->tableDefaultEntryReset(*real_session->bfrt_session_, bf_dev_tgt));
++
 +  const tdi::Device *device = nullptr;
 +  tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
-+
+ 
+-  auto bf_dev_tgt = GetDeviceTarget(device);
+-  RETURN_IF_BFRT_ERROR(
+-      table->tableDefaultEntryReset(*real_session->bfrt_session_, bf_dev_tgt));
 +  tdi::Flags *flags = new tdi::Flags(0);
 +  tdi_status_t tdi_status = table->defaultEntryReset(*real_session->tdirt_session_,
 +                                                     *dev_tgt, *flags);
@@ -6938,7 +6935,7 @@ index 9f4bb3a9..a146753b 100644
            if (auto notifier = weak_ref.lock()) {
              VLOG(1) << "Table counter for table " << table_id << " synced.";
              notifier->Notify();
-@@ -3262,7 +3942,7 @@ namespace {
+@@ -3262,7 +3940,7 @@ namespace {
            }
          },
          nullptr));
@@ -6947,7 +6944,7 @@ index 9f4bb3a9..a146753b 100644
      // Wait until sync done or timeout.
      if (!sync_notifier->WaitForNotificationWithTimeout(timeout)) {
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
-@@ -3270,32 +3950,43 @@ namespace {
+@@ -3270,32 +3948,43 @@ namespace {
               << table_id << ".";
      }
    }
@@ -7006,7 +7003,7 @@ index 9f4bb3a9..a146753b 100644
            if (auto notifier = weak_ref.lock()) {
              VLOG(1) << "Table registers for table " << table_id << " synced.";
              notifier->Notify();
-@@ -3305,7 +3996,7 @@ namespace {
+@@ -3305,7 +3994,7 @@ namespace {
            }
          },
          nullptr));
@@ -7015,7 +7012,7 @@ index 9f4bb3a9..a146753b 100644
      // Wait until sync done or timeout.
      if (!sync_notifier->WaitForNotificationWithTimeout(timeout)) {
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
-@@ -3313,20 +4004,20 @@ namespace {
+@@ -3313,20 +4002,20 @@ namespace {
               << table_id << ".";
      }
    }
