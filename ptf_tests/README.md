@@ -12,6 +12,45 @@ This document is meant to provide a step by step guide on how to run the p4ovs t
 
 ---
 
+# Infrastructure details for Automation to run
+
+The ptf_tests repo contains test cases for a varied type of scenarios. Keeping everything in mind the kind of setup that will run all will look like:
+
+![Figure 1](Auto_Infra.png?raw=True "Automation Infra")
+
+1. Linux Networking related tests (scripts having 'lnt' in their name"):
+Two Fedora/Ubuntu servers connected back to back using an NIC
+
+2. Link Port test cases (scripts having "link" in their name"):
+One Fedora/Ubuntu server with 2-port NIC. These 2 ports are connected in loopback
+We need to bind the first port (PCI ID XX:YY.0) with dpdk:
+
+Load uio or vfio-pci driver                  
+~ modprobe uio                       
+~ modprobe vfio-pci
+
+Bind the devices to dpdk
+~ cd $SDE_INSTALL/bin
+~ ethtool -i <interface name> ; take bus id and use for below command.
+~ ./dpdk-devbind.py --bind=vfio-pci <pci_bdf>          eg: ./dpdk-devbind.py --bind=vfio-pci 0000:18:00.0
+Check if device is bound correctly: ./dpdk-devbind.py -s
+
+We also need to enable intel_iommu=on:
+Update /etc/default/grub file: GRUB_CMDLINE_LINUX_DEFAULT="quiet splash intel_iommu=on iommu=pt"
+~ grub-mkconfig -o /boot/grub/grub.cfg
+reboot
+
+3. VM / vhost related test cases (tests_to_run.txt file will have VM tags VM1, VM2, ...):
+We need to create 4 copies of Ubuntu VM images in our DUT. These images are used to run vhost/hot plug test cases. 
+
+In general the syntaxes for running these tests are mentioned in tests_to_run.txt file. There please replace: 
+VM{i} with absolute path of VM images: E.g. ptf --test-dir tests/ DPDK_Hot_Plug_multi_port_test --pypath $PWD --test-params="config_json='DPDK_Hot_Plug_multi_port_test.json';vm_location_list='/home/admin2/VM/ubuntu-20.04-server-cloudimg-amd64_1.img,/home/admin2/VM/ubuntu-20.04-server-cloudimg-amd64_2.img'" --platform=dummy
+BDF{i} with the PCI ID of port(s) bound to dpdk: E.g. ptf --test-dir tests/ l3_wcm_with_link_port --pypath $PWD --test-params="config_json='l3_wcm_with_link_port.json';pci_bdf='0000:af:00.0'" --platform=dummy
+ 
+For LNT test cases we have some more parameters. #TBD 
+
+---
+
 # Directory Structure
 
 The following directory structure is a pre-requisite to run the tests. All steps should be run from the main directory, ptf_tests.
