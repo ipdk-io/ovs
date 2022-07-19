@@ -1468,11 +1468,12 @@ def parse_rcflow(flow):
 
     return counter_id, index
 
-def validate_counter_name(p4info, cnt_tbl_name):
+def validate_counter_name_and_id(p4info, cnt_tbl_name, ctr_id):
     for iter in p4info.counters:
         if iter.preamble.name == cnt_tbl_name:
-            return True
-    
+            if int(ctr_id) == 0 or iter.preamble.id == int(ctr_id):
+                    return True
+
     return False
 
 def _format_ce(ce):
@@ -1500,11 +1501,12 @@ def p4ctl_get_counter_entry(client, bridge, cnt_tbl_name, flow):
     if not p4info:
         raise Exception("cannot retrieve P4Info from device {}".format(bridge))
 
-    if validate_counter_name(p4info, cnt_tbl_name) is False:
-        print("Error: Could not find counter table \'{}\'in P4Info".format(cnt_tbl_name))
+    ctr_id, idx = parse_rcflow(flow)
+
+    if validate_counter_name_and_id(p4info, cnt_tbl_name, ctr_id) is False:
+        print("Error: Could not find counter table \'{}\' or counter_id {} in P4Info".format(cnt_tbl_name, ctr_id))
         sys.exit(1)
 
-    ctr_id, idx = parse_rcflow(flow)
 
     helper = P4InfoHelper(p4info)
     entity = p4runtime_pb2.Entity()
@@ -1534,11 +1536,11 @@ def p4ctl_reset_counter_entry(client, bridge, cnt_tbl_name, flow):
     if not p4info:
         raise Exception("cannot retrieve P4Info from device {}".format(bridge))
 
-    if validate_counter_name(p4info, cnt_tbl_name) is False:
-        print("Error: Could not find counter table \'{}\'in P4Info".format(cnt_tbl_name))
-        sys.exit(1)
-
     ctr_id, idx = parse_rcflow(flow)
+
+    if validate_counter_name_and_id(p4info, cnt_tbl_name, ctr_id) is False:
+        print("Error: Could not find counter table \'{}\' or counter_id {} in P4Info".format(cnt_tbl_name, ctr_id))
+        sys.exit(1)
 
     helper = P4InfoHelper(p4info)
     entity = p4runtime_pb2.Entity()
