@@ -61,6 +61,10 @@ control linux_networking_control(inout headers_t hdr,
         //    recirculate();
     }
 
+    action drop() {
+        drop_packet();
+    }
+
     action set_exception(PortId_t vport) {
         send_to_port(vport);
         local_metadata.exception_packet = 1;
@@ -318,10 +322,11 @@ control linux_networking_control(inout headers_t hdr,
             hdr.outer_ipv4.dst_addr : exact @name("ipv4_dst");
         }
         actions = {
+            drop;
             @tableonly decap_outer_ipv4;
             @defaultonly set_exception;
         }
-        default_action = set_exception(DEFAULT_EXCEPTION_VPORT);
+        default_action = drop();
     }
 
     action set_tunnel(ModDataPtr_t tunnel_id, ipv4_addr_t dst_addr) {
@@ -352,10 +357,11 @@ control linux_networking_control(inout headers_t hdr,
         }
         actions = {
             l2_fwd;
+            drop;
             @defaultonly l2_fwd_miss_action;
         }
 
-        const default_action = l2_fwd_miss_action(DEFAULT_MGMT_VPORT);
+        const default_action = drop();
         size = 65536;
     }
 
@@ -367,10 +373,11 @@ control linux_networking_control(inout headers_t hdr,
         }
         actions = {
             l2_fwd;
+            drop;
             @defaultonly l2_fwd_miss_action;
         }
 
-        const default_action = l2_fwd_miss_action(DEFAULT_MGMT_VPORT);
+        const default_action = drop();
         size = 65536;
     }
 
@@ -383,15 +390,12 @@ control linux_networking_control(inout headers_t hdr,
         actions = {
             l2_fwd;
             set_tunnel;
+            drop;
             @defaultonly l2_fwd_miss_action;
         }
 
-        const default_action = l2_fwd_miss_action(DEFAULT_MGMT_VPORT);
+        const default_action = drop();
         size = 65536;
-    }
-
-    action drop() {
-        drop_packet();
     }
 
     action set_nexthop(router_interface_id_t router_interface_id,
@@ -409,11 +413,12 @@ control linux_networking_control(inout headers_t hdr,
         }
         actions = {
             set_nexthop;
+            drop;
             @defaultonly set_exception;
         }
 
         size = 65536;
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
     }
 
     action set_nexthop_id (bit<16> nexthop_id) {
@@ -449,10 +454,11 @@ control linux_networking_control(inout headers_t hdr,
         actions = {
             set_nexthop_id;
             ecmp_hash_action; /* not used in RX direction */
+            drop;
             @defaultonly set_exception;
         }
 
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
         size = 65536;
     }
 
@@ -481,10 +487,11 @@ control linux_networking_control(inout headers_t hdr,
 
         actions = {
             set_control_dest;
+            drop;
             @defaultonly set_exception;
         }
 
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
     }
 
     table handle_rx_exception_pkts {
@@ -493,10 +500,11 @@ control linux_networking_control(inout headers_t hdr,
         }
 
         actions = {
+            drop;
             @defaultonly set_exception;
         }
 
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
     }
 
     table handle_tx_control_vlan_pkts_table {
@@ -507,10 +515,11 @@ control linux_networking_control(inout headers_t hdr,
 
         actions = {
             pop_vlan_fwd;
+            drop;
             @defaultonly set_exception;
         }
 
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
     }
 
     table handle_tx_control_pkts_table {
@@ -521,10 +530,11 @@ control linux_networking_control(inout headers_t hdr,
         actions = {
             push_vlan_fwd;
             set_control_dest;
+            drop;
             @defaultonly set_exception;
         }
 
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
     }
 
     table handle_tx_exception_pkts {
@@ -534,9 +544,10 @@ control linux_networking_control(inout headers_t hdr,
 
         actions = {
             set_exception;
+            drop;
         }
 
-        const default_action = set_exception(DEFAULT_DEBUG_VPORT);
+        const default_action = drop();
     }
 
 #ifdef ECMP
