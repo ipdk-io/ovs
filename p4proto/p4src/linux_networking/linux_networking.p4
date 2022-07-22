@@ -165,10 +165,10 @@ control linux_networking_control(inout headers_t hdr,
             bit<16> dst_port,
             vni_id_t vni) {
 
+        hdr.ethernet.setValid();
         hdr.ethernet.dst_addr = hdr.outer_ethernet.dst_addr;
         hdr.ethernet.src_addr = hdr.outer_ethernet.src_addr;
         hdr.ethernet.ether_type = hdr.outer_ethernet.ether_type;
-        hdr.ethernet.setValid();
         hdr.outer_ethernet.setInvalid();
 
         if (hdr.outer_vlan[0].isValid()) {
@@ -197,6 +197,7 @@ control linux_networking_control(inout headers_t hdr,
         }
 
         if (hdr.outer_ipv4.isValid()) {
+            hdr.ipv4.setValid();
             hdr.ipv4.version_ihl = hdr.outer_ipv4.version_ihl;
             hdr.ipv4.dscp_ecn = hdr.outer_ipv4.dscp_ecn;
             hdr.ipv4.total_len = hdr.outer_ipv4.total_len;
@@ -207,30 +208,30 @@ control linux_networking_control(inout headers_t hdr,
             hdr.ipv4.header_checksum = hdr.outer_ipv4.header_checksum;
             hdr.ipv4.src_addr = hdr.outer_ipv4.src_addr;
             hdr.ipv4.dst_addr = hdr.outer_ipv4.dst_addr;
-            hdr.ipv4.setValid();
             hdr.outer_ipv4.setInvalid();
         }
 
         if (hdr.outer_icmp.isValid()) {
+            hdr.icmp.setValid();
             hdr.icmp.type = hdr.outer_icmp.type;
             hdr.icmp.code = hdr.outer_icmp.code;
             hdr.icmp.checksum = hdr.outer_icmp.checksum;
-            hdr.icmp.setValid();
 
             hdr.outer_icmp.setInvalid();
         }
 
         if (hdr.outer_udp.isValid()) {
+            hdr.udp.setValid();
             hdr.udp.src_port = hdr.outer_udp.src_port;
             hdr.udp.dst_port = hdr.outer_udp.dst_port;
             hdr.udp.hdr_length = hdr.outer_udp.hdr_length;
             hdr.udp.checksum = hdr.outer_udp.checksum;
-            hdr.udp.setValid();
 
             hdr.outer_udp.setInvalid();
         }
 
         if (hdr.outer_tcp.isValid()) {
+            hdr.tcp.setValid();
             hdr.tcp.src_port = hdr.outer_tcp.src_port;
             hdr.tcp.dst_port = hdr.outer_tcp.dst_port;
             hdr.tcp.seq_no = hdr.outer_tcp.seq_no;
@@ -240,7 +241,6 @@ control linux_networking_control(inout headers_t hdr,
             hdr.tcp.window = hdr.outer_tcp.window;
             hdr.tcp.checksum = hdr.outer_tcp.checksum;
             hdr.tcp.urgent_ptr = hdr.outer_tcp.urgent_ptr;
-            hdr.tcp.setValid();
 
             hdr.outer_tcp.setInvalid();
         }
@@ -322,9 +322,8 @@ control linux_networking_control(inout headers_t hdr,
             hdr.outer_ipv4.dst_addr : exact @name("ipv4_dst");
         }
         actions = {
-            drop;
             @tableonly decap_outer_ipv4;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
         default_action = drop();
     }
@@ -357,8 +356,7 @@ control linux_networking_control(inout headers_t hdr,
         }
         actions = {
             l2_fwd;
-            drop;
-            @defaultonly l2_fwd_miss_action;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -373,8 +371,7 @@ control linux_networking_control(inout headers_t hdr,
         }
         actions = {
             l2_fwd;
-            drop;
-            @defaultonly l2_fwd_miss_action;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -390,8 +387,7 @@ control linux_networking_control(inout headers_t hdr,
         actions = {
             l2_fwd;
             set_tunnel;
-            drop;
-            @defaultonly l2_fwd_miss_action;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -413,8 +409,7 @@ control linux_networking_control(inout headers_t hdr,
         }
         actions = {
             set_nexthop;
-            drop;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
 
         size = 65536;
@@ -454,8 +449,7 @@ control linux_networking_control(inout headers_t hdr,
         actions = {
             set_nexthop_id;
             ecmp_hash_action; /* not used in RX direction */
-            drop;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -467,9 +461,9 @@ control linux_networking_control(inout headers_t hdr,
     }
 
     action push_vlan_fwd(PortId_t port, bit<16> vlan_tag) {
+        hdr.outer_vlan[0].setValid();
         hdr.outer_vlan[0].ether_type = hdr.outer_ethernet.ether_type;
         hdr.outer_vlan[0].pcp_cfi_vid = vlan_tag;
-        hdr.outer_vlan[0].setValid();
         hdr.outer_ethernet.ether_type = ETHERTYPE_VLAN;
         send_to_port(port);
     }
@@ -487,8 +481,7 @@ control linux_networking_control(inout headers_t hdr,
 
         actions = {
             set_control_dest;
-            drop;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -500,8 +493,7 @@ control linux_networking_control(inout headers_t hdr,
         }
 
         actions = {
-            drop;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -515,8 +507,7 @@ control linux_networking_control(inout headers_t hdr,
 
         actions = {
             pop_vlan_fwd;
-            drop;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
 
         const default_action = drop();
@@ -530,8 +521,7 @@ control linux_networking_control(inout headers_t hdr,
         actions = {
             push_vlan_fwd;
             set_control_dest;
-            drop;
-            @defaultonly set_exception;
+            @defaultonly drop;
         }
 
         const default_action = drop();

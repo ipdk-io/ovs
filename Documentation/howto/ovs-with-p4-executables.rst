@@ -663,6 +663,9 @@ Limitations/Note
     disable checksum using below command.
     $ ethtool --offload <netdev-name> rx off tx off
 
+    d) pna_tcp_connection_tracking demonstrates the PNA add_on_miss feature and
+    flow aging for auto learn flows. It supports basic TCP CT state machine.
+
 
 Logs and Analysis
 ------------------
