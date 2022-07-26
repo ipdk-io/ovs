@@ -172,6 +172,8 @@ EXTRA_DIST = \
 	ptf_tests/common/config/l3_wcm_with_link_port.json \
 	ptf_tests/common/config/max_tap_port.json \
 	ptf_tests/common/config/max_vhost_port.json \
+	ptf_tests/common/config/dpdk_action_selector_cli.json \
+	ptf_tests/common/config/dpdk_action_profile_cli.json \
 	ptf_tests/common/config/l3_action_profile_with_vhost_test1.json \
 	ptf_tests/common/config/l3_action_selector_with_vhost_test1.json \
 	ptf_tests/common/config/l3_action_profile_with_link_test1.json \
@@ -241,6 +243,8 @@ EXTRA_DIST = \
 	ptf_tests/tests/max_tap_port.py \
 	ptf_tests/tests/ctrl_port_counter_with_vhost.py \
 	ptf_tests/tests/max_vhost_port.py \
+	ptf_tests/tests/dpdk_action_selector_cli.py \
+	ptf_tests/tests/dpdk_action_profile_cli.py \
 	ptf_tests/tests/l3_wcm_del_add.py \
 	ptf_tests/tests/lnt_4vm_on_same_host.py \
 	ptf_tests/common/lib/tcpdump.py \
