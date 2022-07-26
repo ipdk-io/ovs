@@ -496,7 +496,7 @@ check-tabs:
 	  grep -ln "^	" \
 	    `git ls-files \
 	      | grep -v -f build-aux/initial-tab-allowed-files` /dev/null \
-	      | $(EGREP) -v ':[ 	]*/?\*'; \
+	      | $(EGREP) -v '^p4proto/p4src/linux_networking/|:[ 	]*/?\*'; \
 	then \
 	  echo "See above for files that use tabs for indentation."; \
 	  echo "Please use spaces instead."; \

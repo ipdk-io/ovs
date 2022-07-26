@@ -13,6 +13,13 @@ EXTRA_DIST += p4proto/p4src/linux_networking/parser.p4
 EXTRA_DIST += p4proto/p4src/linux_networking/routing.p4
 EXTRA_DIST += p4proto/p4src/linux_networking/tunnel.p4
 EXTRA_DIST += p4proto/p4src/linux_networking/lnw_ct.p4
+EXTRA_DIST += p4proto/p4src/linux_networking/lnw.conf
+EXTRA_DIST += p4proto/kctrl/README.md
+EXTRA_DIST += p4proto/kctrl/switchapi/README.md
+EXTRA_DIST += p4proto/kctrl/switchlink/README.md
+EXTRA_DIST += p4proto/kctrl/switchsai/README.md
+EXTRA_DIST += p4proto/p4src/linux_networking/README.md
+EXTRA_DIST += p4proto/p4src/linux_networking/topology.PNG
 #endif
 
 p4proto_libp4proto_la_SOURCES = \
