@@ -11,6 +11,7 @@ import os
 import subprocess
 import re
 import asyncio
+import time
 
 from common.lib.local_connection import Local
 from common.lib.telnet_connection import connectionManager
@@ -155,7 +156,7 @@ def vm_create(vm_location_list, memory="512M"):
         vm_name = f"VM{i}"
         vm_list.append(vm_name)
 
-        cmd = f"(qemu-kvm -smp 2 -m {memory} \
+        cmd = f"(qemu-system-x86_64 -enable-kvm -smp 4 -m {memory} \
 -boot c -cpu host -enable-kvm -nographic \
 -L /root/pc-bios -name VM{i} \
 -hda {vm_location_list[i]} \
@@ -167,6 +168,7 @@ def vm_create(vm_location_list, memory="512M"):
 -device virtio-net-pci,netdev=netdev{i} \
 -serial telnet::655{i},server,nowait &)"
 
+        time.sleep(5)
         p  = subprocess.Popen([cmd], shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
         try:
@@ -229,13 +231,13 @@ def vm_to_vm_ping_drop_test(conn, dst_ip, count="4"):
 
     conn.sendCmd(cmd)
     result = conn.readResult()
-    pkt_loss = 100
+    pkt_loss = "100"
     if result:
         match = re.search('(\d*)% packet loss', result)
         if match:
-            pkt_loss = int(match.group(1))
+            pkt_loss = match.group(1)
 
-    if pkt_loss == 100:
+    if pkt_loss == "100":
         print(f"PASS: 100% packet loss to destination {dst_ip}")
         return True
     else:
@@ -341,6 +343,7 @@ def vm_create_with_hotplug(config_data, memory="512M"):
  -serial telnet::{vm['hotplug']['serial-telnet-port']},server &)"
         
         print(cmd)
+        time.sleep(5)
 
         p  = subprocess.Popen([cmd], shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 

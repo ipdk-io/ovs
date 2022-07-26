@@ -95,9 +95,7 @@
             "name": "ingress.ipv4_host",
             "match_action": [
                     "headers.ipv4.dst_addr=1.1.1.1,group_id=1",
-                    "headers.ipv4.dst_addr=2.2.2.2,group_id=2",
-                    "headers.ipv4.dst_addr=224.0.0.1,group_id=2",
-                    "headers.ipv4.dst_addr=255.255.255.255,group_id=2"
+                    "headers.ipv4.dst_addr=2.2.2.2,group_id=2"
      ]
  } 
      ],

@@ -95,6 +95,7 @@ class L3_Action_Selector_Link(BaseTest):
         for match_action in table['match_action']:
             ovs_p4ctl.ovs_p4ctl_add_entry(table['switch'],table['name'], match_action)
 
+        time.sleep(5)
         # verify whether traffic hits group-1
         pkt = simple_tcp_packet(ip_dst=self.config_data['traffic']['in_pkt_header']['ip_dst'][0])
         # Verify whether packet is dropped as per rule 1
@@ -149,5 +150,10 @@ class L3_Action_Selector_Link(BaseTest):
         print("Deleting members")    
         for del_member in table['del_member']:
             ovs_p4ctl.ovs_p4ctl_del_member(table['switch'],table['name'],del_member)
+
+        if self.result.wasSuccessful():
+            print("Test has PASSED")
+        else:
+            print("Test has FAILED")
 
  

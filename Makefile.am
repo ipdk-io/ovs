@@ -202,6 +202,8 @@ EXTRA_DIST = \
 	ptf_tests/common/p4c_artifacts/linux_networking/pipe/.gitkeep \
 	ptf_tests/common/p4c_artifacts/linux_networking/routing.p4 \
 	ptf_tests/common/p4c_artifacts/linux_networking/tunnel.p4 \
+	ptf_tests/common/p4c_artifacts/l3_exact_match_add_del/l3_exact_match_add_del.conf \
+	ptf_tests/common/p4c_artifacts/l3_exact_match_add_del/l3_exact_match_add_del.p4 \
 	ptf_tests/common/lib/__init__.py \
 	ptf_tests/common/lib/local_connection.py \
 	ptf_tests/common/lib/ovs_p4ctl.py \

@@ -1,6 +1,6 @@
 {
     "switch": "br0",
-    "p4file": "l3_exact_match",
+    "p4file": "l3_exact_match_add_del",
     "port": [
         {
             "id": "1",

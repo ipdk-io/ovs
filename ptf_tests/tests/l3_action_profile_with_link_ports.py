@@ -95,7 +95,8 @@ class L3_Action_Profile_Link(BaseTest):
             print(f"Adding {table['description']} rules")
             for match_action in table[table_entry_dict[table['description']]]:
                 function_dict[table['description']](table['switch'],table['name'], match_action)
-
+        
+        time.sleep(5)
         # verify whether traffic hits group-1
         pkt = simple_tcp_packet(ip_dst=self.config_data['traffic']['in_pkt_header']['ip_dst'][0])
         # Verify whether packet is dropped as per rule 1
@@ -134,19 +135,21 @@ class L3_Action_Profile_Link(BaseTest):
 
 
     def tearDown(self):
+        table = self.config_data['table'][1]
 
-        function_dict = {
-                'table_for_configure_member' : ovs_p4ctl.ovs_p4ctl_del_member,
-                'table_for_ipv4' : ovs_p4ctl.ovs_p4ctl_del_entry
-                }
-        table_entry_dict = {
-                'table_for_configure_member' : 'del_member',
-                'table_for_ipv4' : 'del_action'
-                }
-        for table in self.config_data['table']:
-            print(f"Deleting {table['description']} rules")
-            for del_action in table[table_entry_dict[table['description']]]:
-                function_dict[table['description']](table['switch'], table['name'], del_action)
+        print(f"Deleting rules")
+        for del_action in table['del_action']:
+            ovs_p4ctl.ovs_p4ctl_del_entry(table['switch'], table['name'], del_action)
+
+        table = self.config_data['table'][0]
+        print("Deleting members")
+        for del_member in table['del_member']:
+            ovs_p4ctl.ovs_p4ctl_del_member(table['switch'],table['name'],del_member)
+
+        if self.result.wasSuccessful():
+            print("Test has PASSED")
+        else:
+            print("Test has FAILED")
 
 
  

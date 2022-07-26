@@ -78,6 +78,7 @@ class L2_Exact_Match(BaseTest):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"Failed to add table entry {match_action}")
             
+            time.sleep(5)
             # forming 1st packet and sending to validate if rule-1 hits or not
             print("sending packet to check if rule 1  hits")
             if table['description'] == "table_for_dst_mac":

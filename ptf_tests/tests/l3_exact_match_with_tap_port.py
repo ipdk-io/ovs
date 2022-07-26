@@ -196,6 +196,7 @@ class L3_Exact_Match(BaseTest):
             
             send_cont_2 = gnmi_get_params_counter(self.gnmicli_params[send_port_id])
             if not send_cont_2:
+
                 self.result.addFailure(self, sys.exc_info())
                 print(f"FAIL: unable to get counter of {self.config_data['port'][receive_port_id]['name']}")
 

@@ -150,20 +150,18 @@ class L3_Action_Profile_Vhost(BaseTest):
 
     def tearDown(self):
 
-        function_dict = {
-                'table_for_configure_member' : ovs_p4ctl.ovs_p4ctl_del_member,
-                'table_for_ipv4' : ovs_p4ctl.ovs_p4ctl_del_entry
-                }
-        table_entry_dict = {
-                'table_for_configure_member' : 'del_member',
-                'table_for_ipv4' : 'del_action'
-                }
-        for table in self.config_data['table']:
-            print(f"Deleting {table['description']} rules")
-            for del_action in table[table_entry_dict[table['description']]]:
-                function_dict[table['description']](table['switch'], table['name'], del_action)
-        
-        if self.PASSED:
+        table = self.config_data['table'][1]
+
+        print(f"Deleting rules")
+        for del_action in table['del_action']:
+            ovs_p4ctl.ovs_p4ctl_del_entry(table['switch'], table['name'], del_action)
+
+        table = self.config_data['table'][0]
+        print("Deleting members")
+        for del_member in table['del_member']:
+            ovs_p4ctl.ovs_p4ctl_del_member(table['switch'],table['name'],del_member)
+
+        if self.result.wasSuccessful():
             print("Test has PASSED")
         else:
             print("Test has FAILED")

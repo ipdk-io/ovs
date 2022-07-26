@@ -224,17 +224,6 @@ class L3_Verify_Traffic_with_Action_Profile(BaseTest):
                 print(f"FAIL: {total_octets_send} octets expected but {update[each]} verified on {port} {each} counter")
                 self.result.addFailure(self, sys.exc_info())
 
-        #Record UDP MultiCast counter
-        send_port_id, receive_port_id = 0,2
-        #Record port counter before sending traff
-        receive_cont_1 = gnmi_get_params_counter(self.gnmicli_params[receive_port_id])
-        if not receive_cont_1:  
-            self.result.addFailure(self, sys.exc_info())
-            print (f"FAIL: unable to get counter of {self.config_data['port'][receive_port_id]['name']}")
-        send_cont_1 = gnmi_get_params_counter(self.gnmicli_params[send_port_id])
-        if not send_cont_1:
-            self.result.addFailure(self, sys.exc_info())
-            print (f"FAIL: unable to get counter of {self.config_data['port'][send_port_id]['name']}")
 
         # forming UDP Multicast packet
         print(f"Sending UDP Multicast packet from {port_ids[0]} to {self.config_data['traffic']['in_pkt_header']['ip_dst_2']}")
@@ -250,41 +239,6 @@ class L3_Verify_Traffic_with_Action_Profile(BaseTest):
             self.result.addFailure(self, sys.exc_info())
             self.fail(f"FAIL: Verification of UDP Multicast packets sent failed with exception {err}")
         
-        #Record port counter after sending traffic
-        send_cont_2 = gnmi_get_params_counter(self.gnmicli_params[send_port_id])
-        if not send_cont_2:
-            self.result.addFailure(self, sys.exc_info())
-            print(f"FAIL: unable to get counter of {self.config_data['port'][send_port_id]['name']}")
-        receive_cont_2 = gnmi_get_params_counter(self.gnmicli_params[receive_port_id])
-        if not receive_cont_2:
-            self.result.addFailure(self, sys.exc_info())
-            print (f"FAIL: unable to get counter of {self.config_data['port'][receive_port_id]['name']}")
-
-        #checking counter update
-        for each in self.config_data['traffic']['mul_pkts_counter']:
-            if each == 'in-multicast-pkts':
-                update = test_utils.compare_counter(send_cont_2,send_cont_1)
-                port = self.config_data['port'][send_port_id]['name']
-            if each == 'mul_pkts_counter':
-                update = test_utils.compare_counter(receive_cont_2,receive_cont_1)
-                port = self.config_data['port'][receive_port_id]['name']
-
-            if update[each] in range(num, num_buffer):
-                print(f"PASS: {num} packets expected and {update[each]} verified on {port} {each} counter")
-            else:
-                print(f"FAIL: {num} packets expected but {update[each]} verified on {port} {each} counter")
-                self.result.addFailure(self, sys.exc_info())
-
-        #Record port counter before sending traff
-        send_port_id, receive_port_id = 0,3
-        receive_cont_1 = gnmi_get_params_counter(self.gnmicli_params[receive_port_id])
-        if not receive_cont_1:  
-            self.result.addFailure(self, sys.exc_info())
-            print (f"FAIL: unable to get counter of {self.config_data['port'][receive_port_id]['name']}")
-        send_cont_1 = gnmi_get_params_counter(self.gnmicli_params[send_port_id])
-        if not send_cont_1:
-            self.result.addFailure(self, sys.exc_info())
-            print (f"FAIL: unable to get counter of {self.config_data['port'][send_port_id]['name']}")
 
         # forming UDP Broadcast packet
         print(f"Sending UDP Broadcast packet from {port_ids[0]} to {self.config_data['traffic']['in_pkt_header']['ip_dst_3']}")
@@ -300,47 +254,20 @@ class L3_Verify_Traffic_with_Action_Profile(BaseTest):
             self.result.addFailure(self, sys.exc_info())
             self.fail(f"FAIL: Verification of UDP Broadcast packets sent failed with exception {err}")
 
-        #Record port counter after sending traffic
-        send_cont_2 = gnmi_get_params_counter(self.gnmicli_params[send_port_id])
-        if not send_cont_2:
-            self.result.addFailure(self, sys.exc_info())
-            print(f"FAIL: unable to get counter of {self.config_data['port'][send_port_id]['name']}")
-        receive_cont_2 = gnmi_get_params_counter(self.gnmicli_params[receive_port_id])
-        if not receive_cont_2:
-            self.result.addFailure(self, sys.exc_info())
-            print (f"FAIL: unable to get counter of {self.config_data['port'][receive_port_id]['name']}")
-
-        #checking counter update
-        for each in self.config_data['traffic']['brd_pkts_counter']:
-            if each == 'in-broadcast-pkts':
-                update = test_utils.compare_counter(send_cont_2,send_cont_1)
-                port = self.config_data['port'][send_port_id]['name']
-            if each == 'out-broadcast-pkts':
-                update = test_utils.compare_counter(receive_cont_2,receive_cont_1)
-                port = self.config_data['port'][receive_port_id]['name']
-
-            if update[each] in range(num, num_buffer):
-                print(f"PASS: {num} packets expected and {update[each]} verified on {port} {each} counter")
-            else:
-                print(f"FAIL: {num} packets expected but {update[each]} verified on {port} {each} counter")
-                self.result.addFailure(self, sys.exc_info())
-
         self.dataplane.kill()
 
 
     def tearDown(self):
-        function_dict = {
-                'table_for_configure_member' : ovs_p4ctl.ovs_p4ctl_del_member,
-                'table_for_ipv4' : ovs_p4ctl.ovs_p4ctl_del_entry
-                }
-        table_entry_dict = {
-                'table_for_configure_member' : 'del_member',
-                'table_for_ipv4' : 'del_action'
-                }
-        for table in self.config_data['table']:
-            print(f"Deleting {table['description']} rules")
-            for del_action in table[table_entry_dict[table['description']]]:
-                function_dict[table['description']](table['switch'], table['name'], del_action)
+        table = self.config_data['table'][1]
+
+        print(f"Deleting rules")
+        for del_action in table['del_action']:
+            ovs_p4ctl.ovs_p4ctl_del_entry(table['switch'], table['name'], del_action)
+
+        table = self.config_data['table'][0]
+        print("Deleting members")
+        for del_member in table['del_member']:
+            ovs_p4ctl.ovs_p4ctl_del_member(table['switch'],table['name'],del_member)
 
         if self.result.wasSuccessful():
             print("Test has PASSED")

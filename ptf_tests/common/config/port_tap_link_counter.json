@@ -52,8 +52,7 @@
                 "hdr.ipv4.dst_addr=192.168.16.0/255.255.255.0,priority=150,action=ingress.send(2)",
                 "hdr.ipv4.dst_addr=255.255.255.255/255.0.0.0,priority=200,action=ingress.send(3)",
                 "hdr.ipv4.dst_addr=192.168.15.0/255.255.0.0,priority=110,action=ingress.send(0)",
-                "hdr.ipv4.dst_addr=239.0.0.1/255.0.0.0,priority=120,action=ingress.send(0)",
-                "hdr.ipv4.dst_addr=255.255.255.255/255.0.0.0,priority=150,action=ingress.send(0)"
+                "hdr.ipv4.dst_addr=239.0.0.1/255.0.0.0,priority=120,action=ingress.send(0)"
             ]
         }
     ],

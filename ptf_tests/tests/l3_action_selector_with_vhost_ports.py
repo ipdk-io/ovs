@@ -109,29 +109,22 @@ class L3_Action_Selector_Vhost(BaseTest):
 
 
         # verify whether traffic hits group-1
-        print("Verify whether traffic hits group-3 from VM0 to VM1")
+        print("Verify whether traffic hits group-1 from VM0 to VM1")
         dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][0]
         result = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
         if not result:
             self.result.addFailure(self, sys.exc_info())
             print("FAIL: Traffic test failed for group-1")
-
-        # verify whether traffic hits group-2
-        print("Verify whether traffic hits group-3 from VM0 to VM1")
-        dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][1]
-        result = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
+            
+        # verify whether traffic hits group-1
+        print("Verify whether traffic hits group-1 from VM1 to VM0")
+        dst_ip=self.config_data['traffic']['in_pkt_header']['ip_src'][0]
+        result = test_utils.vm_to_vm_ping_test(conn2, dst_p)
         if not result:
             self.result.addFailure(self, sys.exc_info())
-            print("FAIL: Traffic test failed for group-2")
+            print("FAIL: Traffic test failed for group-1")
 
-        # verify whether traffic hits group-3
-        print("Verify whether traffic hits group-3 from VM0 to VM1")
-        dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][2]
-        result = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
-        if not result:
-            self.result.addFailure(self, sys.exc_info())
-            print("FAIL: Traffic test failed for group-3")
-        
+
 
         # close telnet connections
         conn1.close()
@@ -139,12 +132,6 @@ class L3_Action_Selector_Vhost(BaseTest):
 
 
     def tearDown(self):
-
-        table = self.config_data['table'][1]
-
-        print(f"Deleting rules")
-        for del_action in table['del_action']:
-            ovs_p4ctl.ovs_p4ctl_del_entry(table['switch'], table['name'], del_action)
 
         table = self.config_data['table'][0]
         print("Deleting groups")
@@ -155,4 +142,8 @@ class L3_Action_Selector_Vhost(BaseTest):
         for del_member in table['del_member']:
             ovs_p4ctl.ovs_p4ctl_del_member(table['switch'],table['name'],del_member)
 
+        if self.result.wasSuccessful():
+            print("Test has PASSED")
+        else:
+            print("Test has FAILED")
 

@@ -86,7 +86,7 @@ if args.vm_location_list:
 if args.pci_bdfs:
     test_params={}
     for k,v in enumerate(args.pci_bdfs.split(',')):
-        test_params['VM'+str(k+1)]=v
+        test_params['BDF'+str(k+1)]=v
     for searchExp, replaceExp in test_params.items():
         print(f"replacing {searchExp} with {replaceExp}")
         replaceAll(args.file,searchExp,replaceExp)

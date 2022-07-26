@@ -95,6 +95,43 @@ class LNT_Hot_Plug(BaseTest):
             self.result.addFailure(self, sys.exc_info())
             self.fail("Failed to configure gnmi cli ports")
 
+        # Hotplug port to VM
+        if not gnmi_cli_set_and_verify(self.gnmicli_hotplug_params):
+            self.result.addFailure(self, sys.exc_info())
+            self.fail("Failed to configure hotplug through gnmi")
+
+        # Verify ports are added to VM
+        result = test_utils.sendCmd_and_recvResult(conn1, vm1_command_list)[0]
+        result = result.split("\n")
+        vm1result2 = list(dropwhile(lambda x: 'lo\r' not in x, result))
+        result = test_utils.sendCmd_and_recvResult(conn2, vm2_command_list)[0]
+        result = result.split("\n")
+        vm2result2 = list(dropwhile(lambda x: 'lo\r' not in x, result))
+
+        vm1interfaces = list(set(vm1result2) - set(vm1result1))
+        vm1interfaces = [x.strip() for x in vm1interfaces]
+        vm2interfaces = list(set(vm2result2) - set(vm2result1))
+        vm2interfaces = [x.strip() for x in vm2interfaces]
+
+        if not vm1interfaces:
+            self.result.addFailure(self, sys.exc_info())
+            self.fail("Fail to add hotplug through gnmi")
+        print("PASS: Added hotplug interface for vm1 ",vm1interfaces)
+        if not vm2interfaces:
+            self.result.addFailure(self, sys.exc_info())
+            self.fail("Fail to add hotplug through gnmi")
+        print("PASS: Added hotplug interface for vm2 ",vm2interfaces)
+
+        # Configure Ip address on VMs
+        cmd = ["ip address add " + self.config_data['port'][0]['ip'] + " dev " + vm1interfaces[0]]
+        test_utils.sendCmd_and_recvResult(conn1,cmd)
+        cmd = ["ip link set dev " + vm1interfaces[0] + " up"]
+        test_utils.sendCmd_and_recvResult(conn1,cmd)
+        cmd = ["ip address add " + self.config_data['port'][1]['ip'] + " dev " + vm1interfaces[0]]
+        test_utils.sendCmd_and_recvResult(conn2,cmd)
+        cmd = ["ip link set dev " + vm2interfaces[0] + " up"]
+        test_utils.sendCmd_and_recvResult(conn2,cmd)
+
         # Enable the pipeline
         if not ovs_p4ctl.ovs_p4ctl_set_pipe(self.config_data['switch'], self.config_data['pb_bin'], self.config_data['p4_info']):
             self.result.addFailure(self, sys.exc_info())
@@ -127,43 +164,6 @@ class LNT_Hot_Plug(BaseTest):
 
         for i in range(0, 15):
              print("\nIteration:",i)
-             # Hotplug port to VM
-             if not gnmi_cli_set_and_verify(self.gnmicli_hotplug_params):
-                 self.result.addFailure(self, sys.exc_info())
-                 self.fail("Failed to configure hotplug through gnmi")
-     
-             # Verify ports are added to VM
-             result = test_utils.sendCmd_and_recvResult(conn1, vm1_command_list)[0]
-             result = result.split("\n")
-             vm1result2 = list(dropwhile(lambda x: 'lo\r' not in x, result))
-             result = test_utils.sendCmd_and_recvResult(conn2, vm2_command_list)[0]
-             result = result.split("\n")
-             vm2result2 = list(dropwhile(lambda x: 'lo\r' not in x, result))
-
-             vm1interfaces = list(set(vm1result2) - set(vm1result1))
-             vm1interfaces = [x.strip() for x in vm1interfaces]
-             vm2interfaces = list(set(vm2result2) - set(vm2result1))
-             vm2interfaces = [x.strip() for x in vm2interfaces]
-        
-             if not vm1interfaces:
-                self.result.addFailure(self, sys.exc_info())
-                self.fail("Fail to add hotplug through gnmi")
-             print("PASS: Added hotplug interface for vm1 ",vm1interfaces)
-             if not vm2interfaces:
-                 self.result.addFailure(self, sys.exc_info())
-                 self.fail("Fail to add hotplug through gnmi")
-             print("PASS: Added hotplug interface for vm2 ",vm2interfaces)
-
-             # Configure Ip address on VMs
-             cmd = ["ip address add " + self.config_data['port'][0]['ip'] + " dev " + vm1interfaces[0]]
-             test_utils.sendCmd_and_recvResult(conn1,cmd)
-             cmd = ["ip link set dev " + vm1interfaces[0] + " up"]
-             test_utils.sendCmd_and_recvResult(conn1,cmd)
-             cmd = ["ip address add " + self.config_data['port'][1]['ip'] + " dev " + vm1interfaces[0]]
-             test_utils.sendCmd_and_recvResult(conn2,cmd)
-             cmd = ["ip link set dev " + vm2interfaces[0] + " up"]
-             test_utils.sendCmd_and_recvResult(conn2,cmd)
-
              # Send ping traffic on VMs
              port1=self.config_data['port'][1]
              if not test_utils.vm_to_vm_ping_test(conn1, port1['ip'].split('/')[0]):
@@ -195,6 +195,46 @@ class LNT_Hot_Plug(BaseTest):
                   self.result.addFailure(self, sys.exc_info())
                   self.fail("Fail to del hotplug through gnmi")
              print("PASS: Deleted hotplug interface from vm2 ",vm2interfaces)
+
+             # Hotplug add port to VM
+             if not gnmi_cli_set_and_verify(self.gnmicli_hotplug_params):
+                 self.result.addFailure(self, sys.exc_info())
+                 self.fail("Failed to configure hotplug through gnmi")
+
+             # Verify ports are added to VM
+             result = test_utils.sendCmd_and_recvResult(conn1, vm1_command_list)[0]
+             result = result.split("\n")
+             vm1result2 = list(dropwhile(lambda x: 'lo\r' not in x, result))
+             result = test_utils.sendCmd_and_recvResult(conn2, vm2_command_list)[0]
+             result = result.split("\n")
+             vm2result2 = list(dropwhile(lambda x: 'lo\r' not in x, result))
+
+             vm1interfaces = list(set(vm1result2) - set(vm1result1))
+             vm1interfaces = [x.strip() for x in vm1interfaces]
+             vm2interfaces = list(set(vm2result2) - set(vm2result1))
+             vm2interfaces = [x.strip() for x in vm2interfaces]
+
+             if not vm1interfaces:
+                print("FAIL: Hotplug add failed for vm1")
+                self.result.addFailure(self, sys.exc_info())
+                self.fail("Fail to add hotplug through gnmi")
+             print("PASS: Added hotplug interface for vm1 ",vm1interfaces)
+             if not vm2interfaces:
+                print("FAIL: Hotplug add failed for vm2")
+                self.result.addFailure(self, sys.exc_info())
+                self.fail("Fail to add hotplug through gnmi")
+             print("PASS: Added hotplug interface for vm2 ",vm2interfaces)
+
+             # Configure Ip address on VMs
+             cmd = ["ip address add " + self.config_data['port'][0]['ip'] + " dev " + vm1interfaces[0]]
+             test_utils.sendCmd_and_recvResult(conn1,cmd)
+             cmd = ["ip link set dev " + vm1interfaces[0] + " up"]
+             test_utils.sendCmd_and_recvResult(conn1,cmd)
+             cmd = ["ip address add " + self.config_data['port'][1]['ip'] + " dev " + vm1interfaces[0]]
+             test_utils.sendCmd_and_recvResult(conn2,cmd)
+             cmd = ["ip link set dev " + vm2interfaces[0] + " up"]
+             test_utils.sendCmd_and_recvResult(conn2,cmd)
+
    
         conn1.close()
         conn2.close()

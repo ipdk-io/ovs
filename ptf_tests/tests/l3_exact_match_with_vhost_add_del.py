@@ -124,7 +124,7 @@ class L3_Exact_Match(BaseTest):
             self.result.addFailure(self, sys.exc_info())
             print("FAIL: Ping drop test failed from VM0")
 
-        print("Ping test from VM0 to VM1 : No drop check")
+        print("Ping test from VM1 to VM0 : Drop check")
         result = test_utils.vm_to_vm_ping_drop_test(conn2, self.config_data['vm'][1]['remote_ip'])
         if not result:
             self.result.addFailure(self, sys.exc_info())
