@@ -18,8 +18,10 @@ EXTRA_DIST += p4proto/kctrl/README.md
 EXTRA_DIST += p4proto/kctrl/switchapi/README.md
 EXTRA_DIST += p4proto/kctrl/switchlink/README.md
 EXTRA_DIST += p4proto/kctrl/switchsai/README.md
-EXTRA_DIST += p4proto/p4src/linux_networking/README.md
-EXTRA_DIST += p4proto/p4src/linux_networking/topology.PNG
+EXTRA_DIST += p4proto/p4src/linux_networking/README_LINUX_NETWORKING.md
+EXTRA_DIST += p4proto/p4src/linux_networking/topology_linux_networking.PNG
+EXTRA_DIST += p4proto/p4src/linux_networking/README_LINUX_NETWORKING_WITH_ECMP.md
+EXTRA_DIST += p4proto/p4src/linux_networking/topology_linux_networking_with_ecmp.PNG
 #endif
 
 p4proto_libp4proto_la_SOURCES = \

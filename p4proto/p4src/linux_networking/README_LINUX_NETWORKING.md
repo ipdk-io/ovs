@@ -28,7 +28,7 @@ This README describes a step by step procedure to run Linux networking scenario
 
 ## Topology <a name="topology"></a>
 <p align="center">
-  <img alt="Linux Networking Topology" src="topology.PNG">
+  <img alt="Linux Networking Topology" src="topology_linux_networking.PNG">
 </p>
 
 
@@ -37,7 +37,7 @@ This README describes a step by step procedure to run Linux networking scenario
   * VLAN 1, VLAN 2, .... VLAN N created using Linux commands and are on top a TAP port. These VLAN ports should be equal to number of VM's that are spawned.
   * br-int, VxLAN0 ports are created using ovs-vsctl command provided by P4-OVS and all the VLAN ports are attached to br-int using ovs-vsctl command.
 
-System under test will have above topology running P4-OVS. Link Partner can either have either P4-OVS or legacy OVS or kernel VXLAN. Note the limitaions below before setting up the topology.
+System under test will have above topology running P4-OVS. Link Partner can have either P4-OVS or legacy OVS or kernel VxLAN. Note the limitations below before setting up the topology.
 
 ## Create P4 artifacts <a name="create_p4_artifacts"></a>
 - Install p4c compiler from p4lang/p4c(<https://github.com/p4lang/p4c>) repository and follow the readme for procedure
