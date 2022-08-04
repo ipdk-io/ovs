@@ -50,11 +50,6 @@ bf_status_t switch_pd_allocate_handle_session(const bf_dev_id_t device_id,
                                               bf_rt_info_hdl **bfrt_info_hdl_t,
                                               bf_rt_session_hdl **session_t);
 
-bf_status_t switch_pd_deallocate_handle_session(bf_rt_table_key_hdl *key_hdl_t,
-                                                bf_rt_table_data_hdl *data_hdl_t,
-                                                bf_rt_session_hdl *session_t,
-                                                bool entry_type);
-
 void switch_pd_to_get_port_id(switch_api_rif_info_t *port_rif_info);
 
 tdi_status_t tdi_switch_pd_deallocate_resources(tdi_flags_hdl *flags_hdl,
