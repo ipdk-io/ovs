@@ -57,10 +57,22 @@ bf_status_t switch_pd_deallocate_handle_session(bf_rt_table_key_hdl *key_hdl_t,
 
 void switch_pd_to_get_port_id(switch_api_rif_info_t *port_rif_info);
 
-tdi_status_t tdi_switch_pd_deallocate_handle_session(tdi_table_key_hdl *key_hdl_t,
-                                                    tdi_table_data_hdl *data_hdl_t,
-                                                    tdi_session_hdl *session_t,
-                                                    bool entry_type);
+tdi_status_t tdi_switch_pd_deallocate_resources(tdi_flags_hdl *flags_hdl,
+                                                tdi_target_hdl *target_hdl,
+                                                tdi_table_key_hdl *key_hdl,
+                                                tdi_table_data_hdl *data_hdl,
+                                                tdi_session_hdl *session,
+                                                bool entry_type);
+
+tdi_status_t tdi_deallocate_flag(tdi_flags_hdl *flags_hdl);
+
+tdi_status_t tdi_deallocate_target(tdi_target_hdl *target_hdl);
+
+tdi_status_t tdi_deallocate_table_data(tdi_table_data_hdl *data_hdl);
+
+tdi_status_t tdi_deallocate_table_key(tdi_table_key_hdl *key_hdl);
+
+tdi_status_t tdi_deallocate_session(tdi_session_hdl *session);
 
 #ifdef  __cplusplus
 }

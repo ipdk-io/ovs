@@ -110,31 +110,31 @@ switch_status_t switch_pd_nexthop_table_entry(
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_device_get(dev_id, &dev_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get device handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_target_create(dev_hdl, &target_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create target handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        return status;
+        goto dealloc_resources;
     }
 
     status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get tdi info handle, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_from_name_get(info_hdl,
@@ -143,20 +143,20 @@ switch_status_t switch_pd_nexthop_table_entry(
     if (status != TDI_SUCCESS || !table_hdl) {
         VLOG_ERR("Unable to get table handle for: %s, error: %d",
                  LNW_NEXTHOP_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_key_allocate(table_hdl, &key_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to allocate key handle for: %s, error: %d",
                  LNW_NEXTHOP_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_info_get(table_hdl, &table_info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get table info handle for table, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_id_get(table_info_hdl,
@@ -165,7 +165,7 @@ switch_status_t switch_pd_nexthop_table_entry(
     if (status != TDI_SUCCESS) {
       VLOG_ERR("Unable to get field ID for key: %s, error: %d",
                LNW_NEXTHOP_TABLE_KEY_NEXTHOP_ID, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_set_value(key_hdl, field_id,
@@ -175,7 +175,7 @@ switch_status_t switch_pd_nexthop_table_entry(
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to set value for key ID: %d for nexthop_table,"
                  " error: %d", field_id, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     if (entry_add) {
@@ -188,14 +188,14 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get action allocator ID for: %s, error: %d",
                      LNW_NEXTHOP_TABLE_ACTION_SET_NEXTHOP, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_table_action_data_allocate(table_hdl, action_id, &data_hdl);
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get action allocator for ID: %d, "
                      "error: %d", action_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -204,7 +204,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                      LNW_ACTION_SET_NEXTHOP_PARAM_RIF, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_set_value(data_hdl, data_field_id,
@@ -214,7 +214,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to set action value for ID: %d, error: %d",
                      data_field_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -223,7 +223,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                      LNW_ACTION_SET_NEXTHOP_PARAM_NEIGHBOR_ID, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_set_value(data_hdl, data_field_id,
@@ -233,7 +233,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to set action value for ID: %d, error: %d",
                      data_field_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -242,7 +242,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                    LNW_ACTION_SET_NEXTHOP_PARAM_EGRESS_PORT, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_set_value(data_hdl, data_field_id,
@@ -250,7 +250,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to set action value for ID: %d, error: %d", 
                      data_field_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_table_entry_add(table_hdl, session, target_hdl,
@@ -258,7 +258,7 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to add %s entry, error: %d", 
                    LNW_NEXTHOP_TABLE, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
     } else {
@@ -269,29 +269,14 @@ switch_status_t switch_pd_nexthop_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to delete %s entry, error: %d", 
                      LNW_NEXTHOP_TABLE, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
   }
 
-dealloc_handle_session:
-
-    status = tdi_flags_delete(flags_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate flags handle, error: %d", status);
-    }
-
-    status = tdi_target_delete(target_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate target handle, error: %d", status);
-    }
-
-    status = tdi_switch_pd_deallocate_handle_session(key_hdl, data_hdl,
-                                                     session, entry_add);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate session and handles");
-        return switch_pd_tdi_status_to_status(status);
-    }
-
+dealloc_resources:
+    status = tdi_switch_pd_deallocate_resources(flags_hdl, target_hdl,
+                                                key_hdl, data_hdl,
+                                                session, entry_add);
     return switch_pd_tdi_status_to_status(status);
 }
 
@@ -323,31 +308,31 @@ switch_status_t switch_pd_neighbor_table_entry(
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_device_get(dev_id, &dev_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get device handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_target_create(dev_hdl, &target_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create target handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        return status;
+        goto dealloc_resources;
     }
 
     status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get tdi info handle, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_from_name_get(info_hdl,
@@ -356,20 +341,20 @@ switch_status_t switch_pd_neighbor_table_entry(
     if (status != TDI_SUCCESS || !table_hdl) {
         VLOG_ERR("Unable to get table handle for: %s, error: %d",
                  LNW_NEIGHBOR_MOD_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_key_allocate(table_hdl, &key_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to allocate key handle for: %s, error: %d",
                  LNW_NEIGHBOR_MOD_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_info_get(table_hdl, &table_info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get table info handle for table, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_id_get(table_info_hdl,
@@ -378,7 +363,7 @@ switch_status_t switch_pd_neighbor_table_entry(
     if (status != TDI_SUCCESS) {
       VLOG_ERR("Unable to get field ID for key: %s, error: %d",
                LNW_NEIGHBOR_MOD_TABLE_KEY_VENDORMETA_MOD_DATA_PTR, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_set_value(key_hdl, field_id,
@@ -388,7 +373,7 @@ switch_status_t switch_pd_neighbor_table_entry(
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to set value for key ID: %d for neighbor_mod_table",
                  field_id);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     if (entry_add) {
@@ -403,14 +388,14 @@ switch_status_t switch_pd_neighbor_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get action allocator ID for: %s, error: %d",
                      LNW_NEIGHBOR_MOD_TABLE_ACTION_SET_OUTER_MAC, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_table_action_data_allocate(table_hdl, action_id, &data_hdl);
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get action allocator for ID: %d, "
                      "error: %d", action_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -419,7 +404,7 @@ switch_status_t switch_pd_neighbor_table_entry(
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                    LNW_ACTION_SET_OUTER_MAC_PARAM_DST_MAC_ADDR, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_set_value_ptr(data_hdl, data_field_id,
@@ -429,14 +414,14 @@ switch_status_t switch_pd_neighbor_table_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to set action value for ID: %d, error: %d",
                      data_field_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_table_entry_add(table_hdl, session, target_hdl,
                                      flags_hdl, key_hdl, data_hdl);
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to add neighbor_mod_table entry, error: %d", status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
     } else {
         /* Delete an entry from target */
@@ -445,29 +430,14 @@ switch_status_t switch_pd_neighbor_table_entry(
                                      flags_hdl, key_hdl);
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to delete nexthop_table entry, error: %d", status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
     }
 
-dealloc_handle_session:
-
-    status = tdi_flags_delete(flags_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate flags handle, error: %d", status);
-    }
-
-    status = tdi_target_delete(target_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate target handle, error: %d", status);
-    }
-
-    status = tdi_switch_pd_deallocate_handle_session(key_hdl, data_hdl,
-                                                     session, entry_add);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate session and handles");
-        return switch_pd_tdi_status_to_status(status);
-    }
-
+dealloc_resources:
+    status = tdi_switch_pd_deallocate_resources(flags_hdl, target_hdl,
+                                                key_hdl, data_hdl,
+                                                session, entry_add);
     return switch_pd_tdi_status_to_status(status);
 }
 
@@ -500,31 +470,31 @@ switch_status_t switch_pd_rif_mod_entry(
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_device_get(dev_id, &dev_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get device handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_target_create(dev_hdl, &target_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create target handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        return status;
+        goto dealloc_resources;
     }
 
     status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get tdi info handle, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_from_name_get(info_hdl,
@@ -533,20 +503,20 @@ switch_status_t switch_pd_rif_mod_entry(
     if (status != TDI_SUCCESS || !table_hdl) {
         VLOG_ERR("Unable to get table handle for: %s, error: %d",
                  LNW_RIF_MOD_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_key_allocate(table_hdl, &key_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to allocate key handle for: %s, error: %d",
                  LNW_RIF_MOD_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_info_get(table_hdl, &table_info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get table info handle for table, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_id_get(table_info_hdl,
@@ -555,7 +525,7 @@ switch_status_t switch_pd_rif_mod_entry(
     if (status != TDI_SUCCESS) {
       VLOG_ERR("Unable to get field ID for key: %s, error: %d",
                LNW_RIF_MOD_TABLE_KEY_RIF_MOD_MAP_ID, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_set_value(key_hdl, field_id,
@@ -565,7 +535,7 @@ switch_status_t switch_pd_rif_mod_entry(
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to set value for key ID: %d for rif_mod_table_start",
                  field_id);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     if (entry_add) {
@@ -578,14 +548,14 @@ switch_status_t switch_pd_rif_mod_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get action allocator ID for: %s, error: %d",
                      LNW_RIF_MOD_TABLE_ACTION_SET_SRC_MAC, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_table_action_data_allocate(table_hdl, action_id, &data_hdl);
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get action allocator for ID: %d, "
                      "error: %d", action_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -594,7 +564,7 @@ switch_status_t switch_pd_rif_mod_entry(
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                    LNW_ACTION_SET_SRC_MAC_PARAM_SRC_MAC_ADDR, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_data_field_set_value_ptr(data_hdl, data_field_id,
@@ -604,14 +574,14 @@ switch_status_t switch_pd_rif_mod_entry(
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to set action value for ID: %d, error: %d",
                      data_field_id, status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
 
         status = tdi_table_entry_add(table_hdl, session, target_hdl,
                                      flags_hdl, key_hdl, data_hdl);
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to add rif_mod_table_start entry, error: %d", status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
     } else {
         /* Delete an entry from target */
@@ -620,29 +590,14 @@ switch_status_t switch_pd_rif_mod_entry(
                                      flags_hdl, key_hdl);
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to delete rif_mod_table_start entry, error: %d", status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
     }
 
-dealloc_handle_session:
-
-    status = tdi_flags_delete(flags_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate flags handle, error: %d", status);
-    }
-
-    status = tdi_target_delete(target_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate target handle, error: %d", status);
-    }
-
-    status = tdi_switch_pd_deallocate_handle_session(key_hdl, data_hdl,
-                                                     session, entry_add);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate session and handles");
-        return switch_pd_tdi_status_to_status(status);
-    }
-
+dealloc_resources:
+    status = tdi_switch_pd_deallocate_resources(flags_hdl, target_hdl,
+                                                key_hdl, data_hdl,
+                                                session, entry_add);
     return switch_pd_tdi_status_to_status(status);
 }
 
@@ -674,31 +629,31 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_device_get(dev_id, &dev_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get device handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_target_create(dev_hdl, &target_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create target handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        return status;
+        goto dealloc_resources;
     }
 
     status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get tdi info handle, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_from_name_get(info_hdl,
@@ -707,20 +662,20 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
     if (status != TDI_SUCCESS || !table_hdl) {
         VLOG_ERR("Unable to get table handle for: %s, error: %d",
                 LNW_IPV4_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_key_allocate(table_hdl, &key_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to allocate key handle for: %s, error: %d",
                  LNW_IPV4_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_info_get(table_hdl, &table_info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get table info handle for table, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_id_get(table_info_hdl,
@@ -729,7 +684,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
     if (status != TDI_SUCCESS) {
       VLOG_ERR("Unable to get field ID for key: %s, error: %d",
                LNW_IPV4_TABLE_KEY_IPV4_DST_MATCH, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     /* Use LPM API for LPM match type*/
@@ -741,7 +696,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to set value for key ID: %d for ipv4_table, error: %d",
                  field_id, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     if (entry_add) {
@@ -756,14 +711,14 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to get action allocator ID for: %s, error: %d",
                          LNW_IPV4_TABLE_ACTION_SET_NEXTHOP_ID, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_table_action_data_allocate(table_hdl, action_id, &data_hdl);
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to get action allocator for ID: %d, "
                          "error: %d", action_id, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -772,7 +727,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
             if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                      LNW_ACTION_SET_NEXTHOP_ID_PARAM_NEXTHOP_ID, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_data_field_set_value(data_hdl, data_field_id,
@@ -782,7 +737,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to set action value for ID: %d, error: %d", 
                          data_field_id, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
         }
 
@@ -793,14 +748,14 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to get action allocator ID for: %s, error: %d",
                          LNW_IPV4_TABLE_ACTION_ECMP_HASH_ACTION, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_table_action_data_allocate(table_hdl, action_id, &data_hdl);
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to get action allocator for ID: %d, "
                          "error: %d", action_id, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -809,7 +764,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
             if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to get data field id param for: %s, error: %d",
                      LNW_ACTION_ECMP_HASH_ACTION_PARAM_ECMP_GROUP_ID, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_data_field_set_value(data_hdl, data_field_id,
@@ -819,7 +774,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to set action value for ID: %d, error: %d",
                          data_field_id, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
         }
 
@@ -827,7 +782,7 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
                                      flags_hdl, key_hdl, data_hdl);
         if (status != TDI_SUCCESS) {
           VLOG_ERR("Unable to add rif_mod_table_start entry, error: %d", status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
     } else {
         /* Delete an entry from target */
@@ -836,29 +791,14 @@ switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
                                      flags_hdl, key_hdl);
         if (status != TDI_SUCCESS) {
             VLOG_ERR("Unable to delete ipv4_table entry, error: %d", status);
-            goto dealloc_handle_session;
+            goto dealloc_resources;
         }
     }
 
-dealloc_handle_session:
-
-    status = tdi_flags_delete(flags_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate flags handle, error: %d", status);
-    }
-
-    status = tdi_target_delete(target_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate target handle, error: %d", status);
-    }
-
-    status = tdi_switch_pd_deallocate_handle_session(key_hdl, data_hdl,
-                                                     session, entry_add);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate session and handles");
-        return switch_pd_tdi_status_to_status(status);
-    }
-
+dealloc_resources:
+    status = tdi_switch_pd_deallocate_resources(flags_hdl, target_hdl,
+                                                key_hdl, data_hdl,
+                                                session, entry_add);
     return switch_pd_tdi_status_to_status(status);
 }
 
@@ -896,31 +836,31 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_device_get(dev_id, &dev_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get device handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_target_create(dev_hdl, &target_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create target handle, error: %d", status);
-        return switch_pd_tdi_status_to_status(status);
+        goto dealloc_resources;
     }
 
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        return status;
+        goto dealloc_resources;
     }
 
     status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to get tdi info handle, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_from_name_get(info_hdl,
@@ -929,20 +869,20 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
     if (status != TDI_SUCCESS || !table_hdl) {
         VLOG_ERR("Unable to get table handle for: %s, error: %d",
                  LNW_ECMP_HASH_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_key_allocate(table_hdl, &key_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to allocate key handle for: %s, error: %d",
                  LNW_NEXTHOP_TABLE, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_info_get(table_hdl, &table_info_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get table info handle for table, error: %d", status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_id_get(table_info_hdl,
@@ -951,7 +891,7 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
     if (status != TDI_SUCCESS) {
       VLOG_ERR("Unable to get field ID for key: %s, error: %d",
                LNW_IPV4_TABLE_KEY_IPV4_DST_MATCH, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_key_field_id_get(table_info_hdl,
@@ -960,7 +900,7 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
     if (status != TDI_SUCCESS) {
       VLOG_ERR("Unable to get field ID for key: %s, error: %d",
                LNW_ECMP_HASH_TABLE_KEY_HASH, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_action_name_to_id(table_info_hdl,
@@ -969,14 +909,14 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get action allocator ID for: %s, error: %d",
                  LNW_ECMP_HASH_TABLE_ACTION_SET_NEXTHOP_ID, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_table_action_data_allocate(table_hdl, action_id, &data_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Unable to get action allocator for ID: %d, "
                  "error: %d", action_id, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     status = tdi_data_field_id_with_action_get(table_info_hdl,
@@ -985,7 +925,7 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
     if (status != TDI_SUCCESS) {
     VLOG_ERR("Unable to get data field id param for: %s, error: %d",
              LNW_ACTION_SET_NEXTHOP_ID_PARAM_NEXTHOP_ID, status);
-        goto dealloc_handle_session;
+        goto dealloc_resources;
     }
 
     ecmp_handle = ecmp_info->ecmp_group_handle;
@@ -1003,7 +943,7 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to set value for key ID: %d for ecmp_hash_table"
                          ", error: %d", field_id_group_id, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             status = tdi_key_field_set_value(key_hdl, field_id_hash,
@@ -1011,7 +951,7 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to set value for key ID: %d for ecmp_hash_table"
                          ", error: %d", field_id_hash, status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
 
             if (entry_add) {
@@ -1022,14 +962,14 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
                 if (status != TDI_SUCCESS) {
                     VLOG_ERR("Unable to set action value for ID: %d, error: %d", 
                              data_field_id, status);
-                    goto dealloc_handle_session;
+                    goto dealloc_resources;
                 }
 
         status = tdi_table_entry_add(table_hdl, session, target_hdl,
                                      flags_hdl, key_hdl, data_hdl);
                 if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to add ecmp_hash_table entry, error: %d", status);
-                    goto dealloc_handle_session;
+                    goto dealloc_resources;
                 }
           } else {
             /* Delete an entry from target */
@@ -1038,7 +978,7 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
                                      flags_hdl, key_hdl);
             if (status != TDI_SUCCESS) {
                 VLOG_ERR("Unable to delete ecmp_hash_table entry, error: %d", status);
-                goto dealloc_handle_session;
+                goto dealloc_resources;
             }
         }
         nhop_count++;
@@ -1047,24 +987,9 @@ switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
      ecmp_list += nhop_count;
   }
 
-dealloc_handle_session:
-
-    status = tdi_flags_delete(flags_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate flags handle, error: %d", status);
-    }
-
-    status = tdi_target_delete(target_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate target handle, error: %d", status);
-    }
-
-    status = tdi_switch_pd_deallocate_handle_session(key_hdl, data_hdl,
-                                                     session, entry_add);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Unable to deallocate session and handles");
-        return switch_pd_tdi_status_to_status(status);
-    }
-
+dealloc_resources:
+    status = tdi_switch_pd_deallocate_resources(flags_hdl, target_hdl,
+                                                key_hdl, data_hdl,
+                                                session, entry_add);
     return switch_pd_tdi_status_to_status(status);
 }

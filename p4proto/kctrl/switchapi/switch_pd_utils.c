@@ -88,29 +88,81 @@ switch_pd_to_get_port_id(switch_api_rif_info_t *port_rif_info)
     return;
 }
 
-tdi_status_t tdi_switch_pd_deallocate_handle_session(tdi_table_key_hdl *key_hdl_t,
-                                                    tdi_table_data_hdl *data_hdl_t,
-                                                    tdi_session_hdl *session_t,
-                                                    bool entry_type) {
-    tdi_status_t status;
+tdi_status_t tdi_switch_pd_deallocate_resources(tdi_flags_hdl *flags_hdl,
+                                                tdi_target_hdl *target_hdl,
+                                                tdi_table_key_hdl *key_hdl,
+                                                tdi_table_data_hdl *data_hdl,
+                                                tdi_session_hdl *session,
+                                                bool entry_type) {
+    tdi_status_t status = TDI_SUCCESS;
+
+    status = tdi_deallocate_flag(flags_hdl);
+
+    status = tdi_deallocate_target(target_hdl);
 
     if (entry_type) {
         // Data handle is created only when entry is added to backend
-        status = tdi_table_data_deallocate(data_hdl_t);
+        status = tdi_deallocate_table_data(data_hdl);
+    }
+
+    status = tdi_deallocate_table_key(key_hdl);
+
+    status = tdi_deallocate_session(session);
+
+    return status;
+}
+
+tdi_status_t tdi_deallocate_flag(tdi_flags_hdl *flags_hdl) {
+    tdi_status_t status = TDI_SUCCESS;
+    if (flags_hdl) {
+        status = tdi_flags_delete(flags_hdl);
+        if (status != TDI_SUCCESS) {
+            VLOG_ERR("Unable to deallocate flags handle, error: %d", status);
+        }
+    }
+    return status;
+}
+
+tdi_status_t tdi_deallocate_target(tdi_target_hdl *target_hdl) {
+    tdi_status_t status = TDI_SUCCESS;
+    if (target_hdl) {
+        status = tdi_target_delete(target_hdl);
+        if (status != TDI_SUCCESS) {
+            VLOG_ERR("Unable to deallocate target handle, error: %d", status);
+        }
+    }
+    return status;
+}
+
+tdi_status_t tdi_deallocate_table_data(tdi_table_data_hdl *data_hdl) {
+    tdi_status_t status = TDI_SUCCESS;
+    if (data_hdl) {
+        status = tdi_table_data_deallocate(data_hdl);
         if(status != TDI_SUCCESS) {
             VLOG_ERR("Failed to deallocate data handle, error: %d", status);
         }
     }
+    return status;
+}
 
-    status = tdi_table_key_deallocate(key_hdl_t);
-    if(status != TDI_SUCCESS) {
-        VLOG_ERR("Failed to deallocate key handle, error: %d", status);
+tdi_status_t tdi_deallocate_table_key(tdi_table_key_hdl *key_hdl) {
+    tdi_status_t status = TDI_SUCCESS;
+    if (key_hdl) {
+        status = tdi_table_key_deallocate(key_hdl);
+        if (status != TDI_SUCCESS) {
+            VLOG_ERR("Failed to deallocate key handle, error: %d", status);
+        }
     }
+    return status;
+}
 
-    status = tdi_session_destroy(session_t);
-    if(status != TDI_SUCCESS) {
-        VLOG_ERR("Failed to destroy session, error: %d", status);
+tdi_status_t tdi_deallocate_session(tdi_session_hdl *session) {
+    tdi_status_t status = TDI_SUCCESS;
+    if (session) {
+        status = tdi_session_destroy(session);
+        if (status != TDI_SUCCESS) {
+            VLOG_ERR("Failed to destroy session, error: %d", status);
+        }
     }
-
     return status;
 }
