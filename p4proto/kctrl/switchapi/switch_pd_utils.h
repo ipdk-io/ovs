@@ -45,11 +45,6 @@ extern "C" {
 #define MAX_NO_OF_PORTS 312
 #define CONFIG_PORT_INDEX 256
 
-bf_status_t switch_pd_allocate_handle_session(const bf_dev_id_t device_id,
-                                              const char *pipeline_name,
-                                              bf_rt_info_hdl **bfrt_info_hdl_t,
-                                              bf_rt_session_hdl **session_t);
-
 void switch_pd_to_get_port_id(switch_api_rif_info_t *port_rif_info);
 
 tdi_status_t tdi_switch_pd_deallocate_resources(tdi_flags_hdl *flags_hdl,
