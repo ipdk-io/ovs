@@ -4,6 +4,7 @@ ovsdb_libovsdb_la_LDFLAGS = \
         $(OVS_LTINFO) \
         -Wl,--version-script=$(top_builddir)/ovsdb/libovsdb.sym \
         $(AM_LDFLAGS)
+
 ovsdb_libovsdb_la_SOURCES = \
 	ovsdb/column.c \
 	ovsdb/column.h \
@@ -52,6 +53,7 @@ ovsdb_libovsdb_la_SOURCES = \
 	ovsdb/transaction-forward.h \
 	ovsdb/ovsdb-util.c \
 	ovsdb/ovsdb-util.h
+
 ovsdb_libovsdb_la_CFLAGS = $(AM_CFLAGS)
 ovsdb_libovsdb_la_CPPFLAGS = $(AM_CPPFLAGS)
 
@@ -64,6 +66,7 @@ MAN_FRAGMENTS += ovsdb/ovsdb-schemas.man
 bin_PROGRAMS += ovsdb/ovsdb-tool
 ovsdb_ovsdb_tool_SOURCES = ovsdb/ovsdb-tool.c
 ovsdb_ovsdb_tool_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la
+
 # ovsdb-tool.1
 man_MANS += ovsdb/ovsdb-tool.1
 CLEANFILES += ovsdb/ovsdb-tool.1
@@ -73,6 +76,7 @@ MAN_ROOTS += ovsdb/ovsdb-tool.1.in
 bin_PROGRAMS += ovsdb/ovsdb-client
 ovsdb_ovsdb_client_SOURCES = ovsdb/ovsdb-client.c
 ovsdb_ovsdb_client_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la
+
 # ovsdb-client.1
 man_MANS += ovsdb/ovsdb-client.1
 CLEANFILES += ovsdb/ovsdb-client.1
@@ -82,6 +86,7 @@ MAN_ROOTS += ovsdb/ovsdb-client.1.in
 sbin_PROGRAMS += ovsdb/ovsdb-server
 ovsdb_ovsdb_server_SOURCES = ovsdb/ovsdb-server.c
 ovsdb_ovsdb_server_LDADD = ovsdb/libovsdb.la lib/libopenvswitch.la
+
 # ovsdb-server.1
 man_MANS += ovsdb/ovsdb-server.1
 CLEANFILES += ovsdb/ovsdb-server.1

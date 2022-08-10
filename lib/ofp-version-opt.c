@@ -1,3 +1,6 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ */
 #include <config.h>
 #include "openvswitch/dynamic-string.h"
 #include "openvswitch/ofp-protocol.h"

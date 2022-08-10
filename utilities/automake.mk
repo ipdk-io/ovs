@@ -1,10 +1,13 @@
+# utilities
 bin_PROGRAMS += \
 	utilities/ovs-appctl \
 	utilities/ovs-testcontroller \
 	utilities/ovs-dpctl \
 	utilities/ovs-ofctl \
 	utilities/ovs-vsctl
-bin_SCRIPTS += utilities/ovs-docker \
+
+bin_SCRIPTS += \
+	utilities/ovs-docker \
 	utilities/ovs-pki \
 	utilities/ovs-pcap \
 	utilities/ovs-tcpdump \
@@ -14,11 +17,13 @@ bin_SCRIPTS += utilities/ovs-docker \
 	utilities/ovs-parse-backtrace \
 	utilities/ovs-test \
 	utilities/ovs-vlan-test
+
 scripts_SCRIPTS += \
 	utilities/ovs-check-dead-ifs \
 	utilities/ovs-ctl \
 	utilities/ovs-kmod-ctl \
 	utilities/ovs-save
+
 scripts_DATA += utilities/ovs-lib
 
 completion_SCRIPTS += \
@@ -62,6 +67,8 @@ EXTRA_DIST += \
         utilities/docker/create_ovs_db.sh \
         utilities/docker/debian/Dockerfile \
         utilities/docker/debian/build-kernel-modules.sh
+#	utilities/ovs-p4ctl.in
+
 MAN_ROOTS += \
 	utilities/ovs-testcontroller.8.in \
 	utilities/ovs-dpctl.8.in \
@@ -70,6 +77,7 @@ MAN_ROOTS += \
 	utilities/ovs-ofctl.8.in \
 	utilities/ovs-pcap.1.in \
 	utilities/ovs-vsctl.8.in
+
 CLEANFILES += \
 	utilities/ovs-ctl \
 	utilities/ovs-check-dead-ifs \

@@ -1,9 +1,9 @@
-sbin_PROGRAMS += vswitchd/ovs-vswitchd
+# vswitchd
 man_MANS += vswitchd/ovs-vswitchd.8
 CLEANFILES += \
 	vswitchd/ovs-vswitchd.8
 
-vswitchd_ovs_vswitchd_SOURCES = \
+vswitchd_sources = \
 	vswitchd/bridge.c \
 	vswitchd/bridge.h \
 	vswitchd/ovs-vswitchd.c \
@@ -11,11 +11,39 @@ vswitchd_ovs_vswitchd_SOURCES = \
 	vswitchd/system-stats.h \
 	vswitchd/xenserver.c \
 	vswitchd/xenserver.h
+
+if P4OVS
+# Compile source files. p4ovs will link vswitchd.
+lib_LTLIBRARIES += vswitchd/libvswitchd.la
+
+vswitchd_sources += \
+	p4proto/p4proto-provider.h \
+	p4proto/p4proto.c \
+	p4proto/p4proto.h
+
+vswitchd_libvswitchd_la_CPPFLAGS = $(AM_CPPFLAGS)
+
+vswitchd_libvswitchd_la_SOURCES = \
+	$(vswitchd_sources)
+
+vswitchd_libvswitchd_la_LIBADD = \
+	ofproto/libofproto.la \
+	lib/libsflow.la \
+	lib/libopenvswitch.la
+else
+sbin_PROGRAMS += vswitchd/ovs-vswitchd
+
+vswitchd_ovs_vswitchd_SOURCES = \
+	$(vswitchd_sources)
+
 vswitchd_ovs_vswitchd_LDADD = \
 	ofproto/libofproto.la \
 	lib/libsflow.la \
 	lib/libopenvswitch.la
+
 vswitchd_ovs_vswitchd_LDFLAGS = $(AM_LDFLAGS) $(DPDK_vswitchd_LDFLAGS)
+endif
+
 MAN_ROOTS += vswitchd/ovs-vswitchd.8.in
 
 # vswitch schema and IDL
