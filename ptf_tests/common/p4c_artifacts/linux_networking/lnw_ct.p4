@@ -64,11 +64,6 @@ control ct_tcp (in headers_t hdr,
             tcp_fin_or_rst_packet;
             tcp_other_packets;
         }
-        const entries = {
-            TCP_SYN_MASK &&& TCP_SYN_MASK: tcp_syn_packet;
-            TCP_FIN_MASK &&& TCP_FIN_MASK: tcp_fin_or_rst_packet;
-            TCP_RST_MASK &&& TCP_RST_MASK: tcp_fin_or_rst_packet;
-        }
         const default_action = tcp_other_packets;
     }
     

@@ -186,6 +186,12 @@ EXTRA_DIST = \
 	ptf_tests/common/config/ctrl_port_counter_with_vhost.json \
 	ptf_tests/common/config/l3_wcm_del_add_test.json \
 	ptf_tests/common/config/lnt_4vm_on_same_host.json \
+	ptf_tests/common/config/lnt_2hotplugvm_vxlan_2nsvm.json \
+	ptf_tests/common/config/lnt_4vm_full_mesh.json \
+	ptf_tests/common/config/lnt_ctrl_vhost_port_flap.json \
+	ptf_tests/common/config/lnt_4vm_2host_add_dele_rule.json \
+	ptf_tests/common/config/lnt_2vm_vxlan_2nsvm_5min_ping.json \
+	ptf_tests/common/config/lnt_1hotplugvm_vxlan_1nsvm.json \
 	ptf_tests/common/config/config_control_port_with_link.json \
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.p4 \
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.conf \
@@ -251,6 +257,12 @@ EXTRA_DIST = \
 	ptf_tests/tests/dpdk_action_profile_cli.py \
 	ptf_tests/tests/l3_wcm_del_add.py \
 	ptf_tests/tests/lnt_4vm_on_same_host.py \
+	ptf_tests/tests/lnt_2hotplugvm_vxlan_2nsvm.py \
+	ptf_tests/tests/lnt_4vm_full_mesh.py \
+	ptf_tests/tests/lnt_ctrl_vhost_port_flap.py \
+	ptf_tests/tests/lnt_4vm_2host_add_dele_rule.py \
+	ptf_tests/tests/lnt_2vm_vxlan_2nsvm_5min_ping.py \
+	ptf_tests/tests/lnt_1hotplugvm_vxlan_1nsvm.py \
 	ptf_tests/tests/config_control_port_with_link.py \
 	ptf_tests/common/lib/tcpdump.py \
 	ptf_tests/common/utils/tcpdump_utils.py \

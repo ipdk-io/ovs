@@ -256,7 +256,7 @@ class PortConfig(object):
                 raise ExecuteCMDException(f'FAIL:command "{cmd}" failed with '
                                           f'an error {err}')
             print(f"PASS: {cmd}")
-            return True
+            return True,output
 
         def ipnetns_delete_namespace(self, namespace_name):
             """ This method is used to delete VM namespace

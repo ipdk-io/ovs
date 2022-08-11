@@ -50,7 +50,7 @@ def ovs_p4ctl_del_entry(bridge, tbl_name, match_key):
       ovs_p4ctl_del_entry('br0', 'ingress.ipv4_host', 'hdr.ipv4.dst_addr=.2.2.2')
 
     """
-
+    
     try:
         out = ovs_p4ctl.p4ctl_del_entry(bridge, tbl_name, match_key)
         if out == None:
