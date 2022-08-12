@@ -5,14 +5,8 @@ dnl SPDX-License-Identifier: Apache 2.0
 
 AC_DEFUN([OVS_CHECK_P4OVS], [
   AC_ARG_WITH([p4ovs],
-              [AC_HELP_STRING([--with-p4ovs], [Build for P4])],
+              [AC_HELP_STRING([--with-p4ovs], [Build with P4 support])],
               [have_p4ovs=true])
-  AC_ARG_WITH([tofino],
-              [AC_HELP_STRING([--with-tofino], [Build for Tofino target])],
-              [with_tofino=yes])
-  AC_ARG_WITH([sai],
-              [AC_HELP_STRING([--with-sai], [Build for P4 with SAI])],
-              [have_sai=true])
   AC_MSG_CHECKING([whether P4OVS is enabled])
   if test "$have_p4ovs" != true || test "$with_p4ovs" = no; then
     AC_MSG_RESULT([no])
@@ -20,16 +14,8 @@ AC_DEFUN([OVS_CHECK_P4OVS], [
   else
     AC_MSG_RESULT([yes])
 	P4OVS_VALID=true
-    AC_DEFINE([P4OVS], [1], [System uses the P4PROTO module.])
-    if test "$have_sai" = true; then
-        AC_DEFINE([P4SAI], [1], [System uses the SWITCHLINK and SWITCHSAI modules.])
-    fi
-    if test "$with_tofino" = true; then
-        AC_DEFINE([P4TOFINO], [1], [System is being built for Tofino target])
-    fi
+    AC_DEFINE([P4OVS], [1], [System includes P4 support.])
   fi
-  dnl export automake conditionals
+  dnl export automake conditional
   AM_CONDITIONAL([P4OVS], test "$P4OVS_VALID" = true)
-  AM_CONDITIONAL([P4SAI], test "$P4OVS_VALID" = true && test "$have_sai" = true)
-  AM_CONDITIONAL([P4TOFINO], test "$P4OVS_VALID" = true && test "$with_tofino" = yes)
 ])

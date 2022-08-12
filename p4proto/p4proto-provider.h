@@ -26,8 +26,4 @@ struct p4proto {
     struct hmap bridges;        /* "struct bridge"s indexed by name. */
 };
 
-/* TODO: Implement callbacks for P4runtime(grpc) and BfNode handling*/
-struct p4proto_class {
-};
-
 #endif /* p4proto-provider.h */

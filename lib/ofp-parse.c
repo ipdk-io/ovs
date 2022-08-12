@@ -15,6 +15,7 @@
  */
 
 #include <config.h>
+#include "openvswitch/ofp-parse.h"
 #include <errno.h>
 #include "byte-order.h"
 #include "openvswitch/match.h"
@@ -22,7 +23,6 @@
 #include "openvswitch/ofp-actions.h"
 #include "openvswitch/ofp-flow.h"
 #include "openvswitch/ofp-match.h"
-#include "openvswitch/ofp-parse.h"
 #include "openvswitch/ofp-table.h"
 #include "packets.h"
 #include "socket-util.h"

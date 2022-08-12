@@ -13,7 +13,7 @@ vswitchd_sources = \
 	vswitchd/xenserver.h
 
 if P4OVS
-# Compile source files. p4ovs will link vswitchd.
+# Build static library. p4ovs will link vswitchd.
 lib_LTLIBRARIES += vswitchd/libvswitchd.la
 
 vswitchd_sources += \

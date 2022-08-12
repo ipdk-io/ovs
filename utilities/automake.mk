@@ -67,7 +67,6 @@ EXTRA_DIST += \
         utilities/docker/create_ovs_db.sh \
         utilities/docker/debian/Dockerfile \
         utilities/docker/debian/build-kernel-modules.sh
-#	utilities/ovs-p4ctl.in
 
 MAN_ROOTS += \
 	utilities/ovs-testcontroller.8.in \
