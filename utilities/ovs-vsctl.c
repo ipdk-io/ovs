@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Nicira, Inc.
+ * Copyright (c) 2021-2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,6 +56,11 @@
 #include "util.h"
 
 VLOG_DEFINE_THIS_MODULE(vsctl);
+
+#ifdef P4OVS
+#define MIN_P4_DEVICES 1
+#define MAX_P4_DEVICES 16
+#endif
 
 struct vsctl_context;
 
@@ -758,6 +764,22 @@ pre_get_info(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &ovsrec_interface_col_error);
 }
 
+#ifdef P4OVS
+static void
+pre_get_info_p4device(struct ctl_context *ctx)
+{
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_open_vswitch_col_bridges);
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_open_vswitch_col_p4_devices);
+
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_name);
+
+    ovsdb_idl_add_table(ctx->idl, &ovsrec_table_p4_device);
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_p4_device_col_device_id);
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_p4_device_col_config_file_path);
+    ovsdb_idl_add_column(ctx->idl, &ovsrec_p4_device_col_bridges);
+}
+#endif
+
 static void
 vsctl_context_populate_cache(struct ctl_context *ctx)
 {
@@ -1020,7 +1042,13 @@ static struct cmd_show_table cmd_show_tables[] = {
      NULL,
      {&ovsrec_open_vswitch_col_manager_options,
       &ovsrec_open_vswitch_col_bridges,
-      &ovsrec_open_vswitch_col_ovs_version},
+      &ovsrec_open_vswitch_col_ovs_version,
+#ifdef P4OVS
+      /* Adding p4_devices, as cmd_show function loops through only
+       * Open_vSwitch table and prints necessary contents.*/
+      &ovsrec_open_vswitch_col_p4_devices
+#endif
+     },
      {NULL, NULL, NULL}
     },
 
@@ -1065,6 +1093,17 @@ static struct cmd_show_table cmd_show_tables[] = {
       NULL},
      {NULL, NULL, NULL}
     },
+
+#ifdef P4OVS
+    {&ovsrec_table_p4_device,
+     &ovsrec_p4_device_col_device_id,
+     {&ovsrec_p4_device_col_config_file_path,
+      &ovsrec_p4_device_col_bridges,
+      NULL,
+      NULL},
+     {NULL, NULL, NULL}
+    },
+#endif
 
     {NULL, NULL, {NULL, NULL, NULL}, {NULL, NULL, NULL}}
 };
@@ -2617,7 +2656,6 @@ cmd_get_aa_mapping(struct ctl_context *ctx)
     }
 }
 
-
 #ifdef P4OVS
 
 static void
@@ -2936,6 +2974,12 @@ static const struct ctl_table_class tables[OVSREC_N_TABLES] = {
 
     [OVSREC_TABLE_FLOW_SAMPLE_COLLECTOR_SET].row_ids[0]
     = {&ovsrec_flow_sample_collector_set_col_id, NULL, NULL},
+
+#ifdef P4OVS
+    [OVSREC_TABLE_P4_DEVICE].row_ids[0]
+    = {&ovsrec_p4_device_col_device_id, NULL,
+       &ovsrec_p4_device_col_bridges},
+#endif
 };
 
 static void

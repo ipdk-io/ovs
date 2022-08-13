@@ -61,12 +61,12 @@ EXTRA_DIST += \
 	utilities/ovs-vlan-test.in \
 	utilities/ovs-vsctl-bashcomp.bash \
 	utilities/checkpatch.py \
-        utilities/docker/Makefile \
-        utilities/docker/ovs-override.conf \
-        utilities/docker/start-ovs \
-        utilities/docker/create_ovs_db.sh \
-        utilities/docker/debian/Dockerfile \
-        utilities/docker/debian/build-kernel-modules.sh
+	utilities/docker/Makefile \
+	utilities/docker/ovs-override.conf \
+	utilities/docker/start-ovs \
+	utilities/docker/create_ovs_db.sh \
+	utilities/docker/debian/Dockerfile \
+	utilities/docker/debian/build-kernel-modules.sh
 
 MAN_ROOTS += \
 	utilities/ovs-testcontroller.8.in \
