@@ -18,7 +18,7 @@
 #include "vswitch-idl.h"
 
 #include "p4proto-provider.h"
-#include "openvswitch/p4bfintf.h"
+#include "openvswitch/ovs-p4rt.h"
 
 VLOG_DEFINE_THIS_MODULE(p4proto);
 

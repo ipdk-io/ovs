@@ -5,8 +5,8 @@
  * Public interface to the bfintf module.
  */
 
-#ifndef OPENVSWITCH_P4BFINTF_H
-#define OPENVSWITCH_P4BFINTF_H
+#ifndef OPENVSWITCH_OVS_P4RT_H
+#define OPENVSWITCH_OVS_P4RT_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,24 +14,24 @@ extern "C" {
 
 #include <stdint.h>
 
-#define BF_PORT_NAME_LEN 64
-#define BF_MAC_STRING_LEN 32
+#define OVS_P4_PORT_NAME_LEN 64
+#define OVS_P4_MAC_STRING_LEN 32
 
-typedef enum port_type_t {
+enum ovs_p4_port_type {
     TAP_PORT,
     LINK_PORT,
     SOURCE_PORT,
     SINK_PORT,
     ETHER_PORT,
     VIRTUAL_PORT
-} port_type_t;
+};
 
-typedef struct port_properties_t {
+struct ovs_p4_port_properties {
     /** Port name. */
-    char port_name[BF_PORT_NAME_LEN];
+    char port_name[OVS_P4_PORT_NAME_LEN];
 
     /** MAC address in string format. */
-    char mac_in_use[BF_MAC_STRING_LEN];
+    char mac_in_use[OVS_P4_MAC_STRING_LEN];
 
     //! @todo What distinguishes this port ID from the others?
     uint32_t port_id;
@@ -43,14 +43,14 @@ typedef struct port_properties_t {
     uint32_t port_out_id;
 
     /** Port type. */
-    port_type_t port_type;
-} port_properties_t;
+    enum ovs_p4_port_type port_type;
+};
 
-int bf_p4_add_port(uint64_t device, int64_t port,
-                   const port_properties_t *port_props);
+int ovs_p4_add_port(uint64_t device, int64_t port,
+                    const struct ovs_p4_port_properties *port_props);
 
 #ifdef __cplusplus
 } // extern "C"
 #endif
 
-#endif // OPENVSWITCH_P4BFINTF_H
+#endif // OPENVSWITCH_OVS_P4RT_H

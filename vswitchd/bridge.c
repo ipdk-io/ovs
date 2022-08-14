@@ -73,8 +73,8 @@
 #include "xenserver.h"
 #include "vlan-bitmap.h"
 #ifdef P4OVS
+#include "openvswitch/ovs-p4rt.h"
 #include "p4proto/p4proto.h"
-#include "openvswitch/p4bfintf.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -2030,11 +2030,13 @@ iface_set_netdev_config(const struct ovsrec_interface *iface_cfg,
 }
 
 #ifdef P4OVS
-static void port_props_prepare(struct port_properties_t *port_props,
+static void port_props_prepare(struct ovs_p4_port_properties *port_props,
                                const struct ovsrec_interface *iface_cfg)
 {
-    ovs_strzcpy(port_props->port_name, iface_cfg->name, BF_PORT_NAME_LEN);
-    ovs_strzcpy(port_props->mac_in_use, iface_cfg->mac_in_use, BF_MAC_STRING_LEN);
+    ovs_strzcpy(port_props->port_name, iface_cfg->name,
+                sizeof(port_props->port_name));
+    ovs_strzcpy(port_props->mac_in_use, iface_cfg->mac_in_use,
+                sizeof(port_props->mac_in_use));
     return;
 }
 #endif
@@ -2120,7 +2122,7 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     int error;
 #ifdef P4OVS
     uint64_t device_id = 0;
-    struct port_properties_t port_props;
+    struct ovs_p4_port_properties port_props;
 #endif
 
     /* Do the bits that can fail up front. */
@@ -2158,7 +2160,7 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
 
 #ifdef P4OVS
     /* Make sure attributes structure is initialized to empty values */
-    memset((void*)&port_props, 0, sizeof(port_properties_t));
+    memset((void*)&port_props, 0, sizeof(port_props));
 
     port_props_prepare(&port_props, iface_cfg);
     device_id = p4proto_get_device_id_from_bridge_name(br->name);
@@ -2167,7 +2169,7 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     if (!(iface_is_internal(iface_cfg, br->cfg))) {
         VLOG_INFO("bridge %s: device-id:%"PRIu64" added with interface " \
               "index:%"PRIu64, br->name, device_id, *iface_cfg->ifindex);
-        bf_p4_add_port(device_id, *iface_cfg->ifindex, &port_props);
+        ovs_p4_add_port(device_id, *iface_cfg->ifindex, &port_props);
     }
 #endif
 
