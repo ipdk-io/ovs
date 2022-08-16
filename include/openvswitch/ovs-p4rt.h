@@ -2,7 +2,8 @@
  * Copyright (c) 2021-2022 Intel Corporation.
  * SPDX-License-Identifier: Apache-2.0
  *
- * Public interface to the bfintf module.
+ * Defines the public interface to an externally-supplied module
+ * that permits OvS to communicate with the P4 control plane.
  */
 
 #ifndef OPENVSWITCH_OVS_P4RT_H

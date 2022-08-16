@@ -13,7 +13,7 @@ AC_DEFUN([OVS_CHECK_P4OVS], [
     P4OVS_VALID=false
   else
     AC_MSG_RESULT([yes])
-	P4OVS_VALID=true
+    P4OVS_VALID=true
     AC_DEFINE([P4OVS], [1], [System includes P4 support.])
   fi
   dnl export automake conditional

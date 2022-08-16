@@ -1042,13 +1042,14 @@ static struct cmd_show_table cmd_show_tables[] = {
      NULL,
      {&ovsrec_open_vswitch_col_manager_options,
       &ovsrec_open_vswitch_col_bridges,
+#ifndef P4OVS
+      &ovsrec_open_vswitch_col_ovs_version},
+#else
       &ovsrec_open_vswitch_col_ovs_version,
-#ifdef P4OVS
       /* Adding p4_devices, as cmd_show function loops through only
        * Open_vSwitch table and prints necessary contents.*/
-      &ovsrec_open_vswitch_col_p4_devices
+      &ovsrec_open_vswitch_col_p4_devices},
 #endif
-     },
      {NULL, NULL, NULL}
     },
 
