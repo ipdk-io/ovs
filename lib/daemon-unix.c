@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2015 Nicira, Inc.
+ * Copyright (c) 2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -536,13 +537,13 @@ daemon_usage(void)
 {
     printf(
         "\nDaemon options:\n"
-        "  --detach                run in background as daemon\n"
-        "  --monitor               creates a process to monitor this daemon\n"
-        "  --user=username[:group] changes the effective daemon user:group\n"
-        "  --no-chdir              do not chdir to '/'\n"
-        "  --pidfile[=FILE]        create pidfile (default: %s/%s.pid)\n"
-        "  --overwrite-pidfile     with --pidfile, start even if already "
-                                   "running\n",
+        "  --detach                    run in background as daemon\n"
+        "  --monitor                   creates a process to monitor this daemon\n"
+        "  --user=username[:group]     changes the effective daemon user:group\n"
+        "  --no-chdir                  do not chdir to '/'\n"
+        "  --pidfile[=FILE]            create pidfile (default: %s/%s.pid)\n"
+        "  --overwrite-pidfile         with --pidfile, start even if already "
+                                      "running\n",
         ovs_rundir(), program_name);
 }
 

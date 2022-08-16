@@ -291,13 +291,13 @@ usage(void)
     daemon_usage();
     vlog_usage();
     printf("\nDPDK options:\n"
-           "Configuration of DPDK via command-line is removed from this\n"
-           "version of Open vSwitch. DPDK is configured through ovsdb.\n"
+           "  Configuration of DPDK via command-line is removed from this\n"
+           "  version of Open vSwitch. DPDK is configured through ovsdb.\n"
           );
     printf("\nOther options:\n"
-           "  --unixctl=SOCKET          override default control socket name\n"
-           "  -h, --help                display this help message\n"
-           "  -V, --version             display version information\n");
+           "  --unixctl=SOCKET            override default control socket name\n"
+           "  -h, --help                  display this help message\n"
+           "  -V, --version               display version information\n");
     exit(EXIT_SUCCESS);
 }
 

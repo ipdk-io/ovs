@@ -127,40 +127,40 @@ stream_usage(const char *name, bool active, bool passive,
     printf("\n");
     if (active) {
         printf("Active %s connection methods:\n", name);
-        printf("  tcp:HOST:PORT           "
+        printf("  tcp:HOST:PORT               "
                "PORT at remote HOST\n");
 #ifdef HAVE_OPENSSL
-        printf("  ssl:HOST:PORT           "
+        printf("  ssl:HOST:PORT               "
                "SSL PORT at remote HOST\n");
 #endif
-        printf("  unix:FILE               "
+        printf("  unix:FILE                   "
                "Unix domain socket named FILE\n");
     }
 
     if (passive) {
         printf("Passive %s connection methods:\n", name);
-        printf("  ptcp:PORT[:IP]          "
+        printf("  ptcp:PORT[:IP]              "
                "listen to TCP PORT on IP\n");
 #ifdef HAVE_OPENSSL
-        printf("  pssl:PORT[:IP]          "
+        printf("  pssl:PORT[:IP]              "
                "listen for SSL on PORT on IP\n");
 #endif
-        printf("  punix:FILE              "
+        printf("  punix:FILE                  "
                "listen on Unix domain socket FILE\n");
     }
 
 #ifdef HAVE_OPENSSL
     printf("PKI configuration (required to use SSL):\n"
-           "  -p, --private-key=FILE  file with private key\n"
-           "  -c, --certificate=FILE  file with certificate for private key\n"
-           "  -C, --ca-cert=FILE      file with peer CA certificate\n");
+           "  -p, --private-key=FILE      file with private key\n"
+           "  -c, --certificate=FILE      file with certificate for private key\n"
+           "  -C, --ca-cert=FILE          file with peer CA certificate\n");
     if (bootstrap) {
-        printf("  --bootstrap-ca-cert=FILE  file with peer CA certificate "
+        printf("  --bootstrap-ca-cert=FILE    file with peer CA certificate "
                "to read or create\n");
     }
     printf("SSL options:\n"
-           "  --ssl-protocols=PROTOS  list of SSL protocols to enable\n"
-           "  --ssl-ciphers=CIPHERS   list of SSL ciphers to enable\n");
+           "  --ssl-protocols=PROTOS      list of SSL protocols to enable\n"
+           "  --ssl-ciphers=CIPHERS       list of SSL ciphers to enable\n");
 #endif
 }
 

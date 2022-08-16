@@ -384,12 +384,18 @@ parse_options(int argc, char *argv[], struct shash *local_options)
 }
 
 static void
-usage(void)
+ovs_usage(const char *name)
 {
     printf("\
 %s: ovs-vswitchd management utility\n\
-usage: %s [OPTIONS] COMMAND [ARG...]\n\
-\n\
+usage: %s [OPTIONS] COMMAND [ARG...]\n",
+           name, name);
+}
+
+static void
+ovs_cmd_usage(void)
+{
+    printf("\n\
 Open vSwitch commands:\n\
   init                        initialize database, if not yet initialized\n\
   show                        print overview of database contents\n\
@@ -420,17 +426,17 @@ Interface commands (a bond consists of multiple interfaces):\n\
   iface-to-br IFACE           print name of bridge that contains IFACE\n\
 \n\
 Controller commands:\n\
-  get-controller BRIDGE      print the controllers for BRIDGE\n\
-  del-controller BRIDGE      delete the controllers for BRIDGE\n\
+  get-controller BRIDGE       print the controllers for BRIDGE\n\
+  del-controller BRIDGE       delete the controllers for BRIDGE\n\
   [--inactivity-probe=MSECS]\n\
   set-controller BRIDGE TARGET...  set the controllers for BRIDGE\n\
-  get-fail-mode BRIDGE       print the fail-mode for BRIDGE\n\
-  del-fail-mode BRIDGE       delete the fail-mode for BRIDGE\n\
-  set-fail-mode BRIDGE MODE  set the fail-mode for BRIDGE to MODE\n\
+  get-fail-mode BRIDGE        print the fail-mode for BRIDGE\n\
+  del-fail-mode BRIDGE        delete the fail-mode for BRIDGE\n\
+  set-fail-mode BRIDGE MODE   set the fail-mode for BRIDGE to MODE\n\
 \n\
 Manager commands:\n\
-  get-manager                print the managers\n\
-  del-manager                delete the managers\n\
+  get-manager                 print the managers\n\
+  del-manager                 delete the managers\n\
   [--inactivity-probe=MSECS]\n\
   set-manager TARGET...      set the list of managers to TARGET...\n\
 \n\
@@ -442,14 +448,40 @@ SSL commands:\n\
 Auto Attach commands:\n\
   add-aa-mapping BRIDGE I-SID VLAN   add Auto Attach mapping to BRIDGE\n\
   del-aa-mapping BRIDGE I-SID VLAN   delete Auto Attach mapping VLAN from BRIDGE\n\
-  get-aa-mapping BRIDGE              get Auto Attach mappings from BRIDGE\n\
-\n\
+  get-aa-mapping BRIDGE              get Auto Attach mappings from BRIDGE\n");
+}
+
+#ifdef P4OVS
+static void
+p4_cmd_usage(void)
+{
+    printf("\n\
+P4 device commands:\n\
+  add-p4-device P4-DEV        create a new P4 device\n\
+  del-p4-device P4-DEV        delete an existing P4 device\n\
+  add-br-p4 BRIDGE P4-DEV     assign a bridge to P4 device\n\
+  del-br-p4 BRIDGE P4-DEV     delete a bridge from P4 device\n\
+  add-p4-config P4-DEV FILE   add config file path for p4 device\n");
+}
+#endif
+
+static void
+switch_cmd_usage(void)
+{
+    printf("\n\
 Switch commands:\n\
-  emer-reset                  reset switch to known good state\n\
-\n\
-%s\
-%s\
-\n\
+  emer-reset                  reset switch to known good state\n");
+}
+
+static void db_cmd_usage(void)
+{
+    printf("\n%s\n%s\n", ctl_get_db_cmd_usage(), ctl_list_db_tables_usage());
+}
+
+static void
+options_usage(void)
+{
+    printf("\
 Options:\n\
   --db=DATABASE               connect to DATABASE\n\
                               (default: %s)\n\
@@ -458,17 +490,43 @@ Options:\n\
   -t, --timeout=SECS          wait at most SECS seconds for ovs-vswitchd\n\
   --dry-run                   do not commit changes to database\n\
   --oneline                   print exactly one line of output per command\n",
-           program_name, program_name, ctl_get_db_cmd_usage(),
-           ctl_list_db_tables_usage(), ctl_default_db());
-    table_usage();
+           ctl_default_db());
+}
+
+static void
+vlog_options_usage(void)
+{
     vlog_usage();
+
     printf("\
-  --no-syslog             equivalent to --verbose=vsctl:syslog:warn\n");
-    stream_usage("database", true, true, true);
+  --no-syslog                 equivalent to --verbose=vsctl:syslog:warn\n");
+}
+
+static void
+other_options_usage(void)
+{
     printf("\n\
 Other options:\n\
   -h, --help                  display this help message\n\
   -V, --version               display version information\n");
+}
+
+static void
+usage(void)
+{
+    ovs_usage(program_name);
+    ovs_cmd_usage();
+#ifdef P4OVS
+    p4_cmd_usage();
+#endif
+    switch_cmd_usage();
+    db_cmd_usage();
+    options_usage();
+    table_usage();
+    vlog_options_usage();
+    stream_usage("database", true, true, true);
+    other_options_usage();
+
     exit(EXIT_SUCCESS);
 }
 

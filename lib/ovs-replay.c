@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2021, Red Hat, Inc.
+ * Copyright (c) 2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -238,6 +239,6 @@ void
 ovs_replay_usage(void)
 {
     printf("\nReplay options:\n"
-           "  --record[=DIR]            turn on writing replay files\n"
-           "  --replay[=DIR]            run from replay files\n");
+           "  --record[=DIR]              turn on writing replay files\n"
+           "  --replay[=DIR]              run from replay files\n");
 }

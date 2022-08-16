@@ -44,9 +44,9 @@ ofp_version_usage(void)
     ofputil_format_version_bitmap_names(&msg, OFPUTIL_DEFAULT_VERSIONS);
     printf(
         "\nOpenFlow version options:\n"
-        "  -V, --version           display version information\n"
-        "  -O, --protocols         set allowed OpenFlow versions\n"
-        "                          (default: %s)\n",
+        "  -V, --version               display version information\n"
+        "  -O, --protocols             set allowed OpenFlow versions\n"
+        "                              (default: %s)\n",
         ds_cstr(&msg));
     ds_destroy(&msg);
 }

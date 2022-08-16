@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2015, 2016 Nicira, Inc.
+ * Copyright (c) 2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1325,12 +1326,12 @@ vlog_usage(void)
 {
     printf("\n\
 Logging options:\n\
-  -vSPEC, --verbose=SPEC   set logging levels\n\
-  -v, --verbose            set maximum verbosity level\n\
-  --log-file[=FILE]        enable logging to specified FILE\n\
-                           (default: %s/%s.log)\n\
+  -vSPEC, --verbose=SPEC      set logging levels\n\
+  -v, --verbose               set maximum verbosity level\n\
+  --log-file[=FILE]           enable logging to specified FILE\n\
+                              (default: %s/%s.log)\n\
   --syslog-method=(libc|unix:file|udp:ip:port)\n\
-                           specify how to send messages to syslog daemon\n\
-  --syslog-target=HOST:PORT  also send syslog msgs to HOST:PORT via UDP\n",
+                              specify how to send messages to syslog daemon\n\
+  --syslog-target=HOST:PORT   also send syslog msgs to HOST:PORT via UDP\n",
            ovs_logdir(), program_name);
 }
