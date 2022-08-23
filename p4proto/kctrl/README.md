@@ -28,4 +28,5 @@ Switchapi layer. p4proto/kctrl directory contains the code to manage kernel inte
 - [Switchlink](/p4proto/kctrl/switchlink/README.md)
 - [SwitchSAI](/p4proto/kctrl/switchsai/README.md)
 - [Switchapi](/p4proto/kctrl/switchapi/README.md)
-- [Linux Networking usecase](/p4proto/p4src/linux_networking/README.md)
+- [Linux Networking usecase](/p4proto/p4src/linux_networking/README_LINUX_NETWORKING.md)
+- [Linux Networking with ECMP usecase](/p4proto/p4src/linux_networking/README_LINUX_NETWORKING_WITH_ECMP.md)
