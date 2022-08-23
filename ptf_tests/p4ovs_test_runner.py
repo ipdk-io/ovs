@@ -22,6 +22,7 @@ import sys
 import datetime
 import re
 import fileinput
+import time
 
 from itertools import dropwhile
 
@@ -141,6 +142,10 @@ test_to_run = {}
 sequence = []
 with open(args.file) as fh:
     for i in fh.readlines():
+        # skip if blank line
+        if not i.strip():
+            continue
+        # skip if line starts with #
         if i.startswith("#"):
             continue
         items = i.strip().split(":")
@@ -150,8 +155,10 @@ test_to_run['sequence'] = sequence
 
 results = {}
 for test in test_to_run['sequence']:
+    time.sleep(2)
     process = subprocess.Popen('/bin/bash', stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     cmd = f"""source pre_test.sh {args.p4sde_install_path} {args.p4ovs_install_path} {args.p4dep_install_path}
+    sleep 2
     ptf --test-dir tests/ {test} --pypath $PWD --test-params="{test_to_run[test]}" --platform=dummy
     """
     print(f"\nRunning {test}\n")
