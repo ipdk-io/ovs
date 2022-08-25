@@ -136,7 +136,7 @@ class L3_Action_Selector_Vhost(BaseTest):
         # verify whether traffic hits group-1
         print("Verify whether traffic hits group-1 from VM1 to VM0")
         dst_ip=self.config_data['traffic']['in_pkt_header']['ip_src'][0]
-        result = test_utils.vm_to_vm_ping_test(conn2, dst_p)
+        result = test_utils.vm_to_vm_ping_test(conn2, dst_ip)
         if not result:
             self.result.addFailure(self, sys.exc_info())
             print("FAIL: Traffic test failed for group-1")
