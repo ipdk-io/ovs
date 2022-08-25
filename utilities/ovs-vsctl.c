@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Nicira, Inc.
- * Copyright (c) 2021-2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,11 +55,6 @@
 #include "util.h"
 
 VLOG_DEFINE_THIS_MODULE(vsctl);
-
-#ifdef P4OVS
-#define MIN_P4_DEVICES 1
-#define MAX_P4_DEVICES 16
-#endif
 
 struct vsctl_context;
 
@@ -764,22 +758,6 @@ pre_get_info(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &ovsrec_interface_col_error);
 }
 
-#ifdef P4OVS
-static void
-pre_get_info_p4device(struct ctl_context *ctx)
-{
-    ovsdb_idl_add_column(ctx->idl, &ovsrec_open_vswitch_col_bridges);
-    ovsdb_idl_add_column(ctx->idl, &ovsrec_open_vswitch_col_p4_devices);
-
-    ovsdb_idl_add_column(ctx->idl, &ovsrec_bridge_col_name);
-
-    ovsdb_idl_add_table(ctx->idl, &ovsrec_table_p4_device);
-    ovsdb_idl_add_column(ctx->idl, &ovsrec_p4_device_col_device_id);
-    ovsdb_idl_add_column(ctx->idl, &ovsrec_p4_device_col_config_file_path);
-    ovsdb_idl_add_column(ctx->idl, &ovsrec_p4_device_col_bridges);
-}
-#endif
-
 static void
 vsctl_context_populate_cache(struct ctl_context *ctx)
 {
@@ -1042,14 +1020,7 @@ static struct cmd_show_table cmd_show_tables[] = {
      NULL,
      {&ovsrec_open_vswitch_col_manager_options,
       &ovsrec_open_vswitch_col_bridges,
-#ifndef P4OVS
       &ovsrec_open_vswitch_col_ovs_version},
-#else
-      &ovsrec_open_vswitch_col_ovs_version,
-      /* Adding p4_devices, as cmd_show function loops through only
-       * Open_vSwitch table and prints necessary contents.*/
-      &ovsrec_open_vswitch_col_p4_devices},
-#endif
      {NULL, NULL, NULL}
     },
 
@@ -1094,17 +1065,6 @@ static struct cmd_show_table cmd_show_tables[] = {
       NULL},
      {NULL, NULL, NULL}
     },
-
-#ifdef P4OVS
-    {&ovsrec_table_p4_device,
-     &ovsrec_p4_device_col_device_id,
-     {&ovsrec_p4_device_col_config_file_path,
-      &ovsrec_p4_device_col_bridges,
-      NULL,
-      NULL},
-     {NULL, NULL, NULL}
-    },
-#endif
 
     {NULL, NULL, {NULL, NULL, NULL}, {NULL, NULL, NULL}}
 };
@@ -2657,288 +2617,6 @@ cmd_get_aa_mapping(struct ctl_context *ctx)
     }
 }
 
-#ifdef P4OVS
-
-static void
-ovs_insert_p4_device(struct ovsrec_p4_device *device,
-                     struct ovsdb_idl *idl)
-{
-    struct ovsrec_p4_device **p4_devices;
-    const struct ovsrec_open_vswitch *ovs;
-    size_t i;
-
-    ovs = ovsrec_open_vswitch_first(idl);
-    p4_devices = xmalloc(sizeof *ovs->p4_devices * (ovs->n_p4_devices + 1));
-    for (i = 0; i < ovs->n_p4_devices; i++) {
-        p4_devices[i] = ovs->p4_devices[i];
-    }
-    p4_devices[ovs->n_p4_devices] = device;
-    ovsrec_open_vswitch_set_p4_devices(ovs, p4_devices, ovs->n_p4_devices + 1);
-    free(p4_devices);
-}
-
-static void
-cmd_add_p4_device(struct ctl_context *ctx)
-{
-    struct ovsrec_p4_device *p4_device = NULL;
-    const struct ovsrec_p4_device *p4_device_row = NULL;
-    struct vsctl_context *vsctl_ctx = NULL;
-    int64_t device_id = 0;
-
-    if (!ctx) {
-        ctl_fatal("ctl is NULL, returning...!");
-    }
-
-    vsctl_ctx = vsctl_context_cast(ctx);
-    device_id = atoi(ctx->argv[1]);
-
-    if (device_id < MIN_P4_DEVICES || device_id > MAX_P4_DEVICES) {
-        ctl_fatal("p4 device ID should be in range <%d-%d>",
-                  MIN_P4_DEVICES, MAX_P4_DEVICES);
-    }
-
-    OVSREC_P4_DEVICE_FOR_EACH (p4_device_row, vsctl_ctx->base.idl) {
-        if (*p4_device_row->device_id == device_id) {
-            /* Device ID already configured. */
-            ctl_fatal("cannot create a device named %"PRIu64", because a device"
-                      " named %"PRIu64" already exists", device_id, device_id);
-            return;
-        }
-    }
-
-    p4_device = ovsrec_p4_device_insert(ctx->txn);
-    ovsrec_p4_device_set_device_id(p4_device, &device_id, 1);
-    ovsrec_p4_device_set_config_file_path(p4_device, NULL);
-    ovsrec_p4_device_set_bridges(p4_device, NULL, 0);
-
-    ovs_insert_p4_device(p4_device, vsctl_ctx->base.idl);
-}
-
-static void
-ovs_delete_p4_device(const struct ovsrec_p4_device *device,
-                     struct ovsdb_idl *idl)
-{
-    struct ovsrec_p4_device **p4_devices;
-    const struct ovsrec_open_vswitch *ovs;
-    size_t i, n;
-
-    ovs = ovsrec_open_vswitch_first(idl);
-    p4_devices = xmalloc(sizeof *ovs->p4_devices * (ovs->n_p4_devices + 1));
-    for (i = n = 0; i < ovs->n_p4_devices; i++) {
-        if (ovs->p4_devices[i] != device) {
-            p4_devices[n++] = ovs->p4_devices[i];
-        }
-    }
-    ovsrec_open_vswitch_set_p4_devices(ovs, p4_devices, n);
-    free(p4_devices);
-}
-
-static void
-cmd_del_p4_device(struct ctl_context *ctx)
-{
-    const struct ovsrec_p4_device *p4_device = NULL;
-    const struct ovsrec_p4_device *next_p4_device = NULL;
-    struct vsctl_context *vsctl_ctx = NULL;
-    int64_t device_id = 0;
-
-    if (!ctx) {
-        ctl_fatal("ctl is NULL, returning...!");
-    }
-
-    vsctl_ctx = vsctl_context_cast(ctx);
-    device_id = atoi(ctx->argv[1]);
-
-    if (device_id < MIN_P4_DEVICES || device_id > MAX_P4_DEVICES) {
-        ctl_fatal("p4 device ID should be in range <%d-%d>",
-                  MIN_P4_DEVICES, MAX_P4_DEVICES);
-    }
-
-    OVSREC_P4_DEVICE_FOR_EACH_SAFE (p4_device, next_p4_device, \
-                                    vsctl_ctx->base.idl) {
-        if (*p4_device->device_id == device_id) {
-           /* Device ID found, delete reference from Open_vSwitch
-            * table and p4 device the row. */
-            ovs_delete_p4_device(p4_device, vsctl_ctx->base.idl);
-            ovsrec_p4_device_delete(p4_device);
-            break;
-        }
-    }
-
-    if (!p4_device) {
-         ctl_fatal("no device id named %"PRIu64, device_id);
-    }
-}
-
-static void
-ovs_p4device_insert_bridge(const struct ovsrec_p4_device *device,
-                           struct ovsrec_bridge *bridge)
-{
-    struct ovsrec_bridge **bridges;
-    size_t i;
-
-    bridges = xmalloc(sizeof *device->bridges * (device->n_bridges + 1));
-    for (i = 0; i < device->n_bridges; i++) {
-        bridges[i] = device->bridges[i];
-    }
-    bridges[device->n_bridges] = bridge;
-    ovsrec_p4_device_set_bridges(device, bridges, device->n_bridges + 1);
-    free(bridges);
-}
-
-
-static void
-cmd_add_br_p4_device(struct ctl_context *ctx)
-{
-    const struct ovsrec_p4_device *p4_device_row = NULL;
-    const struct ovsrec_p4_device *p4_device = NULL;
-    struct vsctl_bridge *br = NULL;
-    struct vsctl_context *vsctl_ctx = NULL;
-    const char *br_name = NULL;
-    int64_t device_id = 0;
-
-    if (!ctx) {
-        ctl_fatal("ctl is NULL, returning...!");
-    }
-
-    vsctl_ctx = vsctl_context_cast(ctx);
-    br_name = ctx->argv[1];
-    device_id = atoi(ctx->argv[2]);
-
-    if (device_id < MIN_P4_DEVICES || device_id > MAX_P4_DEVICES) {
-        ctl_fatal("p4 device ID should be in range <%d-%d>",
-                  MIN_P4_DEVICES, MAX_P4_DEVICES);
-    }
-
-    vsctl_context_populate_cache(ctx);
-    br = find_bridge(vsctl_ctx, br_name, true);
-    if (br) {
-        OVSREC_P4_DEVICE_FOR_EACH (p4_device, vsctl_ctx->base.idl) {
-            if (*p4_device->device_id == device_id) {
-                p4_device_row = p4_device;
-            }
-            for (int i = 0 ; i < p4_device->n_bridges; i++) {
-                if (!strcmp(br_name, p4_device->bridges[i]->name)) {
-                    /* Code exits here as bridge is already associated with
-                     * other device. */
-                    ctl_fatal("Bridge %s is already added to p4 device ID %"
-                              PRIu64, br_name, *p4_device->device_id);
-                }
-            }
-        }
-    } else {
-        ctl_fatal("no bridge named %s", br_name);
-    }
-
-    if (!p4_device_row) {
-        ctl_fatal("no device id named %"PRIu64, device_id);
-    }
-    /* Device ID found, add bridge to the device */
-    ovs_p4device_insert_bridge(p4_device_row, br->br_cfg);
-}
-
-static void
-ovs_p4device_delete_bridge(const struct ovsrec_p4_device *device,
-                           struct ovsrec_bridge *bridge)
-{
-    struct ovsrec_bridge **bridges;
-    size_t i, n;
-
-    bridges = xmalloc(sizeof *device->bridges * device->n_bridges);
-    for (i = n = 0; i < device->n_bridges; i++) {
-        if (device->bridges[i] != bridge) {
-            bridges[n++] = device->bridges[i];
-        }
-    }
-
-    /* If i and n are same then we couldnt find 'bridge' in this 'device'
-     * in such case we dont need to update any changes to DB. */
-    if (i == n) {
-        free(bridges);
-        ctl_fatal("bridge %s is not mapped to device %lu",
-                  bridge->name, *device->device_id);
-    } else {
-        ovsrec_p4_device_set_bridges(device, bridges, n);
-        free(bridges);
-    }
-}
-
-static void
-cmd_del_br_p4_device(struct ctl_context *ctx)
-{
-    const struct ovsrec_p4_device *p4_device = NULL;
-    struct vsctl_bridge *br = NULL;
-    struct vsctl_context *vsctl_ctx = NULL;
-    const char *br_name = NULL;
-    int64_t device_id = 0;
-
-    if (!ctx) {
-        ctl_fatal("ctl is NULL, returning...!");
-    }
-
-    vsctl_ctx = vsctl_context_cast(ctx);
-    br_name = ctx->argv[1];
-    device_id = atoi(ctx->argv[2]);
-
-    if (device_id < MIN_P4_DEVICES || device_id > MAX_P4_DEVICES) {
-        ctl_fatal("p4 device ID should be in range <%d-%d>",
-                  MIN_P4_DEVICES, MAX_P4_DEVICES);
-    }
-
-    vsctl_context_populate_cache(ctx);
-    br = find_bridge(vsctl_ctx, br_name, true);
-    if (br) {
-        OVSREC_P4_DEVICE_FOR_EACH (p4_device, vsctl_ctx->base.idl) {
-            if (*p4_device->device_id == device_id) {
-                /* Device ID found, add bridge to the device */
-                ovs_p4device_delete_bridge(p4_device, br->br_cfg);
-                break;
-            }
-        }
-    } else {
-         ctl_fatal("no bridge named %s", br_name);
-    }
-
-    if (!p4_device) {
-         ctl_fatal("no device id named %"PRIu64, device_id);
-    }
-}
-
-static void
-cmd_add_p4_config(struct ctl_context *ctx)
-{
-    const struct ovsrec_p4_device *p4_device = NULL;
-    struct vsctl_context *vsctl_ctx = NULL;
-    const char *config_file= NULL;
-    int64_t device_id = 0;
-
-    if (!ctx) {
-        ctl_fatal("ctl is NULL, returning...!");
-    }
-
-    vsctl_ctx = vsctl_context_cast(ctx);
-    device_id = atoi(ctx->argv[1]);
-    config_file = ctx->argv[2];
-
-    if (device_id < MIN_P4_DEVICES || device_id > MAX_P4_DEVICES) {
-        ctl_fatal("p4 device ID should be in range <%d-%d>",
-                  MIN_P4_DEVICES, MAX_P4_DEVICES);
-    }
-
-    OVSREC_P4_DEVICE_FOR_EACH (p4_device, vsctl_ctx->base.idl) {
-        if (*p4_device->device_id == device_id) {
-           /* Device ID found, update config_file_path file to this row */
-            ovsrec_p4_device_set_config_file_path(p4_device, config_file);
-            break;
-        }
-    }
-
-    if (!p4_device) {
-         ctl_fatal("no device id named %"PRIu64, device_id);
-    }
-}
-
-#endif /* P4OVS */
-
 static const struct ctl_table_class tables[OVSREC_N_TABLES] = {
     [OVSREC_TABLE_BRIDGE].row_ids[0] = {&ovsrec_bridge_col_name, NULL, NULL},
 
@@ -2975,12 +2653,6 @@ static const struct ctl_table_class tables[OVSREC_N_TABLES] = {
 
     [OVSREC_TABLE_FLOW_SAMPLE_COLLECTOR_SET].row_ids[0]
     = {&ovsrec_flow_sample_collector_set_col_id, NULL, NULL},
-
-#ifdef P4OVS
-    [OVSREC_TABLE_P4_DEVICE].row_ids[0]
-    = {&ovsrec_p4_device_col_device_id, NULL,
-       &ovsrec_p4_device_col_bridges},
-#endif
 };
 
 static void
@@ -3470,24 +3142,6 @@ static const struct ctl_command_syntax vsctl_commands[] = {
 
     /* Datapath capabilities. */
     {"list-dp-cap", 1, 1, "", pre_get_dp_cap, cmd_list_dp_cap, NULL, "", RO},
-
-#ifdef P4OVS
-    /* P4 commands. */
-    {"add-p4-device", 1, 1, "NEW-P4-DEVICE-NUMBER", pre_get_info_p4device,
-     cmd_add_p4_device, NULL, "", RW},
-
-    {"del-p4-device", 1, 1, "DELETE-P4-DEVICE", pre_get_info_p4device,
-     cmd_del_p4_device, NULL, "", RW},
-
-    {"add-br-p4", 2, 2, "ADD-BR-P4-DEVICE", pre_get_info_p4device,
-     cmd_add_br_p4_device, NULL, "", RW},
-
-    {"del-br-p4", 2, 2, "ADD-BR-P4-DEVICE", pre_get_info_p4device,
-     cmd_del_br_p4_device, NULL, "", RW},
-
-    {"add-p4-config", 2, 2, "ADD-P4-CONFIG", pre_get_info_p4device,
-     cmd_add_p4_config, NULL, "", RW},
-#endif
 
     {NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, RO},
 };

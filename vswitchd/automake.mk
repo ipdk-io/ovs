@@ -16,11 +16,6 @@ if P4OVS
 # Build a static library instead of an executable.
 lib_LTLIBRARIES += vswitchd/libvswitchd.la
 
-vswitchd_sources += \
-	p4proto/p4proto-provider.h \
-	p4proto/p4proto.c \
-	p4proto/p4proto.h
-
 vswitchd_libvswitchd_la_CPPFLAGS = $(AM_CPPFLAGS)
 
 vswitchd_libvswitchd_la_SOURCES = \
