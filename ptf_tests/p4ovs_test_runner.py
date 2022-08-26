@@ -1,3 +1,20 @@
+# Copyright (c) 2022 Intel Corporation.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at:
+#
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import subprocess
 import argparse
 import os
@@ -33,6 +50,10 @@ optional arguments:
                         Absolute vm image location path(s) separated by comma
     -bdf PCI_BDF, --pci_bdf PCI_BDF
                         PCI BDF list separated by comma
+    -port REMOTE_PORT, --remote_port REMOTE_PORT
+                        REMOTE_PORT list separated by comma
+    -client CLIENT_CRED, --client_cred CLIENT_CRED
+                        CLIENT cretials in the format of hostname, user,passwrod
     -d P4DEP_INSTALL_PATH, --p4dep_install_path P4DEP_INSTALL_PATH
                         Absolute P4OVS Dependency Install path
     -l LOG_FILE, --log_file LOG_FILE
@@ -57,6 +78,10 @@ parser.add_argument('-vm', '--vm_location_list', type=str, required=False,
                     help="Absolute vm image location path(s) separated by comma")
 parser.add_argument('-bdf', '--pci_bdfs', type=str, required=False,
                     help="PCI BDF list separated by comma")
+parser.add_argument('-port', '--remote_port', type=str, required=False,
+                    help="Remote Port list separated by comma")
+parser.add_argument('-client', '--client_cred', type=str, required=False,
+                    help="Client Credential like hostname, user,password")
 parser.add_argument('-d', '--p4dep_install_path', type=str, required=False,
                     help="Absolute P4OVS Dependency Install path")
 parser.add_argument('-l', '--log_file', type=str, required=False,
@@ -91,6 +116,21 @@ if args.pci_bdfs:
         print(f"replacing {searchExp} with {replaceExp}")
         replaceAll(args.file,searchExp,replaceExp)
 
+# Dynamically update the tests_to_run file with remote port info
+if args.remote_port:
+    test_params={}
+    for k,v in enumerate(args.remote_port.split(',')):
+        test_params['PORT'+str(k+1)]=v
+    for searchExp, replaceExp in test_params.items():
+        print(f"replacing {searchExp} with {replaceExp}")
+        replaceAll(args.file,searchExp,replaceExp)
+
+# Dynamically update the tests_to_run file with client cred
+if args.client_cred:
+    searchExp = "CLIENT"
+    replaceExp = args.client_cred
+    replaceAll(args.file,searchExp,replaceExp)
+ 
 # Check if ptf is installed as a binary
 out = subprocess.run("ptf --help", shell=True, capture_output=True)
 if not out.stdout:

@@ -96,6 +96,14 @@ def ip_set_ipv4(interface_ip_list):
     port_config.GNMICLI.tear_down()
     return
 
+def ip_add_addr(interface, ip, remote=False,hostname="",username="",passwd=""):
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=passwd)
+    result = port_config.Ip.ipaddr_ipv4_set(interface, ip)
+    port_config.Ip.tear_down()
+    if result:
+        return True
+
 def gnmi_get_element_value(param, element):
     """
     : Get value of an element from output of gnmi cli query and verify 
@@ -144,34 +152,35 @@ def iplink_add_vlan_port(id, name, netdev_port):
         print(f"FAIL: fail to add {name} to port {netdev_port}")
         return False
 
-def ip_set_dev_up(devname):
+def ip_set_dev_up(devname,status_to_change='up',remote=False,hostname="",username="",password=""):
     """
      Enable <devname> up
     :param: devname: device, e.g. "TAP1", "VLAN1"
     :type: devname: string
     :return: True/False --> boolean
     """
-    port_config = PortConfig()
-    result = port_config.Ip.iplink_enable_disable_link(devname, status_to_change='up')
-    port_config.GNMICLI.tear_down()
-
-    if result:
-        print(f"PASS: succeed to enable {devname} up")
-        return True
-    else:
-        print(f"FAIL: fail to enale {devname} up")
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=password)
+    if not port_config.Ip.iplink_enable_disable_link(devname, status_to_change=status_to_change):
+        print(f"FAIL: fail to enale {devname} {status_to_change}")
+        port_config.Ip.tear_down()
         return False
 
-def iplink_del_port(port_to_delete):
+    port_config.Ip.tear_down()
+    print(f"PASS: succeed to enable {devname} {status_to_change}")
+    return True
+
+def iplink_del_port(port_to_delete,remote=False,hostname="", username="",passwd=""):
     """ This method is used to delete any port including vlan
     :param port_to_delete: name of port to delete
     :type port_to_delete: string e.g. vlan1
     :return: exit status
     :rtype: True on success. False on failure
     """
-    port_config = PortConfig()
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=passwd)
     result = port_config.Ip.iplink_del_port(port_to_delete)
-    port_config.GNMICLI.tear_down()
+    port_config.Ip.tear_down()
     if result:
         print(f"PASS: succeed to delee {port_to_delete}")
         return True
@@ -179,6 +188,71 @@ def iplink_del_port(port_to_delete):
         print(f"FAIL: fail to delete {port_to_delete}")
         return False
 
+def ip_netns_add(namespace, remote=False, hostname="", username="",password=""):
+    """
+    port_config = PortConfig(hostname, username, password)
+    result = port_config.Ip.ipnetns_create_namespace(namespace)
+    """
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                            username=username, passwd=password)
+    if not port_config.Ip.ipnetns_create_namespace(namespace):
+        port_config.Ip.tear_down()
+        return False
+    port_config.Ip.tear_down()
+ 
+    return True
+    
+def ip_netns_del(namespace,remote=False,hostname="", username="",password=""):
+    port_config = PortConfig(remote=remote,hostname=hostname, 
+                                          username=username, passwd=password)
+    if not port_config.Ip.ipnetns_delete_namespace(namespace):
+        port_config.Ip.tear_down()
+        return False
+    port_config.Ip.tear_down()
+  
+    return True
+
+def ip_link_add_veth_and_peer(veth_iface, veth_peer_iface,
+                          remote=False,hostname="", username="",password=""):
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                                username=username, passwd=password)
+    if not port_config.Ip.iplink_create_veth_interface(veth_iface, veth_peer_iface):
+        port_config.Ip.tear_down()
+        return False
+    port_config.Ip.tear_down()
+
+    return True
+
+def ip_link_set_veth_to_ns(namespace_name, veth_iface,
+                             remote=False,hostname="", username="",password=""):
+    port_config = PortConfig(remote=remote,hostname=hostname, 
+                                      username=username, passwd=password)
+    if not port_config.Ip.iplink_add_veth_to_netns(namespace_name, veth_iface):
+        port_config.Ip.tear_down()
+        return False
+    port_config.Ip.tear_down()
+
+    return True
+
+def ip_link_netns_exec(namespace, command,
+                                remote=False,hostname="", username="",password=""):
+    port_config = PortConfig(remote=remote,hostname=hostname, username=username, passwd=password)
+    results =port_config.Ip.ipnetns_execute_command(namespace, command)
+    port_config.Ip.tear_down()
+    if results[0]:
+        return True, results[1]
+    else:
+        return False,False
+
+def del_ip_netns(namespace, remote=False,hostname="",username="",passwd=""):
+    port_config = PortConfig(remote=remote,hostname=hostname, username=username, passwd=passwd)
+    if not port_config.Ip.ipnetns_delete_namespace(namespace):
+        port_config.Ip.tear_down()
+        return False
+    port_config.Ip.tear_down()
+
+    return True
+   
 def get_tap_port_list(config_data):
     tap_port = []
     for data in config_data['port']:
@@ -186,5 +260,16 @@ def get_tap_port_list(config_data):
             tap_port.append(data["name"])
     if tap_port:
         return tap_port
+    else:
+        return False
+
+def get_link_port_list(config_data):
+    link_port = []
+    
+    for data in config_data['port']:
+        if data['port-type'] =="LINK" and data['device'] == 'physical-device':
+            link_port.append(data)      
+    if link_port:
+        return link_port
     else:
         return False

@@ -17,6 +17,7 @@ from common.lib.local_connection import Local
 from common.lib.telnet_connection import connectionManager
 from common.lib.ovs import Ovs
 from common.utils.ovs_utils import get_connection_object
+import common.utils.gnmi_cli_utils as gnmi_cli_utis
 
 def add_port_to_dataplane(port_list):
     """
@@ -104,14 +105,14 @@ def gen_dep_files_p4c_dpdk_pna_ovs_pipeline_builder(config_data):
     cmd = f'''p4c-dpdk -I p4include -I p4include/dpdk --p4v=16 --p4runtime-files \
             {output_dir}/p4Info.txt -o {output_dir}/pipe/{spec_file} --arch pna --bf-rt-schema {output_dir}/bf-rt.json --context \
             {output_dir}/pipe/context.json {output_dir}/{p4file}'''
-   
+    print (cmd)
     out, returncode, err = local.execute_command(cmd)
     if returncode:
         print(f"Failed to run p4c: {out} {err}")
         return False
 
     print(f"PASS: {cmd}")
-
+    
     cmd = f'''cd {output_dir}; ovs_pipeline_builder --p4c_conf_file={conf_file} \
             --bf_pipeline_config_binary_file={pb_bin_file}'''
 
@@ -156,7 +157,7 @@ def vm_create(vm_location_list, memory="512M"):
         vm_name = f"VM{i}"
         vm_list.append(vm_name)
 
-        cmd = f"(qemu-system-x86_64 -enable-kvm -smp 4 -m {memory} \
+        cmd = f"(qemu-kvm -smp 2 -m {memory} \
 -boot c -cpu host -enable-kvm -nographic \
 -L /root/pc-bios -name VM{i} \
 -hda {vm_location_list[i]} \
@@ -168,9 +169,8 @@ def vm_create(vm_location_list, memory="512M"):
 -device virtio-net-pci,netdev=netdev{i} \
 -serial telnet::655{i},server,nowait &)"
 
-        time.sleep(5)
         p  = subprocess.Popen([cmd], shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-
+        time.sleep(5)
         try:
             out, err = p.communicate(timeout=5)
             return False, f"VM{i}"
@@ -213,6 +213,29 @@ def vm_to_vm_ping_test(conn, dst_ip, count="4"):
     else:
         print(f"FAIL: Ping Failed to destination {dst_ip} with {pkt_loss}% loss")
         return False
+    
+def vm_ping_less_than_100_loss(conn, dst_ip, count="4"):
+    """
+    Sometimes when expecting some ping packet loss, we can use this function
+    """
+    cmd = f"ping {dst_ip} -c {count}"
+    dummy_ping(conn, cmd)
+
+    conn.sendCmd(cmd)
+    result = conn.readResult()
+    pkt_loss = 100
+    if result:
+        match = re.search('(\d*)% packet loss', result)
+        if match:
+            pkt_loss = int(match.group(1))
+    
+    if pkt_loss < 100:
+        if f"{count} received, {pkt_loss}% packet loss" in result:
+            print(f"PASS: Ping successful to destination {dst_ip}")
+            return True
+    else:
+        print(f"FAIL: Ping Failed to destination {dst_ip} with {pkt_loss}% loss")
+        return False
 
 def dummy_ping(conn, cmd):
     """
@@ -231,13 +254,13 @@ def vm_to_vm_ping_drop_test(conn, dst_ip, count="4"):
 
     conn.sendCmd(cmd)
     result = conn.readResult()
-    pkt_loss = "100"
+    pkt_loss = 100
     if result:
         match = re.search('(\d*)% packet loss', result)
         if match:
-            pkt_loss = match.group(1)
+            pkt_loss = int(match.group(1))
 
-    if pkt_loss == "100":
+    if pkt_loss == 100:
         print(f"PASS: 100% packet loss to destination {dst_ip}")
         return True
     else:
@@ -343,7 +366,6 @@ def vm_create_with_hotplug(config_data, memory="512M"):
  -serial telnet::{vm['hotplug']['serial-telnet-port']},server &)"
         
         print(cmd)
-        time.sleep(5)
 
         p  = subprocess.Popen([cmd], shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
@@ -552,3 +574,68 @@ def check_vhost_socket_count(directory="/tmp/"):
         if file.startswith("vhost-user"):
             vhost_list.append(file)
     return len(vhost_list), vhost_list  
+
+def create_ipnetns_vm(ns_data, remote=False, hostname="",username="",password=""):
+    """
+    :Function to create Namesapce, VM and IP
+    :returns boolean True or False
+    """
+    namespace = ns_data['name']
+    veth_if = ns_data['veth_if']
+    veth_peer =  ns_data['peer_name']
+    ip_add_cmd = ns_data['cmds'][0]
+    ip_link_set_cmd = ns_data['cmds'][1]
+
+    if not gnmi_cli_utis.ip_netns_add(namespace,remote=remote,hostname=hostname, username=username, password=password):
+        print (f"FAILED: Failed to configure namespace {namespace}")
+        return False
+    elif not gnmi_cli_utis.ip_link_add_veth_and_peer(veth_if,veth_peer, remote=remote,hostname=hostname, username=username, password=password):
+        print (f"FAILED: Failed to configure namespace {veth_peer}")
+        return False
+    elif not gnmi_cli_utis.ip_link_set_veth_to_ns(namespace, veth_if,remote=remote,hostname=hostname, username=username, password=password):
+        print (f"FAILED: Failed to configure {veth_if} to namespace {namespace}")
+        return False
+    elif not gnmi_cli_utis.ip_link_netns_exec(namespace, ip_add_cmd,remote=remote,hostname=hostname, username=username, password=password)[0]:
+        print (f"FAILED: Failed to execute cmd {ip_add_cmd} on namespace {namespace}")
+        return False
+    elif not gnmi_cli_utis.ip_link_netns_exec(namespace, ip_link_set_cmd,remote=remote,hostname=hostname, username=username, password=password)[0]:
+        print (f"FAILED: Failed to execute cmd {ip_link_set_cmd} on namespace {namespace}")
+        return False
+    elif not gnmi_cli_utis.ip_set_dev_up(veth_peer, remote=remote,hostname=hostname, username=username, password=password):
+        print (f"FAILED: unable to configure {veth_peer} up")
+        return False
+    else:
+        return True
+
+def del_ipnetns_vm(ns_data, remote=False, hostname="",username="",password=""):
+    """
+    :Function to delete Namesapce
+    :returns boolean True or False
+    """
+    namespace = ns_data['name']
+    if not gnmi_cli_utis.del_ip_netns(namespace,remote=remote,hostname=hostname, username=username, passwd=password):
+        print (f"Failed to delete namesapce {namespace} ")
+        return False
+    print(f"PASS: delete {namespace} on {hostname}")
+    return True
+
+def ip_ntns_exec_ping_test(nsname, dst_ip, count="4", remote=False, hostname="",username="",password=""):
+    """
+    :To test if ping to a destination works without any drop
+    :E.g. ip netns exec VM1 ping 99.0.0.1
+    """
+    cmd = f"ping {dst_ip} -c {count}"
+    results = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)
+   
+    pkt_loss = 100
+    if results[0]:
+        match = re.search('(\d*)% packet loss', results[1])
+        if match:
+            pkt_loss = match.group(1)
+
+    if f"{count} received, 0% packet loss" in results[1]:
+        print(f"PASS: Ping successful to destination {dst_ip}")
+        return True
+    else:
+        print(f"FAIL: Ping Failed to destination {dst_ip} with {pkt_loss}% loss")
+        return False

@@ -6,7 +6,7 @@ import os
 
 
 def get_config_dict(config_json, pci_bdf="", vm_location_list="", vm_cred="",
-                    client_cred=""):
+                    client_cred="", remote_port=""):
     """util function to convert json config file to dictionary and to add
        extra needed config parameters to dictionary
 
@@ -51,31 +51,27 @@ def get_config_dict(config_json, pci_bdf="", vm_location_list="", vm_cred="",
     with open(config_json) as config_json:
         data = json.load(config_json)
 
-        port_list = []
+        port_list, phy_port_list = [],[]
         for port in data['port']:
             port_list.append(port['name'])
+            if port['device']=='physical-device':
+                phy_port_list.append(port['name'])
         port_list.sort()
 
         data['port_list'] = port_list
 
         if pci_bdf:
             pci_bdf = [x.strip() for x in pci_bdf.split(',')]
-            if len(pci_bdf)>len(data['port_list']):
+            if len(pci_bdf) != len(phy_port_list):
                 print(f"No of pci bdf must be equal to or less than the no of "
                       f"ports defined in the config json file: "
                       f"{len(data['port_list'])}")
                 return None
 
             for port in data['port']:
-                for pci in pci_bdf:
-                    if pci and str(pci_bdf.index(pci)+1) == port['id']:
-                        if port['device']=='physical-device':
-                            port['pci-bdf'] = pci
-                        else:
-                            print(f"Port no {port['id']} expected device type "
-                                  f"as physical-device found {port['device']} "
-                                  f"instead")
-                            return None
+                if port['device']=='physical-device':
+                    port['pci-bdf'] = pci_bdf.pop(0)
+
         if vm_location_list:
             vm_location_list = [x.strip() for x in vm_location_list.split(',')]
             # Check if no of vms added in json file matches with the no of vms
@@ -102,13 +98,7 @@ def get_config_dict(config_json, pci_bdf="", vm_location_list="", vm_cred="",
                 if 'match_action' in table.keys():
                     table['del_action'] = []
                     for match_action in table['match_action']:
-                        if "member_id" in match_action:
-                            delim = ",member_id="
-                        elif "group_id" in match_action:
-                            delim = ",group_id="
-                        else:
-                            delim = ",action="
-                        table['del_action'].append(match_action.replace(" ","").split(delim)[0])
+                        table['del_action'].append(match_action.replace(" ","").split(",action=")[0])
             for table in data['table']:
                 if 'member_details' in table.keys():
                     table['del_member'] = []
@@ -120,13 +110,15 @@ def get_config_dict(config_json, pci_bdf="", vm_location_list="", vm_cred="",
                     table['del_group'] = []
                     for group_detail in table['group_details']:
                         table['del_group'].append(group_detail.split(',')[0])
-        
+
+        if remote_port:
+            data['remote_port'] = [x.strip() for x in remote_port.split(',')]
+
         #######################################################
         # Any future data structure can be added here #########
         #######################################################
 
         return data
-
 
 def get_interface_ipv4_dict(data):
     """

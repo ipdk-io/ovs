@@ -1,6 +1,19 @@
+# Copyright (c) 2022 Intel Corporation.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at:
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 LNT 4VM Mesh ping on same Host
-
 """
 
 # in-built module imports
@@ -15,12 +28,6 @@ import ptf
 import ptf.dataplane as dataplane
 from ptf.base_tests import BaseTest
 from ptf.testutils import *
-from ptf import config
-
-# scapy related imports
-from scapy.packet import *
-from scapy.fields import *
-from scapy.all import *
 
 # framework related imports
 import common.utils.ovsp4ctl_utils as ovs_p4ctl
@@ -55,24 +62,14 @@ class LNT_4VM_Same_Host(BaseTest):
         if not gnmi_cli_set_and_verify(self.gnmicli_params):
             self.result.addFailure(self, sys.exc_info())
             self.fail("Failed to configure gnmi cli ports")
-        
-        #bring up TAP0
-        if not ip_set_dev_up(self.tap_port_list[0]):
-            self.result.addFailure(self, sys.exc_info())
-            self.fail("Failed to bring up {self.tap_port_list[0]}")
-
-        # set pipe line
-        if not ovs_p4ctl.ovs_p4ctl_set_pipe(self.config_data['switch'], self.config_data['pb_bin'], self.config_data['p4_info']):
-            self.result.addFailure(self, sys.exc_info())
-            self.fail("Failed to set pipe")
-        
-        # create VMs
+    
+        print ("Start to crate VM")
         result, vm_name = test_utils.vm_create(self.config_data['vm_location_list'])
         if not result:
             self.result.addFailure(self, sys.exc_info())
             self.fail(f"VM creation failed for {vm_name}")
        
-        # create telnet instance for VMs created
+        print ("Initiate telnet instance for each VM created")
         self.conn_obj_list = []
         vm_cmd_list = []
         vm_id = 0
@@ -85,8 +82,18 @@ class LNT_4VM_Same_Host(BaseTest):
         
         # configuring VMs
         for i in range(len(self.conn_obj_list)):
-            print ("Configuring VM{i}....")
+            print (f"Configuring VM{i}....")
             test_utils.configure_vm(self.conn_obj_list[i], vm_cmd_list[i])
+            
+        #bring up TAP0
+        if not ip_set_dev_up(self.tap_port_list[0]):
+            self.result.addFailure(self, sys.exc_info())
+            self.fail("Failed to bring up {self.tap_port_list[0]}")
+
+        # set pipe line
+        if not ovs_p4ctl.ovs_p4ctl_set_pipe(self.config_data['switch'], self.config_data['pb_bin'], self.config_data['p4_info']):
+            self.result.addFailure(self, sys.exc_info())
+            self.fail("Failed to set pipe")
         
         # add linux networking match action rules
         for table in self.config_data['table']:
@@ -96,7 +103,7 @@ class LNT_4VM_Same_Host(BaseTest):
                 if not ovs_p4ctl.ovs_p4ctl_add_entry(table['switch'],table['name'], match_action):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"Failed to add table entry {match_action}")
-    
+                    
         #add a bridge to ovs
         if not ovs_utils.add_bridge_to_ovs(self.config_data['bridge']):
             self.result.addFailure(self, sys.exc_info())

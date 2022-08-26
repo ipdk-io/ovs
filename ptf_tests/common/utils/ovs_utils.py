@@ -129,6 +129,7 @@ def ovs_bridge_up(bridge_name, remote=False, hostname="", username="",
     """
     pc = port_config.PortConfig(remote, hostname, username, password)
     pc.Ip.iplink_enable_disable_link(bridge_name)
+    pc.Ip.tear_down()
     print(f'bridge {bridge_name} is UP')
 
 
@@ -202,10 +203,10 @@ def add_vlan_to_bridge(bridge, vlan,
     connection.tear_down()
     # work on output data
     if rcode:
-        print(f'failed to add vxlan port to ovs, error is:{err}')
+        print(f'failed to add vlan port to ovs, error is:{err}')
         return False
     else:
-        print('Successfully added vxlan port to ovs')
+        print('Successfully added vlan port to ovs')
         return True
 
 

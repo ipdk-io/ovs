@@ -38,12 +38,12 @@ fi
 ./fix_sde_libs.sh $SDE_INSTALL_PATH
 
 # P4-OVS build process starts here
-./boot.sh
+./boot.sh || exit 1
 if [ ! -z "$DEPS_INSTALL_PATH" ]
 then
-    ./configure --prefix=$DEPS_INSTALL_PATH --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0 -g' --disable-ssl --with-sai
+    ./configure --prefix=$DEPS_INSTALL_PATH --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0 -g' --disable-ssl --with-sai || exit 1
 else
-    ./configure --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0 -g' --with-sai
+    ./configure --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0 -g' --with-sai || exit 1
 fi
 
 #Read the number of CPUs in a system and derive the NUM threads
@@ -51,8 +51,8 @@ get_num_cores
 echo ""
 echo "Number of Parallel threads used: $NUM_THREADS ..."
 echo ""
-make clean
-make $NUM_THREADS
-make $NUM_THREADS install
+make clean || exit 1
+make $NUM_THREADS || exit 1
+make $NUM_THREADS install || exit 1
 
 set +e
