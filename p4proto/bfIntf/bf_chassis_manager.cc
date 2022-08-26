@@ -1,5 +1,5 @@
 // Copyright 2018-present Barefoot Networks, Inc.
-// Copyright(c) 2021 Intel Corporation.
+// Copyright (c) 2021-2022 Intel Corporation.
 // SPDX-License-Identifier: Apache-2.0
 
 #include "bf_chassis_manager.h"
