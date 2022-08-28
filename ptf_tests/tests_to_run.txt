@@ -43,3 +43,9 @@ lnt_4vm_2host_add_dele_rule:config_json='lnt_4vm_2host_add_dele_rule.json';vm_lo
 lnt_2vm_vxlan_2nsvm_5min_ping:config_json='lnt_2vm_vxlan_2nsvm_5min_ping.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';remote_port='PORT1';client_cred='CLIENT'
 lnt_1hotplugvm_vxlan_1nsvm:config_json='lnt_1hotplugvm_vxlan_1nsvm.json';vm_location_list='VM1';pci_bdf='BDF1';remote_port='PORT1';client_cred='CLIENT'
 lnt_2hotplugvm_vxlan_2nsvm:config_json='lnt_2hotplugvm_vxlan_2nsvm.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';remote_port='PORT1';client_cred='CLIENT'
+LNT_ECMP_2VM_2Host_ping:config_json='LNT_ECMP_2VM_2Host_ping.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
+LNT_ECMP_2VM_2Host_hotplug:config_json='LNT_ECMP_2VM_2Host_ping.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
+LNT_ECMP_2VM_2Host_del_add:config_json='LNT_ECMP_2VM_2Host_del_add.json';vm_location_list='VM1';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
+LNT_ECMP_2VM_2Host_netperf:config_json='LNT_ECMP_2VM_2Host_netperf.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2';
+LNT_ECMP_2HotPlugVM_2Host_netperf:config_json='LNT_ECMP_2VM_2Host_netperf.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
+LNT_ECMP_2VM_2Host_link_flap_netperf:config_json='LNT_ECMP_2VM_2Host_netperf.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'

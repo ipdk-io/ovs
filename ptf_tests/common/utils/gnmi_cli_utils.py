@@ -273,3 +273,53 @@ def get_link_port_list(config_data):
         return link_port
     else:
         return False
+
+def ip_del_addr(interface, ip, remote=False,hostname="",username="",passwd=""):
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=passwd)
+    result = port_config.Ip.ipaddr_ipv4_del(interface, ip)
+    port_config.Ip.tear_down()
+    if result:
+        return True
+
+def iproute_add(dst,nexthop_list,device_list,weight_list,remote=False,hostname="",username="",password=""):
+    """
+    utility to add ip routes
+    """
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=password)
+    result = port_config.Ip.iproute_add(dst, nexthop_list, device_list, weight_list)
+    port_config.GNMICLI.tear_down()
+    if result:
+        return True
+    else:
+        print(f"FAIL: fail to add route")
+        return False
+
+def iproute_del(dst,remote=False,hostname="",username="",password=""):
+    """
+    utility to delete ip route
+    """
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=password)
+    result = port_config.Ip.iproute_del(dst)
+    port_config.GNMICLI.tear_down()
+    if result:
+        return True
+    else:
+        print(f"FAIL: fail to delete route")
+        return False
+
+def iplink_add_dev(name,type,remote=False,hostname="",username="",password=""):
+    """
+    utility to add device of specified name and type
+    """
+    port_config = PortConfig(remote=remote,hostname=hostname,
+                                         username=username, passwd=password)
+    result = port_config.Ip.iplink_add_dev(name, type)
+    port_config.GNMICLI.tear_down()
+    if result:
+        return True
+    else:
+        print(f"FAIL: fail to add device {name} type {type}")
+        return False

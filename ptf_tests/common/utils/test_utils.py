@@ -18,6 +18,8 @@ from common.lib.telnet_connection import connectionManager
 from common.lib.ovs import Ovs
 from common.utils.ovs_utils import get_connection_object
 import common.utils.gnmi_cli_utils as gnmi_cli_utis
+from common.lib.ssh import Ssh
+
 
 def add_port_to_dataplane(port_list):
     """
@@ -393,11 +395,11 @@ def sendCmd_and_recvResult(conn, command_list):
 
     return result
 
-def vm_interface_up(conn, interface_ip_list):
+def vm_interface_up(conn, interface_ip_list, status="up"):
     command_list=[]
     for interface_ipv4_dict in interface_ip_list:
         for interface, ip in interface_ipv4_dict.items():
-            command_list.append(f"ip link set {interface} up")
+            command_list.append(f"ip link set {interface} {status}")
     
     return sendCmd_and_recvResult(conn, command_list)
 
@@ -420,6 +422,30 @@ def vm_ip_neigh_configuration(conn, interface, remote_ip, remote_mac):
     remote_ip = remote_ip.split("/")[0] #stripping it of any /24 if any
 
     cmd = f"ip neigh add dev {interface} {remote_ip} lladdr {remote_mac}"
+    return sendCmd_and_recvResult(conn, [cmd])
+
+def vm_ethtool_offload(conn, interface):
+    """
+    :Function to offload interface
+    :Example: ethtool --offload ens3 rx off tx off
+    """
+    cmd = f"ethtool --offload {interface} rx off tx off"
+    return sendCmd_and_recvResult(conn, [cmd])
+
+def vm_change_mtu(conn, interface, mtu):
+    """
+    :Function to change interface mtu
+    :Example: ip link set ens3 mtu 1450 up
+    """
+    cmd = f"ip link set {interface} mtu {mtu} up"
+    return sendCmd_and_recvResult(conn, [cmd])
+
+def vm_change_port_status(conn, interface, status):
+    """
+    :Function to change interface status
+    :Example: ip link set ens3 up or down
+    """
+    cmd = f"ip link set {interface} {status}"
     return sendCmd_and_recvResult(conn, [cmd])
 
 def set_telnet_conn_timeout(conn, timeout=10):
@@ -617,6 +643,7 @@ def del_ipnetns_vm(ns_data, remote=False, hostname="",username="",password=""):
         print (f"Failed to delete namesapce {namespace} ")
         return False
     print(f"PASS: delete {namespace} on {hostname}")
+    
     return True
 
 def ip_ntns_exec_ping_test(nsname, dst_ip, count="4", remote=False, hostname="",username="",password=""):
@@ -639,3 +666,244 @@ def ip_ntns_exec_ping_test(nsname, dst_ip, count="4", remote=False, hostname="",
     else:
         print(f"FAIL: Ping Failed to destination {dst_ip} with {pkt_loss}% loss")
         return False
+    
+def ipnetns_eth_offload(nsname, interface, remote=False, hostname="",username="",password=""):
+    """
+    :Function to offload interface
+    :Example: ethtool --offload ens3 rx off tx off
+    :returns boolean True or False
+    """
+    cmd=f"ethtool --offload {interface} rx off tx off"
+    if not gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[0]:
+        print (f"FAILED: Failed to execute cmd {cmd} on namespace {nsname}")
+        return False
+    return True
+
+def ipnetns_change_mtu(nsname,  interface, mtu=1500, remote=False, hostname="",username="",password=""):
+    """
+    :Function to change mtu of interface on linux name space       
+    :returns boolean True or False
+    """
+    cmd=f"ip link set {interface} mtu {mtu} up"
+    if not gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[0]:
+        print (f"FAILED: Failed to execute cmd {cmd} on namespace {nsname}")
+        return False
+    return True
+
+def ipnetns_netserver(nsname, remote=False, hostname="",username="",password=""):
+    """
+    :Function to start netserver on linux name space
+    :returns boolean True or False
+    """
+    cmd = "netserver"
+    result = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
+    if "Starting netserver" not in result:
+        print (f"FAILED: Failed to execute cmd {cmd} on namespace {nsname}")
+        return False
+        
+    print (f"PASS: netserver is running on namespace {nsname}") 
+    return True
+
+def ipnetns_netperf_client(nsname, host, testlen, testname, option="", remote=False, hostname="",username="",password=""):
+    """
+    :Function to start netperf on linux name space
+    :returns boolean True or False
+    """
+    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
+    output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
+    
+    if testname == "UDP_STREAM":
+        n, data_len = 0, 4
+        try:
+            data = output.strip().split("\n")[-1].split()
+        except IndexError as e:
+             print (f"netperf get incompleted data due to {e} and {output} but will try one more time")
+        # try max of 3 times
+        while len(data) != data_len:
+            print (f"The {n} try {cmd} after failure")
+            output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
+            data = output.strip().split("\n")[-1].split()
+            if n >= 3:
+                break
+            n += 1       
+    elif testname == "TCP_STREAM":
+        n, data_len =0, 5
+        try:
+            data = output.strip().split("\n")[-1].split()
+        except IndexError as e:
+             print (f"netperf get incompleted data due to {e} and {output} but will try one more time")
+        # try max of 3 times
+        while len(data) != data_len:
+            print (f"The {n} try {cmd} after failure")
+            output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
+            data = output.strip().split("\n")[-1].split()
+            if n >= 3:
+                break
+            n += 1
+    else:
+        print(f"FAIL: No expect netperf execution data collected {output}")
+        return False
+  
+    if len(data) == data_len:
+        for value in data:
+            #all value should be either fload or int
+            if type(float(value)) != float and type(int(value)) == int:
+                print(f"FAIL: Send netperf client failed with {data}")
+                return False    
+    else:
+        print(f"FAIL: Send netperf client failed with {output}")
+        return False
+  
+    print (f"PASS: send ip netns exec {nsname} {cmd} succeed") 
+    return True
+
+def vm_check_netperf(conn, vmname):
+    """
+    :Function to check of netperf is installed or not
+    :returns boolean True or False
+    """
+    conn.readResult()
+    cmd= "netperf -V"
+    conn.sendCmd(cmd)
+    output = conn.readResult().split("\n")[1]
+    
+    if "Netperf version" not in output:
+        print (f"FAILED: netperf is not installed on {vmname}")
+        return False
+    
+    print (f"PASS: verify netperf is installed on {vmname}")
+    return True
+
+def vm_start_netserver(conn):
+    """
+    To check if a netserver is running or not. If not running, try to start netperf
+    """
+    # kill existing process and restart it 
+    conn.sendCmd("pkill -9 netserver")
+    conn.sendCmd("netserver")
+    output = conn.readResult()
+    if "Starting netserver" not in output:
+        print(f"FAIL: Unable to start netserver")
+        return False
+    
+    print ("PASS: netserver is running on VM") 
+    return True
+
+def vm_netperf_client(conn, host, testlen, testname, option=""):
+    """
+    Start netperf client to send traffic and process last few lines of 
+    each type stream ouput to determine pass or fail
+    
+      Example 1:  Netperf UDP_STRAM output 
+        root@TRAFFICGEN:~# netperf -H 99.0.0.3 -l 10 -t UDP_STREAM -- -m 64
+        ....omitted .....
+        212992           10.00     1938991             99.27
+    
+      Example 2 :  Netperf TCP_STRAM output 
+        root@TRAFFICGEN:~# netperf -H 99.0.0.3 -l 10 -t TCP_STREAM -- -m 64
+        .... omitted ....
+        131072  16384     64    10.00     610.03
+    """
+    conn.readResult()
+    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
+    conn.sendCmd(cmd)
+    output = conn.readResult().split("\n")
+   
+    if testname == "UDP_STREAM":
+        n, data_len = 0, 4
+        try:
+            data = output[-3].strip().split()
+        except IndexError as e:
+            print (f"netperf get incompleted data due to {e} and and {output} but will try one more time")
+        # try max of 3 times
+        while len(data) != data_len:
+            print (f"The {n} try {cmd} after failure")
+            conn.sendCmd(cmd)
+            output = conn.readResult().split("\n")
+            data = output[-3].strip().split()
+            if n >= 3:
+                break
+            n +=1
+                  
+    elif testname == "TCP_STREAM":
+        n, data_len =0, 5
+        # try 3 times if failed
+        try:
+            data = output[-2].strip().split()
+        except IndexError as e:
+            print (f"netperf get incompleted data due to {e} and and {output} but will try one more time")
+        while len(data) != data_len:
+            print (f"The {n} try {cmd} after failure")
+            conn.sendCmd(cmd)
+            output = conn.readResult().split("\n")
+            data = output[-3].strip().split()
+            if n >= 3:
+                break
+            n += 1
+    else:
+        print(f"FAIL: No expect netperf execution data collected {output}")
+        return False
+  
+    if len(data) == data_len:
+        for value in data:
+            #all value should be either fload or int
+            if type(float(value)) != float and type(int(value)) == int:
+                print(f"FAIL: Send netperf client failed with {data}")
+                return False    
+    else:
+        print(f"FAIL: Send netperf client failed with {output}")
+        return False
+  
+    print (f"PASS: send {cmd} succeed") 
+    return True
+
+def vm_netperf_client_fail(conn, host, testlen, testname, option=""):
+    """
+    To test netserver is not listening and expect netperf failure
+    
+      Example 1: 
+        root@TRAFFICGEN:~# netperf -H 99.0.0.3 -l 5 -t TCP_STREAM -- -m 64
+        stablish control: are you sure there is a netserver listening on 99.0.0.3 at port 12865?
+        establish_control could not establish the control connection from 0.0.0.0 port 0 address family AF_UNSPEC to 99.0.0.3 port 12865 address family AF_INET
+
+    """
+    conn.readResult()
+    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
+    conn.sendCmd(cmd)
+    output = conn.readResult().split("\n")
+    if "are you sure there is a netserver listening" in output[-3]:
+        print(f"PASS: {cmd} not established as netserver is not expected reachable")
+        return True  
+   
+    print (f"FAIL: netserver is expected not reachable but it's reached") 
+    return False
+
+def host_check_netperf(remote=False, hostname="",username="",password=""):
+    """
+    :Function to check if netperf is installed and pkill running porcess
+    :and prepare to restart it.
+    :returns boolean True or False
+    """
+    if remote:
+        connection = Ssh(hostname=hostname, username=username, passwrd=password)
+        connection.setup_ssh_connection()
+    else:
+        hostname="local host"
+        connection = Local()
+    result, _, _ = connection.execute_command("netperf -V")
+    
+    if "Netperf version" not in result:
+        print (f"FAILED: netperf is not installed on namespace {hostname}")
+        connection.tear_down
+        return False
+    print (f"PASS: verify netperf is installed on {hostname}")
+ 
+    _, _, err= connection.execute_command("pkill -9 netserver")
+    if err:
+        print (f"FAILED: faild to pkill -9 netserver")
+        connection.tear_down
+        return False
+    print (f"PASS: pkill -9 netserver and ready to restart netserver on {hostname}")
+    
+    connection.tear_down
+    return True

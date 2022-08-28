@@ -273,7 +273,7 @@ class PortConfig(object):
                                           f'an error {err}')
             print(f"PASS: {cmd}")
             return True
-
+        
         def tear_down(self):
             """ Close any open connections after use of class
 
@@ -281,3 +281,62 @@ class PortConfig(object):
             :rtype: None
             """
             self.connection.tear_down()
+            
+        def ipaddr_ipv4_del(self, interface, ip):
+            """
+            Assigns IP address 'ip' to 'interface'
+            :param interface: network interface name --> str e.g. "TAP0"
+            Assigns IP address 'ip' to 'interface'
+            :param interface: network interface name --> str e.g. "TAP0"
+            :param ip: ipv4 address --> str e.g. "1.1.1.1/24"
+            :return: True/False --> boolean
+            """
+            cmd = self.form_cmd(f" addr del {ip} dev {interface}")
+            output, return_code, _ = self.connection.execute_command(cmd)
+            if return_code:
+                print(f"FAIL: {cmd}")
+                raise ExecuteCMDException(f'Failed to execute command "{cmd}"')
+
+            print(f"PASS: {cmd}")
+            return True
+
+        def iplink_add_dev(self, name, type):
+            """ Add device of specified name and type
+            e.g. "ip link add dev TEP0 type dummy"
+            """
+            cmd = self.form_cmd(f" link add dev {name} type {type}")
+            output, return_code, _ = self.connection.execute_command(cmd)
+            if return_code:
+                print(f"FAIL: {cmd}")
+                raise ExecuteCMDException(f'Failed to execute command "{cmd}"')
+
+            print(f"PASS: {cmd}")
+            return True
+
+        def iproute_add(self, dst, nexthop_list, device_list, weight_list):
+            """ Add multiple routes for a destination
+                e.g. ip route add 40.1.1.2 nexthop via 50.1.1.2 dev TAP1 weight 1 nexthop via 60.1.1.2 dev TAP2 weight 1
+            """
+            cmd = " "
+            for (nexthop,device,weight) in zip(nexthop_list, device_list, weight_list):
+               cmd = cmd + f"nexthop via {nexthop} dev {device} weight {weight} "
+            cmd = self.form_cmd(f" route add {dst} {cmd}")
+            output, return_code, err = self.connection.execute_command(cmd)
+            if return_code:
+                raise ExecuteCMDException(f'FAIL:command "{cmd}" failed with '
+                                          f'an error {err}')
+            print(f"PASS: {cmd}")
+            return True
+
+        def iproute_del(self, dst):
+            """ Delete ip route
+                e.g. ip route del 40.1.1.2
+            """
+            cmd = self.form_cmd(f" route del {dst}")
+            output, return_code, err = self.connection.execute_command(cmd)
+            if return_code:
+                raise ExecuteCMDException(f'FAIL:command "{cmd}" failed with '
+                                          f'an error {err}')
+            print(f"PASS: {cmd}")
+            return True
+        
