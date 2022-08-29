@@ -1,4 +1,5 @@
 # Copyright (c) 2022 Intel Corporation.
+# SPDX-License-Identifier: Apache-2.0
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -82,12 +83,14 @@ class L2L3_Unpsupport_Tbl_Port_Match_Action(BaseTest):
             print(f"Scenario : {table['description']}")
             print(f"Adding {table['description']} rules")
             if table['name'] == "pipe.ipv4_host":
+                #add invalid match action
                 for match_action in table['match_action']:
                     if ovs_p4ctl.ovs_p4ctl_add_entry(table['switch'],table['name'], match_action):
                         self.result.addFailure(self, sys.exc_info())
                         self.fail(f"Failed: invalid entry {match_action} should not be added")
-                    print (f"EXPECTED failure to add Invalid match action {match_action}")
+                    print (f"PASS: expected failure to add Invalid match action {match_action}")
             elif table['name'] == "ingress.ipv4_host_dst":
+                #add valid match action
                 for match_action in table['match_action']:
                     if not ovs_p4ctl.ovs_p4ctl_add_entry(table['switch'],table['name'], match_action):
                         self.result.addFailure(self, sys.exc_info())
@@ -95,26 +98,25 @@ class L2L3_Unpsupport_Tbl_Port_Match_Action(BaseTest):
 
         print (f"Sending Traffic")
         # Verify support table, ports and match actions
-        for table in self.config_data['table'][1:2]:
-            for i in range(len(table['match_action'])):
-                print (f"Verifing match action {table['match_action'][i]}") 
-                pkt = simple_tcp_packet(ip_src = self.config_data['traffic']['ip_src'][0],
-                                          ip_dst=self.config_data['traffic']['ip_dst'][i])
-                send_packet(self, port_ids[self.config_data['traffic']['send_port'][i]],
-                                          pkt, count= self.config_data['traffic']['pkt_num'])
-                try:
-                    verify_packet(self, pkt, port_ids[self.config_data['traffic']['receive_port'][i]][1])
-                    print(f"PASS: Verification of packets passed, packet received as per rule {i+1}")
-                except Exception as err:
-                    self.result.addFailure(self, sys.exc_info())
-                    print(f"FAIL: Verification of packets sent failed with exception {err}")
-                    
+        for i in range(len(self.config_data['table'][1]['match_action'])):
+            print (f"Verifing match action {table['match_action'][i]}") 
+            pkt = simple_tcp_packet(ip_src = self.config_data['traffic']['ip_src'][0],
+                                        ip_dst=self.config_data['traffic']['ip_dst'][i])
+            send_packet(self, port_ids[self.config_data['traffic']['send_port'][i]],
+                                        pkt, count= self.config_data['traffic']['pkt_num'])
+            try:
+                verify_packet(self, pkt, port_ids[self.config_data['traffic']['receive_port'][i]][1])
+                print(f"PASS: Verification of packets passed, packet received as per rule {i+1}")
+            except Exception as err:
+                self.result.addFailure(self, sys.exc_info())
+                print(f"FAIL: Verification of packets sent failed with exception {err}")
+                
         self.dataplane.kill()
 
     def tearDown(self):
-
+    
         for table in self.config_data['table']:
-            if table['name'] == "ingress.ipv4_host_src":
+            if table['name'] == "ingress.ipv4_host_dst":
                 print(f"Deleting {table['description']} rules")
                 for del_action in table['del_action']:
                     ovs_p4ctl.ovs_p4ctl_del_entry(table['switch'], table['name'], del_action)
