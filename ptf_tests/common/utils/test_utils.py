@@ -609,8 +609,8 @@ def create_ipnetns_vm(ns_data, remote=False, hostname="",username="",password=""
     namespace = ns_data['name']
     veth_if = ns_data['veth_if']
     veth_peer =  ns_data['peer_name']
-    ip_add_cmd = ns_data['cmds'][0]
-    ip_link_set_cmd = ns_data['cmds'][1]
+    ip_add_cmd =f"ip addr add {ns_data['ip']} dev {ns_data['veth_if']}"
+    ip_link_set_cmd = f"ip link set dev {ns_data['veth_if']} up"
 
     if not gnmi_cli_utis.ip_netns_add(namespace,remote=remote,hostname=hostname, username=username, password=password):
         print (f"FAILED: Failed to configure namespace {namespace}")
@@ -709,35 +709,48 @@ def ipnetns_netperf_client(nsname, host, testlen, testname, option="", remote=Fa
     :Function to start netperf on linux name space
     :returns boolean True or False
     """
+    counter ={}
+    err_list, data = [],[]
+    max = 5
     cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
     output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
-    
+
     if testname == "UDP_STREAM":
-        n, data_len = 0, 4
+        cnt_name=['sckt_byte','msg_byte','elapsed','msg_ok','msg_erro','throput']
+        n, data_len = 1, 6
         try:
-            data = output.strip().split("\n")[-1].split()
+            data = output.strip().split("\n")[-2].split()
         except IndexError as e:
-             print (f"netperf get incompleted data due to {e} and {output} but will try one more time")
-        # try max of 3 times
+            err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            n += 1
+        # try max of 5 times
         while len(data) != data_len:
-            print (f"The {n} try {cmd} after failure")
             output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
-            data = output.strip().split("\n")[-1].split()
-            if n >= 3:
+            try:
+                data = output.strip().split("\n")[-2].split()
+            except IndexError as e:
+                err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            err_list.append(f"The {n} try failure: {output}")
+            if n >= max:
                 break
             n += 1       
     elif testname == "TCP_STREAM":
-        n, data_len =0, 5
+        cnt_name=['recv_sckt_byte','send_sckt_byte','sned_msg_byte','elapsed','throput']
+        n, data_len =1, 5
         try:
             data = output.strip().split("\n")[-1].split()
         except IndexError as e:
-             print (f"netperf get incompleted data due to {e} and {output} but will try one more time")
-        # try max of 3 times
+            err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            n += 1
+        # try max 5 times
         while len(data) != data_len:
-            print (f"The {n} try {cmd} after failure")
             output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
-            data = output.strip().split("\n")[-1].split()
-            if n >= 3:
+            try:
+                data = output.strip().split("\n")[-1].split()
+            except IndexError as e:
+                err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            err_list.append(f"The {n} try failure: {output}")
+            if n >= max:
                 break
             n += 1
     else:
@@ -745,17 +758,21 @@ def ipnetns_netperf_client(nsname, host, testlen, testname, option="", remote=Fa
         return False
   
     if len(data) == data_len:
-        for value in data:
-            #all value should be either fload or int
-            if type(float(value)) != float and type(int(value)) == int:
-                print(f"FAIL: Send netperf client failed with {data}")
-                return False    
+        for i in range(len(data)):
+            #all data  should be either fload or int
+            if type(float(data[i])) == float:
+                    counter[cnt_name[i]] = float(data[i])
+            elif type(int(data[i])) == int:
+                counter[cnt_name[i]] = int(data[i])
+            else:
+                print(f"FAIL: Send netperf client failed with {output}")
+                return False
     else:
-        print(f"FAIL: Send netperf client failed with {output}")
+        print(f"FAIL: Send netperf client had {n} failure with error list \n\n{err_list}")
         return False
-  
-    print (f"PASS: send ip netns exec {nsname} {cmd} succeed") 
-    return True
+    
+    print (f"PASS: send ip netns exec {nsname} {cmd} succeed with below output \n\n {output}") 
+    return counter
 
 def vm_check_netperf(conn, vmname):
     """
@@ -804,58 +821,74 @@ def vm_netperf_client(conn, host, testlen, testname, option=""):
         .... omitted ....
         131072  16384     64    10.00     610.03
     """
+    max = 5
+    err_list,data =[],[]
+    counter ={}
     conn.readResult()
     cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
     conn.sendCmd(cmd)
-    output = conn.readResult().split("\n")
-   
+    output = conn.readResult()
+    
     if testname == "UDP_STREAM":
-        n, data_len = 0, 4
+        cnt_name=['sckt_byte','msg_byte','elapsed','msg_ok','msg_erro','throput']
+        n, data_len = 1, 6
         try:
-            data = output[-3].strip().split()
+            data = output.split("\n")[-4].strip().split()
         except IndexError as e:
-            print (f"netperf get incompleted data due to {e} and and {output} but will try one more time")
-        # try max of 3 times
+            err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            n += 1
+        # try max 5 times if failed
         while len(data) != data_len:
-            print (f"The {n} try {cmd} after failure")
             conn.sendCmd(cmd)
-            output = conn.readResult().split("\n")
-            data = output[-3].strip().split()
-            if n >= 3:
+            output = conn.readResult()
+            try:
+                data = output.split("\n")[-4].strip().split()
+            except IndexError as e:
+                err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            err_list.append(f"The {n} try failure: {output}")
+            if n >= max:
                 break
-            n +=1
-                  
+            n +=1    
     elif testname == "TCP_STREAM":
-        n, data_len =0, 5
-        # try 3 times if failed
+        cnt_name=['recv_sckt_byte','send_sckt_byte','sned_msg_byte','elapsed','throput']
+        n, data_len =1, 5
+        # try max 5 times if failed
         try:
-            data = output[-2].strip().split()
+            data = output.split("\n")[-2].strip().split()
         except IndexError as e:
-            print (f"netperf get incompleted data due to {e} and and {output} but will try one more time")
+            err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            n += 1
         while len(data) != data_len:
-            print (f"The {n} try {cmd} after failure")
             conn.sendCmd(cmd)
-            output = conn.readResult().split("\n")
-            data = output[-3].strip().split()
-            if n >= 3:
+            output = conn.readResult()
+            try:
+                data = output.split("\n")[-2].strip().split()
+            except IndexError as e:
+                err_list.append(f"The {n} try error {e} and output \n\n{output}")
+            if n >= max:
                 break
+            err_list.append(f"The {n} try failure: {output}")
             n += 1
     else:
         print(f"FAIL: No expect netperf execution data collected {output}")
         return False
   
     if len(data) == data_len:
-        for value in data:
-            #all value should be either fload or int
-            if type(float(value)) != float and type(int(value)) == int:
-                print(f"FAIL: Send netperf client failed with {data}")
-                return False    
-    else:
-        print(f"FAIL: Send netperf client failed with {output}")
+        for i in range(len(data)):
+            #all data  should be either fload or int
+            if type(float(data[i])) == float:
+                 counter[cnt_name[i]] = float(data[i])
+            elif type(int(data[i])) == int:
+                counter[cnt_name[i]] = int(data[i])
+            else:
+                print(f"FAIL: Send netperf client failed with {output}")
+                return False
+    else:  
+        print(f"FAIL: Send netperf client had {n} failure with error list \n\n{err_list}")
         return False
-  
-    print (f"PASS: send {cmd} succeed") 
-    return True
+    
+    print (f"PASS: send {cmd} succeed with below output \n\n{output}\n") 
+    return counter
 
 def vm_netperf_client_fail(conn, host, testlen, testname, option=""):
     """
@@ -894,16 +927,16 @@ def host_check_netperf(remote=False, hostname="",username="",password=""):
     
     if "Netperf version" not in result:
         print (f"FAILED: netperf is not installed on namespace {hostname}")
-        connection.tear_down
+        connection.tear_down()
         return False
     print (f"PASS: verify netperf is installed on {hostname}")
  
     _, _, err= connection.execute_command("pkill -9 netserver")
     if err:
         print (f"FAILED: faild to pkill -9 netserver")
-        connection.tear_down
+        connection.tear_down()
         return False
     print (f"PASS: pkill -9 netserver and ready to restart netserver on {hostname}")
     
-    connection.tear_down
+    connection.tear_down()
     return True

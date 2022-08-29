@@ -172,10 +172,7 @@
       "name": "VM0",
       "veth_if": "veth_vm0",
       "peer_name": "veth_host_vm0",
-      "cmds": [
-        "ip addr add 99.0.0.3/24 dev veth_vm0",
-        "ifconfig veth_vm0 up"
-      ],
+      "ip":"99.0.0.3/24",
       "remote_ip": [
         "99.0.0.1",
         "99.0.0.2"
@@ -186,10 +183,7 @@
       "name": "VM1",
       "veth_if": "veth_vm1",
       "peer_name": "veth_host_vm1",
-      "cmds": [
-        "ip addr add 99.0.0.4/24 dev veth_vm1",
-        "ifconfig veth_vm1 up"
-      ],
+      "ip":"99.0.0.4/24",
       "remote_ip": [
         "99.0.0.1",
         "99.0.0.2"

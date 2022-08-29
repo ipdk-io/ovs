@@ -284,9 +284,8 @@ class LNT_ECMP_2VM_2Host_netperf(BaseTest):
             if not test_utils.vm_start_netserver(self.conn_obj_list[i]):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: failed to start netserver on VM{i}")
-                
+            
         print("prepare netserver on remote name sapce")
-        # linux name spaces are using same 
         if not test_utils.host_check_netperf(remote=True, hostname=self.config_data['client_hostname'], 
                 username=self.config_data['client_username'], 
                         password=self.config_data['client_password'] ):
@@ -312,7 +311,7 @@ class LNT_ECMP_2VM_2Host_netperf(BaseTest):
                                  username=self.config_data['client_username'], password=self.config_data['client_password'] ):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: failed to start netserver on {namespace['name']}")
-
+       
         print("\nSleep before sending netperf traffic")
         time.sleep(20)      
         #send netperf from local VM  
@@ -336,12 +335,10 @@ class LNT_ECMP_2VM_2Host_netperf(BaseTest):
                         testname, remote=True, option = self.config_data['netperf']['cmd_option'], 
                             hostname=self.config_data['client_hostname'], username=self.config_data['client_username'], 
                                                                                   password=self.config_data['client_password'] ):
-                        
                         self.result.addFailure(self, sys.exc_info())
                         self.fail(f"FAIL: failed to get netperf data on name space {namespace['name']}")
-                
+        
         #Verify if the traffic is load balanced
-        num = self.config_data['traffic']['number_pkts'][0]
         send_port_id= self.config_data['traffic']['send_port'][0]
         #Record port counter before sending traffic
         send_count_list_before = []
@@ -354,11 +351,18 @@ class LNT_ECMP_2VM_2Host_netperf(BaseTest):
             
         #Send netperf traffic across ecmp links from VM
         print("Send netperf traffic to verify load balancing")
-        if not test_utils.vm_netperf_client(self.conn_obj_list[0], self.config_data['vm'][0]['remote_ip'][1],
-                self.config_data['netperf']['testlen'], self.config_data['netperf']['testname'][0],
-                                                           option = self.config_data['netperf']['cmd_option']):
-                    self.result.addFailure(self, sys.exc_info())
-                    self.fail(f"FAIL: failed to get netperf data on VM0")
+        netperf_rslt = test_utils.vm_netperf_client(self.conn_obj_list[0], 
+                    self.config_data['vm'][0]['remote_ip'][1],
+                        self.config_data['netperf']['testlen'], 
+                            self.config_data['netperf']['testname'][0],
+                                 option = self.config_data['netperf']['cmd_option'])
+        
+        if not netperf_rslt:
+            self.result.addFailure(self, sys.exc_info())
+            self.fail(f"FAIL: failed to get netperf data on VM0")
+            
+        #calculate netperf packet
+        num =  netperf_rslt['send_sckt_byte']/netperf_rslt['sned_msg_byte']
         
         #Record port counter after sending traffic
         send_count_list_after = []
@@ -371,6 +375,7 @@ class LNT_ECMP_2VM_2Host_netperf(BaseTest):
         #check if icmp pkts are forwarded on both ecmp links
         counter_type = "out-unicast-pkts"
         stat_total = 0
+      
         for send_count_before,send_count_after in zip(send_count_list_before,send_count_list_after):
             stat = test_utils.compare_counter(send_count_after,send_count_before)
             if not stat[counter_type] > 0:

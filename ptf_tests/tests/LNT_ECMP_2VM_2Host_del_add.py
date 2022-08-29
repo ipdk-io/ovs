@@ -310,12 +310,12 @@ class LNT_ECMP_DEL_ADD_RULE(BaseTest):
 
             details = f"Execute ping from {self.config_data['port'][i]['ip'].split('/')[0]} on " + \
                       f"{self.config_data['vm'][i]['vm_name']} to " + \
-                      f"{self.config_data['net_namespace'][i]['ip']} on " + \
+                      f"{self.config_data['net_namespace'][i]['ip'].split('/')[0]} on " + \
                       f"{self.config_data['net_namespace'][i]['name']}"
 
             print (details)
-            time.sleep(20)
-            if not test_utils.vm_to_vm_ping_drop_test(self.conn_obj_list[i],self.config_data['net_namespace'][i]['ip']):
+            time.sleep(30)
+            if not test_utils.vm_to_vm_ping_drop_test(self.conn_obj_list[i],self.config_data['net_namespace'][i]['ip'].split("/")[0]):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: Ping expected to fail but succeed after deleting rule")
 
@@ -326,7 +326,7 @@ class LNT_ECMP_DEL_ADD_RULE(BaseTest):
 
             print (details)
             time.sleep(30)
-            if not test_utils.vm_to_vm_ping_test(self.conn_obj_list[i], self.config_data['net_namespace'][i]['ip']):
+            if not test_utils.vm_to_vm_ping_test(self.conn_obj_list[i], self.config_data['net_namespace'][i]['ip'].split("/")[0]):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: Ping test failed for VM after adding back rule")
 
@@ -335,7 +335,7 @@ class LNT_ECMP_DEL_ADD_RULE(BaseTest):
             conn.close()
 
     def tearDown(self):
-
+       
         print("\nUnconfiguration on local host")
         print (f"Delete p4ovs match action rules on local host")
         for table in self.config_data['table']:

@@ -361,7 +361,7 @@ class LNT_ECMP_2HotPlugVM_2Host_Netperf(BaseTest):
                 self.fail(f"FAIL: failed to netserver on {namespace['name']}")
                 
         print("\nSleep before sending netperf traffic")
-        time.sleep(20)
+        time.sleep(20) 
         #send netperf from local VM 
         for i in range(len(self.conn_obj_list)):
             for testname in self.config_data['netperf']['testname']:
@@ -374,7 +374,7 @@ class LNT_ECMP_2HotPlugVM_2Host_Netperf(BaseTest):
                         self.result.addFailure(self, sys.exc_info())
                         self.fail(f"FAIL: failed to get netperf data on VM{i}")
                     time.sleep(10)
-                        
+                     
         # send netperf from remote name space VM
         for namespace in self.config_data['net_namespace']:                      
             for testname in self.config_data['netperf']['testname']:
@@ -387,9 +387,8 @@ class LNT_ECMP_2HotPlugVM_2Host_Netperf(BaseTest):
                         
                         self.result.addFailure(self, sys.exc_info())
                         self.fail(f"FAIL: failed to get netperf on name space {namespace['name']}")
-          
+    
         #Verify if the traffic is load balanced
-        num = self.config_data['traffic']['number_pkts'][0]
         send_port_id= self.config_data['traffic']['send_port'][0]
         #Record port counter before sending traffic
         send_count_list_before = []
@@ -402,11 +401,12 @@ class LNT_ECMP_2HotPlugVM_2Host_Netperf(BaseTest):
             
         #Send ping traffic across ecmp links from VM
         print("Send netperf traffic to verify load balancing")
-        if not test_utils.vm_netperf_client(self.conn_obj_list[0], self.config_data['vm'][0]['remote_ip'][1],
+        netperf_rslt = test_utils.vm_netperf_client(self.conn_obj_list[0], self.config_data['vm'][0]['remote_ip'][1],
                 self.config_data['netperf']['testlen'], self.config_data['netperf']['testname'][0],
-                                                           option = self.config_data['netperf']['cmd_option']):
-                    self.result.addFailure(self, sys.exc_info())
-                    self.fail(f"FAIL: failed to start netserver on VM0")
+                                                           option = self.config_data['netperf']['cmd_option'])
+        if not netperf_rslt:
+            self.result.addFailure(self, sys.exc_info())
+            self.fail(f"FAIL: failed to start netserver on VM0")
         
         #Record port counter after sending traffic
         send_count_list_after = []
@@ -425,6 +425,10 @@ class LNT_ECMP_2HotPlugVM_2Host_Netperf(BaseTest):
                 print(f"FAIL: Packets are not forwarded on one of the ecmp links")
                 self.result.addFailure(self, sys.exc_info())
             stat_total = stat_total + stat[counter_type]
+            
+        #calculate netperf packet
+        num =  netperf_rslt['send_sckt_byte']/netperf_rslt['sned_msg_byte']
+        
         if stat_total >= num:
             print(f"PASS: Minimum {num} packets expected and {stat_total} received")
         else:

@@ -271,12 +271,12 @@ EXTRA_DIST = \
 	ptf_tests/tests/config_control_port_with_link.py \
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multi_port.py \
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multiple_times.py \
-    ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
+        ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_del_add.py \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_hotplug.py \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_netperf.py \
 	ptf_tests/tests/LNT_ECMP_2HotPlugVM_2Host_netperf.py \ 
-    ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
+        ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
 	ptf_tests/common/lib/tcpdump.py \
 	ptf_tests/common/utils/tcpdump_utils.py \
 	ptf_tests/tests/mtu_config_test_with_tap.py \
