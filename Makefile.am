@@ -196,6 +196,7 @@ EXTRA_DIST = \
 	ptf_tests/common/config/config_control_port_with_link.json \
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 	ptf_tests/common/config/LNT_Hot_Plug_Add_Remove.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_ping.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_del_add.json \
@@ -207,6 +208,10 @@ EXTRA_DIST = \
     ptf_tests/common/config/l2l3_unsupport_tbl_port_match_action.json \
     ptf_tests/common/config/l2l3_unsupport_tbl_port_proto_action.json \
 >>>>>>> c39bbc34e (l2l3_config_invalid_params)
+=======
+        ptf_tests/common/config/l2l3_unsupport_tbl_port_match_action.json \
+        ptf_tests/common/config/l2l3_unsupport_tbl_port_proto_action.json \
+>>>>>>> 154c0e9a3 (Update Makefile.am)
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.p4 \
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.conf \
 	ptf_tests/common/p4c_artifacts/l3_action_selector/l3_action_selector.p4 \
@@ -280,6 +285,7 @@ EXTRA_DIST = \
 	ptf_tests/tests/config_control_port_with_link.py \
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multi_port.py \
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multiple_times.py \
         ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
@@ -295,6 +301,10 @@ EXTRA_DIST = \
     ptf_tests/tests/l2l3_unsupport_tbl_port_match_action.py \
     ptf_tests/tests/l2l3_unsupport_tbl_port_proto_action.py \
 >>>>>>> c39bbc34e (l2l3_config_invalid_params)
+=======
+        ptf_tests/tests/l2l3_unsupport_tbl_port_match_action.py \
+        ptf_tests/tests/l2l3_unsupport_tbl_port_proto_action.py \
+>>>>>>> 154c0e9a3 (Update Makefile.am)
 	ptf_tests/common/lib/tcpdump.py \
 	ptf_tests/common/utils/tcpdump_utils.py \
 	ptf_tests/tests/mtu_config_test_with_tap.py \
