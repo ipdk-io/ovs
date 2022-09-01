@@ -661,6 +661,44 @@ previously configured CONFIG params.
     tdi-portin-id: Port ID for Pipeline in Input Direction
     tdi-portin-id: Port ID for Pipeline in Output Direction
 
+10) Get port statistics for VHOST, Physical link and non-control TAP ports::
+
+    $ gnmi-cli get PARAMS
+    $ Example for Physical link ports:
+    $ gnmi-cli get "device:physical-device,name:PORT0,counters" | grep "name\|uint_val" | grep -v "interface\|key\|config\|counters"
+    $ Example for vhost ports:
+    $ gnmi-cli get "device:virtual-device,name:net_vhost0,counters" | grep "name\|uint_val" | grep -v "interface\|key\|config\|counters"
+    $ Example for non-control TAP ports:
+    $ gnmi-cli get "device:virtual-device,name:TAP0,counters" | grep "name\|uint_val" | grep -v "interface\|key\|config\|counters"
+
+  .. note::
+
+    Port stats can be retrieved for the ports that are created through GNMI CLI.
+    These ports can be of type LINK/VHOST/TAP type. PORT0, net_vhost0, and TAP0
+    corresponds to the name used when creating the ports using GNMI CLI.
+    gnmi-cli by default outputs the data in yang model, so the output is formatted
+    using the grep command to display the port statistics.
+
+    Refer to section-11,``Get port statistics for control TAP ports`` to retrieve
+    port statistics for control TAP ports.
+
+    ``PARAMS``: These params are key:value pairs. Here physical-device or
+    virtual-device is a sub-node which holds multiple ports,... to Pass
+    the key name for whose value need to be fetched. Each get can take ONLY
+    one key, and fetches value for that previously configured KEY.
+
+11) Get port statistics for control TAP ports::
+
+    $ Example:
+    $ ovs-ofctl dump-ports <BRIDGE>
+
+  .. note::
+
+    ``gnmi-cli get`` counters command is not applicable for the TAP ports that are
+    added as control ports. But these control ports when added to OVS bridge
+    through the "ovs-vsctl add-port <BRIDGE> <TAP-PORT>" command, stats can be
+    read through the "ovs-ofctl dump-ports <BRIDGE>" command.
+
 Limitations/Note
 ----------------
 
