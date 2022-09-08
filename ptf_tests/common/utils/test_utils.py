@@ -232,7 +232,7 @@ def vm_to_vm_ping_test(conn, dst_ip, count="4"):
     else:
         print(f"FAIL: Ping Failed to destination {dst_ip} with {pkt_loss}% loss")
         return False
-    
+
 def vm_ping_less_than_100_loss(conn, dst_ip, count="4"):
     """
     Sometimes when expecting some ping packet loss, we can use this function

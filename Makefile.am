@@ -194,10 +194,14 @@ EXTRA_DIST = \
 	ptf_tests/common/config/lnt_2vm_vxlan_2nsvm_5min_ping.json \
 	ptf_tests/common/config/lnt_1hotplugvm_vxlan_1nsvm.json \
 	ptf_tests/common/config/config_control_port_with_link.json \
+<<<<<<< HEAD
 	ptf_tests/common/config/LNT_Hot_Plug_Add_Remove.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_ping.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_del_add.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_netperf.json \
+=======
+	ptf_tests/common/config/l3_dpdk_port_flapping_with_link_ports.json \
+>>>>>>> 336a1d29e (dpdk_port_flapping_with_link_ports)
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.p4 \
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.conf \
 	ptf_tests/common/p4c_artifacts/l3_action_selector/l3_action_selector.p4 \
@@ -269,6 +273,7 @@ EXTRA_DIST = \
 	ptf_tests/tests/lnt_2vm_vxlan_2nsvm_5min_ping.py \
 	ptf_tests/tests/lnt_1hotplugvm_vxlan_1nsvm.py \
 	ptf_tests/tests/config_control_port_with_link.py \
+<<<<<<< HEAD
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multi_port.py \
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multiple_times.py \
         ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
@@ -277,6 +282,9 @@ EXTRA_DIST = \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_netperf.py \
 	ptf_tests/tests/LNT_ECMP_2HotPlugVM_2Host_netperf.py \ 
         ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
+=======
+	ptf_tests/tests/l3_dpdk_port_flapping_with_link_ports.py \
+>>>>>>> 336a1d29e (dpdk_port_flapping_with_link_ports)
 	ptf_tests/common/lib/tcpdump.py \
 	ptf_tests/common/utils/tcpdump_utils.py \
 	ptf_tests/tests/mtu_config_test_with_tap.py \

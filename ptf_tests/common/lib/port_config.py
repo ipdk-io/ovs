@@ -165,11 +165,63 @@ class PortConfig(object):
 
             print(f"PASS: {cmd}")
             return True
-           
+
+        def ipaddr_ipv4_del(self, interface, ip):
+            """
+            Assigns IP address 'ip' to 'interface'
+            :param interface: network interface name --> str e.g. "TAP0"
+            Assigns IP address 'ip' to 'interface'
+            :param interface: network interface name --> str e.g. "TAP0"
+            :param ip: ipv4 address --> str e.g. "1.1.1.1/24"
+            :return: True/False --> boolean
+            """
+            cmd = self.form_cmd(f" addr del {ip} dev {interface}")
+            output, return_code, _ = self.connection.execute_command(cmd)
+            if return_code:
+                print(f"FAIL: {cmd}")
+                raise ExecuteCMDException(f'Failed to execute command "{cmd}"')
+
+            print(f"PASS: {cmd}")
+            return True
+
+
+        def ip_link_set_mac(self, interface, mac):
+            """
+            Assigns Mac address 'mac' to 'interface'
+            :param interface: network interface name --> str e.g. "TAP0"
+            :param mac: mac address --> str e.g. "00:e8:ca:11:bb:01"
+            :return: True/False --> boolean
+            """
+            cmd = self.form_cmd(f" link set dev {interface} address {mac}")
+            output, return_code, _ = self.connection.execute_command(cmd)
+            if return_code:
+                print(f"FAIL: {cmd}")
+                raise ExecuteCMDException(f'Failed to execute command "{cmd}"')
+
+            print(f"PASS: {cmd}")
+            return True
+
+        def ip_neigh_add(self, interface, ip, mac):
+            """
+            Assigns Mac address 'mac' to 'interface'
+            :param interface: network interface name --> str e.g. "phy_interface"
+            :param mac: mac address --> str e.g. "00:e8:ca:11:bb:01"
+            :return: True/False --> boolean
+            """
+            cmd = self.form_cmd(f" neigh add dev {interface} {ip} lladdr {mac}")
+            output, return_code, _ = self.connection.execute_command(cmd)
+            if return_code:
+                print(f"FAIL: {cmd}")
+                raise ExecuteCMDException(f'Failed to execute command "{cmd}"')
+
+            print(f"PASS: {cmd}")
+            return True
+
+
 
         def iplink_add_vlan_port(self, id, name, netdev_port):
-            """ Method to add vlan port to given netdev port
-
+            """ 
+            Method to add vlan port to given netdev port
             :param id: vlan id
             :type id: integer e.g. 1
             :param name: name of vlan port to add
