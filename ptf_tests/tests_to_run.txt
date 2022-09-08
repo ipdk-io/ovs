@@ -45,6 +45,7 @@ lnt_1hotplugvm_vxlan_1nsvm:config_json='lnt_1hotplugvm_vxlan_1nsvm.json';vm_loca
 lnt_2hotplugvm_vxlan_2nsvm:config_json='lnt_2hotplugvm_vxlan_2nsvm.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';remote_port='PORT1';client_cred='CLIENT'
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 LNT_ECMP_2VM_2Host_ping:config_json='LNT_ECMP_2VM_2Host_ping.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
 LNT_ECMP_2VM_2Host_hotplug:config_json='LNT_ECMP_2VM_2Host_ping.json';vm_location_list='VM1,VM2';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
 LNT_ECMP_2VM_2Host_del_add:config_json='LNT_ECMP_2VM_2Host_del_add.json';vm_location_list='VM1';pci_bdf='BDF1,BDF2';client_cred='CLIENT';remote_port='PORT1,PORT2'
@@ -58,3 +59,10 @@ l3_dpdk_port_flapping_with_link_ports:config_json='l3_dpdk_port_flapping_with_li
 l2l3_unsupport_tbl_port_match_action:config_json='l2l3_unsupport_tbl_port_match_action.json'
 l2l3_unsupport_tbl_port_proto_action:config_json='l2l3_unsupport_tbl_port_proto_action.json'
 >>>>>>> c39bbc34e (l2l3_config_invalid_params)
+=======
+dpdk_l3em_indirect_counter:config_json='dpdk_l3em_indirect_counter_pna.json';vm_location_list='VM1,VM2'
+dpdk_l3em_indirect_counter:config_json='dpdk_l3em_indirect_counter_psa.json';vm_location_list='VM1,VM2'
+dpdk_l3em_indirect_counter_reset:config_json='dpdk_l3em_indirect_counter_pna.json';vm_location_list='VM1,VM2'
+dpdk_l3em_indirect_counter_reset:config_json='dpdk_l3em_indirect_counter_psa.json';vm_location_list='VM1,VM2'
+dpdk_l3em_indirect_counter_help:config_json='dpdk_l3em_indirect_counter_help.json'
+>>>>>>> 1458a68ef (IPDK indirect counter test case automation)

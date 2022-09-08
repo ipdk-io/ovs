@@ -225,7 +225,7 @@ def vm_to_vm_ping_test(conn, dst_ip, count="4"):
         match = re.search('(\d*)% packet loss', result)
         if match:
             pkt_loss = int(match.group(1))
-
+  
     if f"{count} received, 0% packet loss" in result:
         print(f"PASS: Ping successful to destination {dst_ip}")
         return True
@@ -683,6 +683,7 @@ def ip_ntns_exec_ping_test(nsname, dst_ip, count="4", remote=False, hostname="",
     else:
         print(f"FAIL: Ping Failed to destination {dst_ip} with {pkt_loss}% loss")
         return False
+<<<<<<< HEAD
     
 def ipnetns_eth_offload(nsname, interface, remote=False, hostname="",username="",password=""):
     """
@@ -957,3 +958,20 @@ def host_check_netperf(remote=False, hostname="",username="",password=""):
     
     connection.tear_down()
     return True
+=======
+
+def get_ovs_p4ctl_help(option):
+    """
+    :Function to get output of command "ovs-p4ctl --help"
+    :returns output or False
+    """
+    connection = Local()
+    cmd =f"ovs-p4ctl {option}"
+    output, _, _ = connection.execute_command(cmd)
+    connection.tear_down
+    if output:
+        print (f"PASS: The command \"{cmd}\" return below message \n {output}")
+        return output 
+    else:
+        return False
+>>>>>>> 1458a68ef (IPDK indirect counter test case automation)
