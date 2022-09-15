@@ -71,7 +71,6 @@
 #include "lib/vswitch-idl.h"    // generated
 #include "xenserver.h"
 #include "vlan-bitmap.h"
-#endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
 
