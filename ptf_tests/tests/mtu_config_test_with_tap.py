@@ -103,23 +103,33 @@ class TapPort_MTU_Config(BaseTest):
         print(f"sending packet from " + port_list[0] + " of size " + pktsize1 +"  i.e. greater than assigned MTU of " + assigned_mtu )
         tcpdump_start_pcap(interface=port_list[1], src_host=ip_src, pkt_count=1)
         pkt = simple_tcp_packet(eth_src=src_mac,eth_dst=dst_mac,ip_src=ip_src,ip_dst=ip_dst1,pktlen=int(pktsize1))
-        send_packet(self, port_ids[self.config_data['traffic']['send_port'][0]], pkt)
-        time.sleep(1)
         try:
-            verify_packet(self, pkt, port_id=port_ids[1][1], timeout=None)
+           send_packet(self, port_ids[self.config_data['traffic']['send_port'][0]][1], pkt)
         except Exception as err:
-            outpcap = tcpdump_get_pcap(port_list[1])
-            mtudiffstr = "truncated-ip " + str(mtudiff) + " bytes missing!"
-            result =  tcdump_match_str(outpcap, mtudiffstr)
-            if result == True :
-                print(f"PASS: Assertion verified as per difference in MTU and packet size")
+           errstr = "Message too long"
+           result = tcdump_match_str(str(err), errstr)
+           if result:
+               print(f"PASS: Assertion verified as per difference in MTU and packet size")
+           else:
+               self.result.addFailure(self, sys.exc_info())
+               self.fail(f"FAIL: Assertion not verified as per difference in MTU and packet size")
+        else:
+            try:
+                time.sleep(1)
+                verify_packet(self, pkt, port_id=port_ids[1][1], timeout=None)
+            except Exception as err:
+                outpcap = tcpdump_get_pcap(port_list[1])
+                mtudiffstr = "truncated-ip " + str(mtudiff) + " bytes missing!"
+                result =  tcdump_match_str(outpcap, mtudiffstr)
+                if result == True :
+                    print(f"PASS: Assertion verified as per difference in MTU and packet size")
+                else:
+                    self.result.addFailure(self, sys.exc_info())
+                    self.fail(f"FAIL: Assertion not verified as per difference in MTU and packet size")
             else:
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: Assertion not verified as per difference in MTU and packet size")
-        else:
-            self.result.addFailure(self, sys.exc_info())
-            self.fail(f"FAIL: Assertion not verified as per difference in MTU and packet size")
-        tcpdump_tear_down()  
+            tcpdump_tear_down()
 
         pkt = simple_tcp_packet(eth_src=src_mac,eth_dst=dst_mac,ip_src=ip_src,ip_dst=ip_dst2,pktlen=int(pktsize1))
         print("sending packet from " + port_list[1] + " of size " + pktsize1  )
