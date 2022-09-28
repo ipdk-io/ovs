@@ -336,7 +336,7 @@ sai_object_type_t sai_object_type_query(_In_ sai_object_id_t sai_object_id) {
     case SWITCH_HANDLE_TYPE_PRIORITY_GROUP:
       object_type = SAI_OBJECT_TYPE_INGRESS_PRIORITY_GROUP;
       break;
-    case SWITCH_HANDLE_TYPE_ECMP_MEMBER:
+    case SWITCH_HANDLE_TYPE_NHOP_MEMBER:
       object_type = SAI_OBJECT_TYPE_NEXT_HOP_GROUP_MEMBER;
       break;
     case SWITCH_HANDLE_TYPE_HOSTIF_REASON_CODE:
@@ -396,7 +396,7 @@ sai_object_type_t sai_object_type_query(_In_ sai_object_id_t sai_object_id) {
     case SWITCH_HANDLE_TYPE_HASH:
       object_type = SAI_OBJECT_TYPE_HASH;
       break;
-    case SWITCH_HANDLE_TYPE_ECMP_GROUP:
+    case SWITCH_HANDLE_TYPE_NHOP_GROUP:
       object_type = SAI_OBJECT_TYPE_NEXT_HOP_GROUP;
       break;
     case SWITCH_HANDLE_TYPE_BD:

@@ -71,10 +71,10 @@ static char *switch_table_id_to_string(switch_table_id_t table_id) {
     /* Nexthop */
     case SWITCH_TABLE_NHOP:
       return "nexthop";
-    case SWITCH_TABLE_ECMP_GROUP:
-      return "ecmp group";
-    case SWITCH_TABLE_ECMP_SELECT:
-      return "ecmp select";
+    case SWITCH_TABLE_NHOP_GROUP:
+      return "nhop group";
+    case SWITCH_TABLE_NHOP_MEMBER_SELECT:
+      return "nhop member select";
 
     /* Rewrite */
     case SWITCH_TABLE_REWRITE:
@@ -498,8 +498,8 @@ switch_status_t switch_table_default_sizes_get(switch_size_t *table_sizes) {
         table_sizes[index] = NEIGHBOR_MOD_TABLE_SIZE;
         break;
 
-      case SWITCH_TABLE_ECMP_SELECT:
-        table_sizes[index] = ECMP_HASH_TABLE_SIZE;
+      case SWITCH_TABLE_NHOP_MEMBER_SELECT:
+        table_sizes[index] = NHOP_MEMBER_HASH_TABLE_SIZE;
         break;
 #if 0
       case SWITCH_TABLE_TUNNEL_REWRITE:

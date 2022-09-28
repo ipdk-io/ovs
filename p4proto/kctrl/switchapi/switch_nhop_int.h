@@ -46,20 +46,20 @@ extern "C" {
   switch_handle_create(                    \
       _device, SWITCH_HANDLE_TYPE_NHOP, sizeof(switch_nhop_info_t))
 
-#define switch_ecmp_group_handle_create(_device, _count) \
+#define switch_nhop_group_handle_create(_device, _count) \
   switch_handle_create(                    \
-      _device, SWITCH_HANDLE_TYPE_ECMP_GROUP, sizeof(switch_ecmp_info_t))
+      _device, SWITCH_HANDLE_TYPE_NHOP_GROUP, sizeof(switch_nhop_group_info_t))
 
-#define switch_ecmp_group_handle_delete(_device, _count) \
+#define switch_nhop_group_handle_delete(_device, _count) \
   switch_handle_delete(                    \
-      _device, SWITCH_HANDLE_TYPE_ECMP_GROUP, _handle)
+      _device, SWITCH_HANDLE_TYPE_NHOP_GROUP, _handle)
 
 #define switch_nhop_handle_delete(_device, _handle, _count) \
   switch_handle_delete(_device, SWITCH_HANDLE_TYPE_NHOP, _handle)
 
-#define switch_ecmp_handle_delete_contiguous(_device, _handle, count) \
+#define switch_nhop_group_handle_delete_contiguous(_device, _handle, count) \
   switch_handle_delete_contiguous(                                    \
-      _device, SWITCH_HANDLE_TYPE_NHOP, _handle, count)
+      _device, SWITCH_HANDLE_TYPE_NHOP_GROUP, _handle, count)
 
 #define switch_nhop_get(_device, _handle, _info)                    \
   ({                                                                \
@@ -69,36 +69,36 @@ extern "C" {
         _device, SWITCH_HANDLE_TYPE_NHOP, _handle, (void **)_info); \
   })
 
-#define switch_ecmp_member_handle_create(_device) \
+#define switch_nhop_member_handle_create(_device) \
   switch_handle_create(                           \
-      _device, SWITCH_HANDLE_TYPE_ECMP_MEMBER, sizeof(switch_ecmp_member_t))
+      _device, SWITCH_HANDLE_TYPE_NHOP_MEMBER, sizeof(switch_nhop_member_t))
 
-#define switch_ecmp_member_handle_delete(_device, _handle) \
-  switch_handle_delete(_device, SWITCH_HANDLE_TYPE_ECMP_MEMBER, _handle)
+#define switch_nhop_member_handle_delete(_device, _handle) \
+  switch_handle_delete(_device, SWITCH_HANDLE_TYPE_NHOP_MEMBER, _handle)
 
-#define switch_ecmp_member_get(_device, _handle, _info)                    \
+#define switch_nhop_member_get(_device, _handle, _info)                    \
   ({                                                                       \
-    switch_ecmp_member_t *_tmp_ecmp_member_info = NULL;                    \
-    (void)(_tmp_ecmp_member_info == *_info);                               \
+    switch_nhop_member_t *_tmp_nhop_member_info = NULL;                    \
+    (void)(_tmp_nhop_member_info == *_info);                               \
     switch_handle_get(                                                     \
-        _device, SWITCH_HANDLE_TYPE_ECMP_MEMBER, _handle, (void **)_info); \
+        _device, SWITCH_HANDLE_TYPE_NHOP_MEMBER, _handle, (void **)_info); \
   })
 
-#define switch_ecmp_group_get(_device, _handle, _info)                    \
+#define switch_nhop_group_get(_device, _handle, _info)                    \
   ({                                                                \
-    switch_ecmp_info_t *_tmp_ecmp_info = NULL;                      \
-    (void)(_tmp_ecmp_info == *_info);                               \
+    switch_nhop_info_t *_tmp_nhop_info = NULL;                      \
+    (void)(_tmp_nhop_info == *_info);                               \
     switch_handle_get(                                              \
-        _device, SWITCH_HANDLE_TYPE_ECMP_GROUP, _handle, (void **)_info); \
+        _device, SWITCH_HANDLE_TYPE_NHOP_GROUP, _handle, (void **)_info); \
   })
 
-#define switch_ecmp_handle_delete(_device, _handle) \
-  switch_handle_delete(_device, SWITCH_HANDLE_TYPE_ECMP_GROUP, _handle)
+#define switch_nhop_group_handle_delete(_device, _handle) \
+  switch_handle_delete(_device, SWITCH_HANDLE_TYPE_NHOP_GROUP, _handle)
 
-#define SWITCH_ECMP_MEMBER_INIT(_m)                         \
+#define SWITCH_NHOP_MEMBER_INIT(_m)                         \
   do {                                                      \
     if (_m) {                                               \
-      SWITCH_MEMSET(_m, 0x0, sizeof(switch_ecmp_member_t)); \
+      SWITCH_MEMSET(_m, 0x0, sizeof(switch_nhop_member_t)); \
       _m->nhop_handle = SWITCH_API_INVALID_HANDLE;          \
     }                                                       \
   } while (0);
@@ -204,11 +204,11 @@ typedef struct switch_nhop_info_s {
   /** nhop type is single path */
   switch_spath_info_t spath;
   
-  /** number of ecmp references */
-  switch_uint32_t ecmp_ref_count;
+  /** number of nhop group references */
+  switch_uint32_t nhop_group_ref_count;
 
-  /** List of ecmp-members(handles) referring this nexthop */
-  Pvoid_t PJLarr_ecmp_members;
+  /** List of nhop-members(handles) referring this nexthop */
+  Pvoid_t PJLarr_nhop_members;
 
   /** nexthop reference count */
   switch_handle_t nhop_ref_count;
@@ -234,9 +234,9 @@ typedef struct switch_nhop_context_s {
   (nhop->id_type == SWITCH_NHOP_ID_TYPE_ECMP || \
    nhop->id_type == SWITCH_NHOP_ID_TYPE_WCMP)
 
-#define SWITCH_NHOP_NUM_ECMP_MEMBER_REF(nhop) nhop->ecmp_ref_count
+#define SWITCH_NHOP_NUM_NHOP_MEMBER_REF(nhop) nhop->nhop_group_ref_count
 
-#define SWITCH_NHOP_ECMP_MEMBER_REF_LIST(nhop) nhop->PJLarr_ecmp_members
+#define SWITCH_NHOP_GROUP_MEMBER_REF_LIST(nhop) nhop->PJLarr_nhop_members
 
 #define SWITCH_NHOP_TYPE(_nhop_info) _nhop_info->spath.api_nhop_info.nhop_type
 
@@ -248,39 +248,25 @@ switch_status_t switch_nhop_default_entries_add(switch_device_t device);
 
 switch_status_t switch_nhop_default_entries_delete(switch_device_t device);
 
-switch_status_t switch_ecmp_member_activate(switch_device_t device,
-                                            switch_handle_t ecmp_handle,
-                                            switch_uint16_t num_nhops,
-                                            switch_handle_t *nhop_handles,
-                                            bool activate);
-
-switch_status_t switch_nhop_ecmp_members_deactivate(
-    switch_device_t device, switch_nhop_info_t *nhop_info);
-
-switch_status_t switch_nhop_update(switch_device_t device,
-                                   switch_handle_t nhop_handle,
-                                   switch_ifindex_t ifindex,
-                                   switch_port_lag_index_t port_lag_index,
-                                   switch_nhop_pd_action_t pd_action);
-
-switch_status_t switch_nhop_ecmp_type_get(switch_device_t device,
-                                          switch_handle_t ecmp_handle,
-                                          bool *ecmp_type);
-
 /**
- * Adds created ecmp member to the list of members
- * maintained by nhop and increases ecmp ref count by 1
+ * Adds created nhop member to the list of members
+ * maintained by nhop and increases ref count by 1
  */
-switch_status_t switch_nhop_ecmp_member_list_add(
+switch_status_t switch_nhop_group_member_list_add(
     switch_device_t device,
     switch_nhop_info_t *nhop_info,
-    switch_handle_t ecmp_mem_handle);
+    switch_handle_t nhop_mem_handle);
 
-switch_status_t switch_nhop_ecmp_member_list_remove(
+switch_status_t switch_nhop_group_member_list_remove(
     switch_device_t device,
     switch_nhop_info_t *nhop_info,
-    switch_handle_t ecmp_mem_handle);
+    switch_handle_t nhop_mem_handle);
 
+switch_status_t switch_nhop_member_get_from_nhop(
+    const switch_device_t device,
+    const switch_handle_t nhop_group_handle,
+    const switch_handle_t nhop_handle,
+    switch_nhop_member_t **nhop_member);
 
 #ifdef __cplusplus
 }

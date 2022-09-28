@@ -39,6 +39,9 @@ typedef struct switch_api_device_info_s {
   /** vlan handle */
   switch_handle_t vlan_handle;
 
+  /** vlan handle */
+  switch_handle_t group_handle;
+
   /** switch mac address */
   switch_mac_addr_t mac;
 
@@ -51,20 +54,8 @@ typedef struct switch_api_device_info_s {
   /** maximum lag members supported */
   switch_uint16_t max_lag_members;
 
-  /** maximum ecmp groups supported */
-  switch_uint16_t max_ecmp_groups;
-
-  /** maximum ecmp members supported */
-  switch_uint16_t max_ecmp_members;
-
   /** lag hashing flags */
   switch_uint32_t lag_hash_flags;
-
-  /** ecmp hashing flags */
-  switch_uint32_t ecmp_hash_flags;
-
-  /** default logging level */
-//  switch_log_level_t default_log_level;
 
   /** install learnt dmacs */
   bool install_dmac;
@@ -113,6 +104,9 @@ switch_status_t switch_api_device_remove(switch_device_t device);
 
 switch_status_t switch_api_device_default_rmac_handle_get(
     switch_device_t device, switch_handle_t *rmac_handle);
+
+switch_status_t switch_api_default_nhop_group_get(
+    switch_device_t device, switch_handle_t *nhop_group_handle);
 
 switch_status_t switch_api_device_tunnel_dmac_get(
     switch_device_t device, switch_mac_addr_t *mac_addr);

@@ -59,8 +59,8 @@ typedef enum switch_table_id_ {
 
   /* Nexthop */
   SWITCH_TABLE_NHOP = 81,
-  SWITCH_TABLE_ECMP_GROUP = 82,
-  SWITCH_TABLE_ECMP_SELECT = 83,
+  SWITCH_TABLE_NHOP_GROUP = 82,
+  SWITCH_TABLE_NHOP_MEMBER_SELECT = 83,
 
   /* Rewrite */
   SWITCH_TABLE_REWRITE = 101,

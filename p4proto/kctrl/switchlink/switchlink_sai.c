@@ -462,8 +462,22 @@ int switchlink_nexthop_create(switchlink_db_nexthop_info_t *nexthop_info) {
   }
   attr_list[2].id = SAI_NEXT_HOP_ATTR_ROUTER_INTERFACE_ID;
   attr_list[2].value.oid = nexthop_info->intf_h;
-  status =
-      nhop_api->create_next_hop(&(nexthop_info->nhop_h), 0, 3, attr_list);
+  status = nhop_api->create_next_hop(&(nexthop_info->nhop_h), 0, 3, attr_list);
+  if (status != SAI_STATUS_SUCCESS) {
+    VLOG_ERR("Unable to create nexthop");
+    return -1;
+  }
+
+  memset(attr_list, 0x0, sizeof(attr_list));
+  attr_list[0].id = SAI_NEXT_HOP_GROUP_MEMBER_ATTR_NEXT_HOP_ID;
+  attr_list[0].value.oid = nexthop_info->nhop_h;
+  status = nhop_group_api->create_next_hop_group_member(
+           &(nexthop_info->nhop_member_h), 0, 1, attr_list);
+  if (status != SAI_STATUS_SUCCESS) {
+      VLOG_ERR("Unable to add member to nexthop");
+      return -1;
+  }
+
   return ((status == SAI_STATUS_SUCCESS) ? 0 : -1);
 }
 
@@ -700,11 +714,9 @@ int switchlink_ecmp_create(switchlink_db_ecmp_info_t *ecmp_info) {
 
 int switchlink_ecmp_delete(switchlink_db_ecmp_info_t *ecmp_info) {
   sai_status_t status = SAI_STATUS_SUCCESS;
-  uint8_t index = 0;
-  for (index = 0; index < ecmp_info->num_nhops; index++) {
-    status = nhop_group_api->remove_next_hop_group_member(
-        ecmp_info->nhop_member_handles[index]);
-  }
+  /* hile deleting group, we oop through list of members and delete
+   * member entries as well
+   * */
   status = nhop_group_api->remove_next_hop_group(ecmp_info->ecmp_h);
   return ((status == SAI_STATUS_SUCCESS) ? 0 : -1);
 }

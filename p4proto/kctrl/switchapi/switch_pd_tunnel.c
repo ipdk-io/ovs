@@ -60,6 +60,12 @@ switch_status_t switch_pd_tunnel_entry(
 
     VLOG_DBG("%s", __func__);
 
+    status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
+    if (status != TDI_SUCCESS) {
+        VLOG_ERR("Failed to get tdi info handle, error: %d", status);
+        goto dealloc_resources;
+    }
+
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
@@ -81,12 +87,6 @@ switch_status_t switch_pd_tunnel_entry(
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        goto dealloc_resources;
-    }
-
-    status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Failed to get tdi info handle, error: %d", status);
         goto dealloc_resources;
     }
 
@@ -276,6 +276,12 @@ switch_status_t switch_pd_tunnel_term_entry(
 
     VLOG_DBG("%s", __func__);
 
+    status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
+    if (status != TDI_SUCCESS) {
+        VLOG_ERR("Failed to get tdi info handle, error: %d", status);
+        goto dealloc_resources;
+    }
+
     status = tdi_flags_create(0, &flags_hdl);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create flags handle, error: %d", status);
@@ -297,12 +303,6 @@ switch_status_t switch_pd_tunnel_term_entry(
     status = tdi_session_create(dev_hdl, &session);
     if (status != TDI_SUCCESS) {
         VLOG_ERR("Failed to create tdi session, error: %d", status);
-        goto dealloc_resources;
-    }
-
-    status = tdi_info_get(dev_id, PROGRAM_NAME, &info_hdl);
-    if (status != TDI_SUCCESS) {
-        VLOG_ERR("Failed to get tdi info handle, error: %d", status);
         goto dealloc_resources;
     }
 

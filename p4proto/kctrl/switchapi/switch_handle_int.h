@@ -163,8 +163,8 @@ switch_status_t switch_api_handle_count_get(switch_device_t device,
   SWITCH_HANDLE_VALID(handle, SWITCH_HANDLE_TYPE_NHOP)
 
 //#define SWITCH_ECMP_HANDLE(handle) SWITCH_NHOP_HANDLE(handle)
-#define SWITCH_ECMP_HANDLE(handle) \
-  SWITCH_HANDLE_VALID(handle, SWITCH_HANDLE_TYPE_ECMP_GROUP)
+#define SWITCH_NHOP_GROUP_HANDLE(handle) \
+  SWITCH_HANDLE_VALID(handle, SWITCH_HANDLE_TYPE_NHOP_GROUP)
 
 #define SWITCH_WCMP_HANDLE(handle) SWITCH_NHOP_HANDLE(handle)
 
@@ -274,8 +274,8 @@ switch_status_t switch_api_handle_count_get(switch_device_t device,
 #define SWITCH_RANGE_HANDLE(handle) \
   SWITCH_HANDLE_VALID(handle, SWITCH_HANDLE_TYPE_RANGE)
 
-#define SWITCH_ECMP_MEMBER_HANDLE(_handle) \
-  SWITCH_HANDLE_VALID(_handle, SWITCH_HANDLE_TYPE_ECMP_MEMBER)
+#define SWITCH_NHOP_MEMBER_HANDLE(_handle) \
+  SWITCH_HANDLE_VALID(_handle, SWITCH_HANDLE_TYPE_NHOP_MEMBER)
 
 #define SWITCH_LABEL_HANDLE(_handle) \
   SWITCH_HANDLE_VALID(_handle, SWITCH_HANDLE_TYPE_LABEL)

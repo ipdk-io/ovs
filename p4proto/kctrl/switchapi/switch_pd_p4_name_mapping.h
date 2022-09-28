@@ -159,6 +159,7 @@ extern "C" {
         "linux_networking_control.set_nexthop_id"
 
 #define LNW_ECMP_HASH_SIZE 65536
+#define LNW_MAX_MEMBERS 512
 
 /* IPV4_TABLE */
 #define LNW_IPV4_TABLE \
@@ -177,6 +178,26 @@ extern "C" {
 #define LNW_ACTION_ECMP_HASH_ACTION_PARAM_ECMP_GROUP_ID \
         "ecmp_group_id"
 
+/* AS_ECMP_TABLE */
+#define LNW_AS_ECMP_TABLE \
+        "linux_networking_control.as_ecmp"
+
+#define LNW_AS_ECMP_SELECTOR_TABLE \
+        "linux_networking_control.as_ecmp_sel"
+
+#define LNW_SELECTOR_GROUP_ID \
+        "$SELECTOR_GROUP_ID"
+
+#define LNW_SELECTOR_MEMBER_ID \
+        "$ACTION_MEMBER_ID"
+
+#define LNW_ACTION_MEMBER_STATUS \
+        "$ACTION_MEMBER_STATUS"
+
+#define LNW_ACTION_MAX_GROUP_SIZE \
+        "$MAX_GROUP_SIZE"
+#define LNW_SELECTOR_ACTION_ID \
+        0
 #ifdef __cplusplus
 }
 #endif

@@ -35,7 +35,7 @@ extern "C" {
 typedef enum switch_pv4_table_action_s
 {
   SWITCH_ACTION_NHOP = 0,
-  SWITCH_ACTION_ECMP = 1,
+  SWITCH_ACTION_NHOP_GROUP = 1,
   SWITCH_ACTION_NONE = 2
 }switch_ipv4_table_action_t;
 
@@ -82,14 +82,18 @@ switch_status_t switch_pd_rif_mod_entry(
 switch_status_t switch_pd_ipv4_table_entry (switch_device_t device,
     const switch_api_route_entry_t *api_route_entry,
     bool entry_add, switch_ipv4_table_action_t action);
-
-switch_status_t switch_pd_ecmp_hash_table_entry(switch_device_t device,
-    const switch_ecmp_info_t *ecmp_info, bool entry_add);
-
 switch_status_t switch_routing_table_entry (
         switch_device_t device,
         const switch_pd_routing_info_t *api_routing_info,
         bool entry_type);
+
+switch_status_t switch_pd_handle_member(switch_device_t device,
+    const switch_nhop_member_t *nhop_member_pd_info,
+    bool entry_add);
+
+switch_status_t switch_pd_handle_group(switch_device_t device,
+    switch_nhop_group_info_t *nhop_group_pd_info,
+    bool entry_add);
 
 #ifdef  __cplusplus
 }

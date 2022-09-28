@@ -585,8 +585,8 @@ char *switch_handle_type_to_string(switch_handle_type_t handle_type) {
       return "wred";
     case SWITCH_HANDLE_TYPE_RANGE:
       return "range";
-    case SWITCH_HANDLE_TYPE_ECMP_MEMBER:
-      return "ecmp member";
+    case SWITCH_HANDLE_TYPE_NHOP_MEMBER:
+      return "nhop member";
     case SWITCH_HANDLE_TYPE_STP_PORT:
       return "stp port";
     case SWITCH_HANDLE_TYPE_HOSTIF_REASON_CODE:
@@ -645,8 +645,8 @@ char *switch_handle_type_to_string(switch_handle_type_t handle_type) {
       return "sr sidlist";
     case SWITCH_HANDLE_TYPE_METER_COLOR_ACTION:
       return "meter color action";
-    case SWITCH_HANDLE_TYPE_ECMP_GROUP:
-      return "ecmp group";
+    case SWITCH_HANDLE_TYPE_NHOP_GROUP:
+      return "nhop group";
     case SWITCH_HANDLE_TYPE_L2_FWD_RX:
       return "l2 fwd rx";
     case SWITCH_HANDLE_TYPE_L2_FWD_TX:
@@ -873,8 +873,8 @@ switch_direction_t switch_table_id_to_direction(switch_table_id_t table_id) {
     case SWITCH_TABLE_URPF:
     case SWITCH_TABLE_IPV4_LOCAL_HOST:
     case SWITCH_TABLE_NHOP:
-    case SWITCH_TABLE_ECMP_GROUP:
-    case SWITCH_TABLE_ECMP_SELECT:
+    case SWITCH_TABLE_NHOP_GROUP:
+    case SWITCH_TABLE_NHOP_MEMBER_SELECT:
     case SWITCH_TABLE_IPV4_SRC_VTEP:
     case SWITCH_TABLE_IPV4_DST_VTEP:
     case SWITCH_TABLE_IPV6_SRC_VTEP:
