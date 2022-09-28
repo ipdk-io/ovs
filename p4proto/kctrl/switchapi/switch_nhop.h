@@ -127,30 +127,34 @@ typedef struct switch_pd_nexthhop_info_s
 
 } switch_pd_nexthop_info_t;
 
-/** ecmp info struct */
-typedef struct switch_ecmp_info_s
+/** nhop_group info struct */
+typedef struct switch_nhop_group_info_s
 {
-  switch_handle_t ecmp_group_handle;
+  switch_handle_t nhop_group_handle;
 
   switch_list_t members;
 
   switch_nhop_id_type_t id_type;
 
-} switch_ecmp_info_t;
+  bool first_insert_complete;
+
+  bool pd_nhop_group_deleted;
+
+} switch_nhop_group_info_t;
 
 
 
-typedef struct switch_ecmp_member_s {
-  /** ecmp member handle */
+typedef struct switch_nhop_member_s {
+  /** nhop member handle */
   switch_handle_t member_handle;
 
-  /** ecmp group handle */
-  switch_handle_t ecmp_handle;
+  /** nhop group handle */
+  switch_handle_t nhop_group_handle;
 
   /** list node */
   switch_node_t node;
 
-  /** ecmp member nhop handle */
+  /** nhop member nhop handle */
   switch_handle_t nhop_handle;
 
   /** member active bit */
@@ -159,12 +163,12 @@ typedef struct switch_ecmp_member_s {
   /** hardware flags */
   switch_uint64_t hw_flags;
 
-} switch_ecmp_member_t;
+} switch_nhop_member_t;
 
 /**
- * initialize ecmp member handle
+ * initialize nhop member handle
  */
-switch_status_t switch_ecmp_member_handle_init(switch_device_t device);
+switch_status_t switch_nhop_member_handle_init(switch_device_t device);
 
 /**
  Create a Nexthop
@@ -207,82 +211,45 @@ switch_status_t switch_api_nhop_delete(const switch_device_t device,
                                        const switch_handle_t nhop_handle);
 
 /**
- Create a ECMP Group
- @param device - device to create the ecmp group
+ Create a nhop Group
+ @param device - device to create the nhop_group group
 */
-switch_status_t switch_api_ecmp_create(const switch_device_t device,
-                                       switch_handle_t *ecmp_handle);
+switch_status_t switch_api_nhop_group_create(const switch_device_t device,
+                                            switch_handle_t *nhop_group_handle);
 
 /**
- Delete a ECMP Group
- @param ecmp_handle - Handle that identifies ECMP group uniquely
+ Delete a nhop Group
+ @param nhop_group_handle - Handle that identifies nhop group uniquely
 */
-switch_status_t switch_api_ecmp_delete(const switch_device_t device,
-                                       const switch_handle_t ecmp_handle);
+switch_status_t switch_api_nhop_group_delete(const switch_device_t device,
+                                      const switch_handle_t nhop_group_handle);
 
 /**
- Add nexthop member to ecmp group
+ Add nexthop member to nhop group
  @param device - device to program the nexthop
- @param ecmp_handle - handle that identifies ECMP group uniquely
+ @param nhop_group_handle - handle that identifies nhop group uniquely
  @param nhop_count - number of nexthops
- @param nhop_handle_list - List of nexthops to be added to the ECMP Group
+ @param nhop_handle_list - List of nexthops to be added to the nhop Group
 */
-switch_status_t switch_api_ecmp_member_add(const switch_device_t device,
-                                           const switch_handle_t ecmp_handle,
-                                           const switch_uint32_t num_nhops,
-                                           const switch_handle_t *nhop_handles,
-                                           switch_handle_t *member_handle);
-
-/**
- Delete nexthop member from ecmp group
- @param device - device to program the nexthop
- @param ecmp_handle - handle that identifies ECMP group uniquely
- @param nhop_count - number of nexthops
- @param nhop_handle_list - List of nexthops to be added to the ECMP Group
-*/
-switch_status_t switch_api_ecmp_member_delete(
+switch_status_t switch_api_nhop_member_add(
     const switch_device_t device,
-    const switch_handle_t ecmp_handle,
-    const switch_uint32_t num_nhops,
-    const switch_handle_t *nhop_handles);
-
-/*
- Create ECMP Group along with the members.
- @param member_count - Number of nexthops
- @param nhop_handle - List of nexthops to be added to ECMP group
-*/
-switch_status_t switch_api_ecmp_create_with_members(
-    const switch_device_t device,
+    const switch_handle_t nhop_group_handle,
     const switch_uint32_t num_nhops,
     const switch_handle_t *nhop_handles,
-    switch_handle_t *ecmp_handle,
     switch_handle_t *member_handle);
 
 /**
- Reactivate nexthop member from ecmp group
+ Delete nexthop member from nhop group
  @param device - device to program the nexthop
- @param ecmp_handle - handle that identifies ECMP group uniquely
+ @param nhop_group_handle - handle that identifies nhop group uniquely
  @param nhop_count - number of nexthops
- @param nhop_handle_list - List of nexthops to be activated
+ @param nhop_handle_list - List of nexthops to be added to the nhop Group
 */
-switch_status_t switch_api_ecmp_member_activate(
-    switch_device_t device,
-    switch_handle_t ecmp_handle,
-    uint16_t nhop_count,
-    switch_handle_t *nhop_handle_list);
-
-/**
- Deactivate nexthop member from ecmp group
- @param device - device to program the nexthop
- @param ecmp_handle - handle that identifies ECMP group uniquely
- @param nhop_count - number of nexthops
- @param nhop_handle_list - List of nexthops to be deactivated
-*/
-switch_status_t switch_api_ecmp_member_deactivate(
-    switch_device_t device,
-    switch_handle_t ecmp_handle,
-    uint16_t nhop_count,
-    switch_handle_t *nhop_handle_list);
+switch_status_t switch_api_nhop_member_delete(
+    const switch_device_t device,
+    const switch_handle_t nhop_group_handle,
+    const switch_uint32_t num_nhops,
+    const switch_handle_t *nhop_handles);
 
 /*
  Return nexthop handle from (intf_handle, ip address)
@@ -309,11 +276,11 @@ switch_status_t switch_api_nhop_id_type_get(const switch_device_t device,
                                             const switch_handle_t nhop_handle,
                                             switch_nhop_id_type_t *nhop_type);
 
-switch_status_t switch_api_ecmp_members_delete(switch_device_t device,
-                                               switch_handle_t ecmp_handle);
+switch_status_t switch_api_nhop_members_delete(switch_device_t device,
+                                               switch_handle_t nhop_group_handle);
 
-switch_status_t switch_api_ecmp_members_get(const switch_device_t device,
-                                            const switch_handle_t ecmp_handle,
+switch_status_t switch_api_nhop_members_get(const switch_device_t device,
+                                            const switch_handle_t nhop_group_handle,
                                             switch_uint16_t *num_nhops,
                                             switch_handle_t **nhop_handles);
 
@@ -323,10 +290,10 @@ switch_status_t switch_api_nhop_handle_dump(const switch_device_t device,
 switch_status_t switch_api_nhop_table_size_get(switch_device_t device,
                                                switch_size_t *tbl_size);
 
-switch_status_t switch_api_ecmp_nhop_by_member_get(
+switch_status_t switch_api_nhop_group_by_nhop_member_get(
     const switch_device_t device,
-    const switch_handle_t ecmp_member_handle,
-    switch_handle_t *ecmp_handle,
+    const switch_handle_t nhop_member_handle,
+    switch_handle_t *nhop_group_handle,
     switch_handle_t *nhop_handle);
 
 switch_status_t switch_api_rif_nhop_get(switch_device_t device,
@@ -346,11 +313,11 @@ switch_status_t switch_nhop_hash_key_init(void *args,
  * */
 switch_int32_t switch_nhop_hash_compare(const void *key1, const void *key2);
 
-switch_status_t switch_ecmp_member_get_from_nhop(
+switch_status_t nhop_member_get_from_nhop(
     const switch_device_t device,
-    const switch_handle_t ecmp_handle,
+    const switch_handle_t nhop_group_handle,
     const switch_handle_t nhop_handle,
-    switch_ecmp_member_t **ecmp_member);
+    switch_nhop_member_t **nhop_member);
 #ifdef __cplusplus
 }
 #endif

@@ -68,9 +68,6 @@ typedef struct switch_device_context_s {
   /** ifindex allocator */
   switch_id_allocator_t *ifindex_allocator;
 
-  /** ecmp hash handle */
-  switch_handle_t ecmp_hash_handle;
-
   /** maximum pipes */
   switch_uint32_t max_pipes;
 

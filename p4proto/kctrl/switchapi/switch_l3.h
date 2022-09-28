@@ -63,6 +63,9 @@ typedef struct switch_api_route_entry_s {
   /** nexthop handle */
   switch_handle_t nhop_handle;
 
+  /** nexthop member handle */
+  switch_handle_t nhop_member_handle;
+
   /**ecmp group handle */
   switch_handle_t ecmp_group_id;
 
