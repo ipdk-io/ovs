@@ -111,7 +111,7 @@ cd "$SRC_DIR"/"$MODULE"
 git checkout 503e3dec8d1fe071376befc62119a837c26612a3
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
-cmake $CMAKE_PREFIX -Dgflags_DIR:PATH="$INSTALL_DIR"/lib/cmake/gflags ..
+cmake $CMAKE_PREFIX -Dgflags_DIR:PATH="$INSTALL_DIR"/lib/cmake/gflags -DWITH_GTEST=OFF ..
 make "$NUM_THREADS"
 sudo make "$NUM_THREADS" install
 sudo ldconfig
@@ -184,7 +184,7 @@ cd "$SRC_DIR"/"$MODULE"
 git checkout 760304635dc74a5bf77903ad92446a6febb85acf
 mkdir -p "$SRC_DIR"/"$MODULE"/build
 cd "$SRC_DIR"/"$MODULE"/build
-cmake "$CMAKE_PREFIX" ..
+cmake "$CMAKE_PREFIX" -DJSON_BuildTests=OFF ..
 make "$NUM_THREADS"
 sudo make "$NUM_THREADS" install
 sudo ldconfig

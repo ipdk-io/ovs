@@ -41,9 +41,9 @@ fi
 ./boot.sh || exit 1
 if [ ! -z "$DEPS_INSTALL_PATH" ]
 then
-    ./configure --prefix=$DEPS_INSTALL_PATH --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0 -g' --disable-ssl --with-sai || exit 1
+    ./configure --prefix=$DEPS_INSTALL_PATH --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0' --disable-ssl --with-sai || exit 1
 else
-    ./configure --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0 -g' --with-sai || exit 1
+    ./configure --with-p4tdi=$SDE_INSTALL_PATH CFLAGS='-O0' --disable-ssl --with-sai || exit 1
 fi
 
 #Read the number of CPUs in a system and derive the NUM threads
