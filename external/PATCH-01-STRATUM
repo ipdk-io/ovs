@@ -2147,7 +2147,11 @@ index 4afa1532..d2e70214 100644
  };
  
 diff --git a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
+<<<<<<< HEAD
 index 9f4bb3a9..255835e4 100644
+=======
+index 9f4bb3a9..46f96c30 100644
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
 --- a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 +++ b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 @@ -11,8 +11,10 @@
@@ -2439,7 +2443,11 @@ index 9f4bb3a9..255835e4 100644
          std::vector<uint16> bools_as_ints;
          for (bool b : bools) {
            bools_as_ints.push_back(b);
+<<<<<<< HEAD
 @@ -238,303 +254,341 @@ inline constexpr uint64 BytesPerSecondToKbits(uint64 bytes) {
+=======
+@@ -238,303 +254,348 @@ inline constexpr uint64 BytesPerSecondToKbits(uint64 bytes) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return s;
  }
  
@@ -2875,11 +2883,17 @@ index 9f4bb3a9..255835e4 100644
 -  if (table_type == bfrt::BfRtTable::TableType::METER ||
 -      table_type == bfrt::BfRtTable::TableType::COUNTER) {
 +  const tdi::Device *device = nullptr;
-+  tdi::DevMgr::getInstance().deviceGet(0, &device);
++  tdi::DevMgr::getInstance().deviceGet(0 , &device);
 +  std::unique_ptr<tdi::TableKey> table_key;
 +  std::unique_ptr<tdi::TableData> table_data;
 +  tdi_status_t tdi_status;
+<<<<<<< HEAD
 +  
+=======
++
++  //const tdi::Device *device = nullptr;
++  //tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
 +  uint32 entries = 0, actual = 0;
@@ -2912,8 +2926,16 @@ index 9f4bb3a9..255835e4 100644
  
    table_keys->resize(0);
    table_datums->resize(0);
+<<<<<<< HEAD
    if (entries == 0) return ::util::OkStatus();
 -
+=======
+-  if (entries == 0) return ::util::OkStatus();
++ if (entries == 0) {
++    return ::util::OkStatus();
++  }
+ 
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    // Get first entry.
    {
 -    std::unique_ptr<bfrt::BfRtTableKey> table_key;
@@ -2944,8 +2966,16 @@ index 9f4bb3a9..255835e4 100644
      table_keys->push_back(std::move(table_key));
      table_datums->push_back(std::move(table_data));
    }
+<<<<<<< HEAD
    if (entries == 1) return ::util::OkStatus();
 -
+=======
+-  if (entries == 1) return ::util::OkStatus();
+-
++  if (entries == 1) {
++	  return ::util::OkStatus();
++  }
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    // Get all entries following the first.
    {
 -    std::vector<std::unique_ptr<bfrt::BfRtTableKey>> keys(entries - 1);
@@ -2982,7 +3012,11 @@ index 9f4bb3a9..255835e4 100644
  
      table_keys->insert(table_keys->end(), std::make_move_iterator(keys.begin()),
                         std::make_move_iterator(keys.end()));
+<<<<<<< HEAD
 @@ -546,96 +600,139 @@ template <typename T>
+=======
+@@ -546,96 +607,139 @@ template <typename T>
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    CHECK(table_keys->size() == table_datums->size());
    CHECK(table_keys->size() == entries);
  
@@ -3049,10 +3083,10 @@ index 9f4bb3a9..255835e4 100644
 +  const char *valueTernary = reinterpret_cast<const char *>(v.data());
 +  const char *maskTernary = reinterpret_cast<const char *>(m.data());
 +  size_t sizeTernary = reinterpret_cast<size_t>(v.size());
-+
+ 
 +  tdi::KeyFieldValueTernary<const char *> ternaryKey(valueTernary, maskTernary,
 +                                                  sizeTernary);
- 
++
 +  RETURN_IF_TDI_ERROR(table_key_->setValue(static_cast<tdi_id_t>(id),
 +                                           ternaryKey));
    return ::util::OkStatus();
@@ -3160,7 +3194,11 @@ index 9f4bb3a9..255835e4 100644
      *value = ByteStringToP4RuntimeByteString(*value);
    }
  
+<<<<<<< HEAD
 @@ -644,18 +741,30 @@ template <typename T>
+=======
+@@ -644,18 +748,30 @@ template <typename T>
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  
  ::util::Status TableKey::GetTernary(int id, std::string* value,
                                      std::string* mask) const {
@@ -3198,7 +3236,11 @@ index 9f4bb3a9..255835e4 100644
      *value = ByteStringToP4RuntimeByteString(*value);
      *mask = ByteStringToP4RuntimeByteString(*mask);
    }
+<<<<<<< HEAD
 @@ -665,16 +774,25 @@ template <typename T>
+=======
+@@ -665,16 +781,25 @@ template <typename T>
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  
  ::util::Status TableKey::GetLpm(int id, std::string* prefix,
                                  uint16* prefix_length) const {
@@ -3231,7 +3273,11 @@ index 9f4bb3a9..255835e4 100644
      *prefix = ByteStringToP4RuntimeByteString(*prefix);
    }
  
+<<<<<<< HEAD
 @@ -683,91 +801,90 @@ template <typename T>
+=======
+@@ -683,91 +808,90 @@ template <typename T>
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  
  ::util::Status TableKey::GetRange(int id, std::string* low,
                                    std::string* high) const {
@@ -3372,7 +3418,11 @@ index 9f4bb3a9..255835e4 100644
    return ::util::OkStatus();
  }
  
+<<<<<<< HEAD
 @@ -776,31 +893,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+=======
+@@ -776,31 +900,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  }
  
  ::util::Status TableData::GetActionMemberId(uint64* action_member_id) const {
@@ -3405,7 +3455,11 @@ index 9f4bb3a9..255835e4 100644
  }
  
  ::util::Status TableData::SetSelectorGroupId(uint64 selector_group_id) {
+<<<<<<< HEAD
 @@ -808,31 +901,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+=======
+@@ -808,31 +908,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  }
  
  ::util::Status TableData::GetSelectorGroupId(uint64* selector_group_id) const {
@@ -3438,7 +3492,11 @@ index 9f4bb3a9..255835e4 100644
  }
  
  // The P4Runtime `CounterData` message has no mechanism to differentiate between
+<<<<<<< HEAD
 @@ -840,36 +909,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+=======
+@@ -840,36 +916,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  // recognize a counter reset (set, e.g., bytes to zero) request from a set
  // request for a packet-only counter. Therefore we have to be careful when
  // making set calls for those fields against the SDE.
@@ -3494,7 +3552,11 @@ index 9f4bb3a9..255835e4 100644
  
    return ::util::OkStatus();
  }
+<<<<<<< HEAD
 @@ -877,80 +936,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+=======
+@@ -877,80 +943,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  ::util::Status TableData::GetCounterData(uint64* bytes, uint64* packets) const {
    CHECK_RETURN_IF_FALSE(bytes);
    CHECK_RETURN_IF_FALSE(packets);
@@ -3606,7 +3668,11 @@ index 9f4bb3a9..255835e4 100644
        new TableData(std::move(table_data)));
    return data;
  }
+<<<<<<< HEAD
 @@ -961,18 +1003,19 @@ namespace {
+=======
+@@ -961,18 +1010,19 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
                                       bool up, void* cookie) {
    absl::Time timestamp = absl::Now();
@@ -3630,7 +3696,11 @@ index 9f4bb3a9..255835e4 100644
  ::util::StatusOr<bf_port_speed_t> PortSpeedHalToBf(uint64 speed_bps) {
    switch (speed_bps) {
      case kOneGigBps:
+<<<<<<< HEAD
 @@ -992,6 +1035,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+=======
+@@ -992,6 +1042,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    }
  }
  
@@ -3639,7 +3709,11 @@ index 9f4bb3a9..255835e4 100644
  ::util::StatusOr<int> AutonegHalToBf(TriState autoneg) {
    switch (autoneg) {
      case TRI_STATE_UNKNOWN:
+<<<<<<< HEAD
 @@ -1005,6 +1050,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+=======
+@@ -1005,6 +1057,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    }
  }
  
@@ -3647,7 +3721,11 @@ index 9f4bb3a9..255835e4 100644
  ::util::StatusOr<bf_fec_type_t> FecModeHalToBf(FecMode fec_mode,
                                                 uint64 speed_bps) {
    if (fec_mode == FEC_MODE_UNKNOWN || fec_mode == FEC_MODE_OFF) {
+<<<<<<< HEAD
 @@ -1043,52 +1089,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+=======
+@@ -1043,52 +1096,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
            << ".";
    }
  }
@@ -3733,7 +3811,11 @@ index 9f4bb3a9..255835e4 100644
                                                 absl::Time timestamp) {
    // Create PortStatusEvent message.
    PortState state = up ? PORT_STATE_UP : PORT_STATE_DOWN;
+<<<<<<< HEAD
 @@ -1103,117 +1154,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
+=======
+@@ -1103,117 +1161,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    }
  }
  
@@ -4050,7 +4132,11 @@ index 9f4bb3a9..255835e4 100644
  
    return is_sw_model;
  }
+<<<<<<< HEAD
 @@ -1221,6 +1443,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
+=======
+@@ -1221,6 +1450,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  // Helper functions around reading the switch SKU.
  namespace {
  std::string GetBfChipFamilyAndType(int device) {
@@ -4058,7 +4144,11 @@ index 9f4bb3a9..255835e4 100644
    bf_dev_type_t dev_type = lld_sku_get_dev_type(device);
    switch (dev_type) {
      case BF_DEV_BFNT10064Q:
+<<<<<<< HEAD
 @@ -1284,9 +1507,12 @@ std::string GetBfChipFamilyAndType(int device) {
+=======
+@@ -1284,9 +1514,12 @@ std::string GetBfChipFamilyAndType(int device) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
      default:
        return "UNKNOWN";
    }
@@ -4071,7 +4161,11 @@ index 9f4bb3a9..255835e4 100644
    bf_sku_chip_part_rev_t revision_number;
    lld_sku_get_chip_part_revision_number(device, &revision_number);
    switch (revision_number) {
+<<<<<<< HEAD
 @@ -1297,22 +1523,26 @@ std::string GetBfChipRevision(int device) {
+=======
+@@ -1297,22 +1530,26 @@ std::string GetBfChipRevision(int device) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
      default:
        return "UNKOWN";
    }
@@ -4100,7 +4194,11 @@ index 9f4bb3a9..255835e4 100644
  #if defined(SDE_9_1_0)
    return "9.1.0";
  #elif defined(SDE_9_2_0)
+<<<<<<< HEAD
 @@ -1332,7 +1562,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+=======
+@@ -1332,7 +1569,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  #endif
  }
  
@@ -4109,7 +4207,11 @@ index 9f4bb3a9..255835e4 100644
      int device, const PortKey& port_key) {
    const int port = port_key.port;
    CHECK_RETURN_IF_FALSE(port >= 0)
+<<<<<<< HEAD
 @@ -1358,35 +1588,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+=======
+@@ -1358,35 +1595,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
        << channel << " on dev " << device << ".";
  
    bf_dev_port_t dev_port;
@@ -4160,7 +4262,11 @@ index 9f4bb3a9..255835e4 100644
                                             const std::string& sde_config_file,
                                             bool run_in_background) {
    CHECK_RETURN_IF_FALSE(sde_install_path != "")
+<<<<<<< HEAD
 @@ -1408,7 +1647,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+=======
+@@ -1408,7 +1654,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    std::string bf_sysfs_fname;
    {
      char buf[128] = {};
@@ -4169,7 +4275,11 @@ index 9f4bb3a9..255835e4 100644
      bf_sysfs_fname = buf;
    }
    absl::StrAppend(&bf_sysfs_fname, "/dev_add");
+<<<<<<< HEAD
 @@ -1417,55 +1656,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+=======
+@@ -1417,55 +1663,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
      // Override previous parsing if bf_kpkt KLM was loaded.
      LOG(INFO)
          << "kernel mode packet driver present, forcing kernel_pkt option!";
@@ -4246,7 +4356,11 @@ index 9f4bb3a9..255835e4 100644
      CHECK_RETURN_IF_FALSE(program.pipelines_size() > 0);
      for (int j = 0; j < program.pipelines_size(); ++j) {
        const auto& pipeline = program.pipelines(j);
+<<<<<<< HEAD
 @@ -1496,10 +1738,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+=======
+@@ -1496,10 +1745,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
      }
    }
  
@@ -4259,7 +4373,11 @@ index 9f4bb3a9..255835e4 100644
  
    // Set SDE log levels for modules of interest.
    // TODO(max): create story around SDE logs. How to get them into glog? What
+<<<<<<< HEAD
 @@ -1510,114 +1751,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+=======
+@@ -1510,114 +1758,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
        bf_sys_log_level_set(BF_MOD_PKT, BF_LOG_DEST_STDOUT, BF_LOG_WARN) == 0);
    CHECK_RETURN_IF_FALSE(
        bf_sys_log_level_set(BF_MOD_PIPE, BF_LOG_DEST_STDOUT, BF_LOG_WARN) == 0);
@@ -4415,7 +4533,11 @@ index 9f4bb3a9..255835e4 100644
                                              bf_pkt_rx_ring_t rx_ring) {
    absl::ReaderMutexLock l(&packet_rx_callback_lock_);
    auto rx_writer = gtl::FindOrNull(device_to_packet_rx_writer_, device);
+<<<<<<< HEAD
 @@ -1635,7 +1885,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
+=======
+@@ -1635,7 +1892,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -4424,7 +4546,11 @@ index 9f4bb3a9..255835e4 100644
                                                  bf_pkt_tx_ring_t tx_ring,
                                                  uint64 tx_cookie,
                                                  uint32 status) {
+<<<<<<< HEAD
 @@ -1647,34 +1897,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
+=======
+@@ -1647,34 +1904,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return bf_pkt_free(device, pkt);
  }
  
@@ -4468,7 +4594,11 @@ index 9f4bb3a9..255835e4 100644
    // Data: $MULTICAST_NODE_ID
    RETURN_IF_ERROR(GetField(*table_data, kMcNodeId, &mc_node_list));
    // Data: $MULTICAST_NODE_L1_XID_VALID
+<<<<<<< HEAD
 @@ -1684,6 +1928,7 @@ namespace {
+=======
+@@ -1684,6 +1935,7 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  
    LOG(INFO) << "Multicast group id " << multicast_group_id << " has "
              << mc_node_list.size() << " nodes.";
@@ -4476,7 +4606,11 @@ index 9f4bb3a9..255835e4 100644
    for (const auto& node : mc_node_list) {
      LOG(INFO) << "\tnode id " << node;
    }
+<<<<<<< HEAD
 @@ -1691,12 +1936,12 @@ namespace {
+=======
+@@ -1691,12 +1943,12 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -4494,7 +4628,11 @@ index 9f4bb3a9..255835e4 100644
    // Data: $MULTICAST_RID (16 bit)
    uint64 rid;
    RETURN_IF_ERROR(GetField(*table_data, kMcReplicationId, &rid));
+<<<<<<< HEAD
 @@ -1715,41 +1960,44 @@ namespace {
+=======
+@@ -1715,41 +1967,44 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  }
  }  // namespace
  
@@ -4557,7 +4695,11 @@ index 9f4bb3a9..255835e4 100644
        PrintMcNodeEntry(table, table_key.get(), table_data.get());
      }
      LOG(INFO) << "###################";
+<<<<<<< HEAD
 @@ -1757,51 +2005,90 @@ namespace {
+=======
+@@ -1757,51 +2012,90 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -4675,7 +4817,11 @@ index 9f4bb3a9..255835e4 100644
      int mc_replication_id, const std::vector<uint32>& mc_lag_ids,
      const std::vector<uint32>& ports) {
    ::absl::ReaderMutexLock l(&data_lock_);
+<<<<<<< HEAD
 @@ -1809,22 +2096,25 @@ namespace {
+=======
+@@ -1809,22 +2103,25 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -4712,7 +4858,11 @@ index 9f4bb3a9..255835e4 100644
    // Data: $MULTICAST_RID (16 bit)
    RETURN_IF_ERROR(
        SetField(table_data.get(), kMcReplicationId, mc_replication_id));
+<<<<<<< HEAD
 @@ -1832,68 +2122,107 @@ namespace {
+=======
+@@ -1832,68 +2129,107 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeLagId, mc_lag_ids));
    // Data: $DEV_PORT
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeDevPort, ports));
@@ -4749,14 +4899,14 @@ index 9f4bb3a9..255835e4 100644
 +  tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
-+
-+  const tdi::Table* table;
-+  RETURN_IF_TDI_ERROR(tdi_info_->tableFromNameGet(kPreMgidTable, &table));
  
 -  std::unique_ptr<bfrt::BfRtTableKey> table_key;
 -  std::unique_ptr<bfrt::BfRtTableData> table_data;
 -  RETURN_IF_BFRT_ERROR(table->keyAllocate(&table_key));
 -  RETURN_IF_BFRT_ERROR(table->dataAllocate(&table_data));
++  const tdi::Table* table;
++  RETURN_IF_TDI_ERROR(tdi_info_->tableFromNameGet(kPreMgidTable, &table));
++
 +  std::unique_ptr<tdi::TableKey> table_key;
 +  std::unique_ptr<tdi::TableData> table_data;
 +  RETURN_IF_TDI_ERROR(table->keyAllocate(&table_key));
@@ -4852,7 +5002,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 mc_node_id, int* replication_id, std::vector<uint32>* lag_ids,
      std::vector<uint32>* ports) {
    CHECK_RETURN_IF_FALSE(replication_id);
+<<<<<<< HEAD
 @@ -1903,51 +2232,69 @@ namespace {
+=======
+@@ -1903,51 +2239,69 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -4948,7 +5102,11 @@ index 9f4bb3a9..255835e4 100644
  
    std::vector<uint32> mc_node_list;
    std::vector<bool> l1_xid_valid_list;
+<<<<<<< HEAD
 @@ -1959,7 +2306,7 @@ namespace {
+=======
+@@ -1959,7 +2313,7 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
      l1_xid_list.push_back(0);
    }
    // Key: $MGID
@@ -4957,7 +5115,11 @@ index 9f4bb3a9..255835e4 100644
    // Data: $MULTICAST_NODE_ID
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeId, mc_node_list));
    // Data: $MULTICAST_NODE_L1_XID_VALID
+<<<<<<< HEAD
 @@ -1968,54 +2315,73 @@ namespace {
+=======
+@@ -1968,54 +2322,73 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    // Data: $MULTICAST_NODE_L1_XID
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeL1Xid, l1_xid_list));
  
@@ -5055,7 +5217,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 group_id, std::vector<uint32>* group_ids,
      std::vector<std::vector<uint32>>* mc_node_ids) {
    CHECK_RETURN_IF_FALSE(group_ids);
+<<<<<<< HEAD
 @@ -2024,39 +2390,49 @@ namespace {
+=======
+@@ -2024,39 +2397,49 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5124,7 +5290,11 @@ index 9f4bb3a9..255835e4 100644
      RETURN_IF_ERROR(GetField(*table_data, kMcNodeId, &mc_node_list));
      mc_node_ids->push_back(mc_node_list);
    }
+<<<<<<< HEAD
 @@ -2067,24 +2443,32 @@ namespace {
+=======
+@@ -2067,24 +2450,32 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -5169,7 +5339,11 @@ index 9f4bb3a9..255835e4 100644
    // Data: $direction
    RETURN_IF_ERROR(SetField(table_data.get(), "$direction", "BOTH"));
    // Data: $session_enable
+<<<<<<< HEAD
 @@ -2100,62 +2484,85 @@ namespace {
+=======
+@@ -2100,62 +2491,85 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    // Data: $max_pkt_len
    RETURN_IF_ERROR(SetField(table_data.get(), "$max_pkt_len", max_pkt_len));
  
@@ -5283,7 +5457,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 session_id, std::vector<uint32>* session_ids,
      std::vector<int>* egress_ports, std::vector<int>* coss,
      std::vector<int>* max_pkt_lens) {
+<<<<<<< HEAD
 @@ -2165,29 +2572,43 @@ namespace {
+=======
+@@ -2165,29 +2579,43 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    CHECK_RETURN_IF_FALSE(max_pkt_lens);
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
@@ -5342,7 +5520,11 @@ index 9f4bb3a9..255835e4 100644
                                    table, &keys, &datums));
    }
  
+<<<<<<< HEAD
 @@ -2196,32 +2617,30 @@ namespace {
+=======
+@@ -2196,32 +2624,30 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    coss->resize(0);
    max_pkt_lens->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5383,7 +5565,11 @@ index 9f4bb3a9..255835e4 100644
                               &ucast_egress_port_valid));
      CHECK_RETURN_IF_FALSE(ucast_egress_port_valid)
          << "Found a unicase egress port that is not set valid.";
+<<<<<<< HEAD
 @@ -2235,51 +2654,66 @@ namespace {
+=======
+@@ -2235,51 +2661,66 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -5473,7 +5659,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 counter_id, absl::optional<uint32> counter_index,
      std::vector<uint32>* counter_indices,
      std::vector<absl::optional<uint64>>* byte_counts,
+<<<<<<< HEAD
 @@ -2292,29 +2726,41 @@ namespace {
+=======
+@@ -2292,29 +2733,41 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5528,7 +5718,11 @@ index 9f4bb3a9..255835e4 100644
                                    table, &keys, &datums));
    }
  
+<<<<<<< HEAD
 @@ -2322,31 +2768,31 @@ namespace {
+=======
+@@ -2322,31 +2775,31 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    byte_counts->resize(0);
    packet_counts->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5578,7 +5772,11 @@ index 9f4bb3a9..255835e4 100644
      }
      packet_counts->push_back(packet_count);
    }
+<<<<<<< HEAD
 @@ -2362,87 +2808,122 @@ namespace {
+=======
+@@ -2362,87 +2815,122 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
  // Helper function to get the field ID of the "f1" register data field.
  // TODO(max): Maybe use table name and strip off "pipe." at the beginning?
  // std::string table_name;
@@ -5738,7 +5936,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 table_id, absl::optional<uint32> register_index,
      std::vector<uint32>* register_indices, std::vector<uint64>* register_datas,
      absl::Duration timeout) {
+<<<<<<< HEAD
 @@ -2452,58 +2933,73 @@ namespace {
+=======
+@@ -2452,58 +2940,73 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5836,7 +6038,11 @@ index 9f4bb3a9..255835e4 100644
              << "Unsupported register data type " << static_cast<int>(data_type)
              << " for register in table " << table_id;
      }
+<<<<<<< HEAD
 @@ -2515,21 +3011,21 @@ namespace {
+=======
+@@ -2515,21 +3018,21 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -5866,7 +6072,11 @@ index 9f4bb3a9..255835e4 100644
  
    // Meter data: $METER_SPEC_*
    if (in_pps) {
+<<<<<<< HEAD
 @@ -2549,36 +3045,63 @@ namespace {
+=======
+@@ -2549,36 +3052,63 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
                               BytesPerSecondToKbits(pburst)));
    }
  
@@ -5945,7 +6155,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 table_id, absl::optional<uint32> meter_index,
      std::vector<uint32>* meter_indices, std::vector<uint64>* cirs,
      std::vector<uint64>* cbursts, std::vector<uint64>* pirs,
+<<<<<<< HEAD
 @@ -2592,26 +3115,37 @@ namespace {
+=======
+@@ -2592,26 +3122,37 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5996,7 +6210,11 @@ index 9f4bb3a9..255835e4 100644
                                    table, &keys, &datums));
    }
  
+<<<<<<< HEAD
 @@ -2622,55 +3156,58 @@ namespace {
+=======
+@@ -2622,55 +3163,58 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    pbursts->resize(0);
    in_pps->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6072,7 +6290,11 @@ index 9f4bb3a9..255835e4 100644
              << "Unknown meter field " << field_name << " in meter with id "
              << table_id << ".";
        }
+<<<<<<< HEAD
 @@ -2687,8 +3224,8 @@ namespace {
+=======
+@@ -2687,8 +3231,8 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -6083,7 +6305,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 table_id, int member_id, const TableDataInterface* table_data,
      bool insert) {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
+<<<<<<< HEAD
 @@ -2696,12 +3233,14 @@ namespace {
+=======
+@@ -2696,12 +3240,14 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6102,7 +6328,11 @@ index 9f4bb3a9..255835e4 100644
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
          DumpTableMetadata(table).ValueOr("<error reading table>"),
+<<<<<<< HEAD
 @@ -2710,54 +3249,63 @@ namespace {
+=======
+@@ -2710,54 +3256,63 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
          DumpTableData(real_table_data->table_data_.get())
              .ValueOr("<error parsing data>"));
    };
@@ -6190,7 +6420,11 @@ index 9f4bb3a9..255835e4 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
+<<<<<<< HEAD
 @@ -2767,18 +3315,28 @@ namespace {
+=======
+@@ -2767,18 +3322,28 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    };
  
    // Key: $ACTION_MEMBER_ID
@@ -6227,7 +6461,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 table_id, int member_id, std::vector<int>* member_ids,
      std::vector<std::unique_ptr<TableDataInterface>>* table_datas) {
    CHECK_RETURN_IF_FALSE(member_ids);
+<<<<<<< HEAD
 @@ -2787,24 +3345,34 @@ namespace {
+=======
+@@ -2787,24 +3352,34 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6274,7 +6512,11 @@ index 9f4bb3a9..255835e4 100644
                                    table, &keys, &datums));
    }
  
+<<<<<<< HEAD
 @@ -2812,8 +3380,8 @@ namespace {
+=======
+@@ -2812,8 +3387,8 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    table_datas->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
      // Key: $sid
@@ -6285,7 +6527,11 @@ index 9f4bb3a9..255835e4 100644
      member_ids->push_back(member_id);
  
      // Data: action params
+<<<<<<< HEAD
 @@ -2827,21 +3395,21 @@ namespace {
+=======
+@@ -2827,21 +3402,21 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -6315,7 +6561,11 @@ index 9f4bb3a9..255835e4 100644
  
    // We have to capture the std::unique_ptrs by reference [&] here.
    auto dump_args = [&]() -> std::string {
+<<<<<<< HEAD
 @@ -2854,7 +3422,7 @@ namespace {
+=======
+@@ -2854,7 +3429,7 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6324,7 +6574,11 @@ index 9f4bb3a9..255835e4 100644
    // Data: $ACTION_MEMBER_ID
    RETURN_IF_ERROR(SetField(table_data.get(), kActionMemberId, member_ids));
    // Data: $ACTION_MEMBER_STATUS
+<<<<<<< HEAD
 @@ -2864,53 +3432,63 @@ namespace {
+=======
+@@ -2864,53 +3439,63 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    RETURN_IF_ERROR(
        SetField(table_data.get(), "$MAX_GROUP_SIZE", max_group_size));
  
@@ -6408,7 +6662,11 @@ index 9f4bb3a9..255835e4 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
+<<<<<<< HEAD
 @@ -2920,18 +3498,28 @@ namespace {
+=======
+@@ -2920,18 +3505,28 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6444,7 +6702,11 @@ index 9f4bb3a9..255835e4 100644
      uint32 table_id, int group_id, std::vector<int>* group_ids,
      std::vector<int>* max_group_sizes,
      std::vector<std::vector<uint32>>* member_ids,
+<<<<<<< HEAD
 @@ -2944,24 +3532,35 @@ namespace {
+=======
+@@ -2944,24 +3539,35 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6492,7 +6754,11 @@ index 9f4bb3a9..255835e4 100644
                                    table, &keys, &datums));
    }
  
+<<<<<<< HEAD
 @@ -2970,27 +3569,26 @@ namespace {
+=======
+@@ -2970,27 +3576,26 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    member_ids->resize(0);
    member_status->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6528,7 +6794,11 @@ index 9f4bb3a9..255835e4 100644
      member_status->push_back(member_enabled);
    }
  
+<<<<<<< HEAD
 @@ -3002,10 +3600,11 @@ namespace {
+=======
+@@ -3002,10 +3607,11 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -6542,7 +6812,11 @@ index 9f4bb3a9..255835e4 100644
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
+<<<<<<< HEAD
 @@ -3014,8 +3613,8 @@ namespace {
+=======
+@@ -3014,8 +3620,8 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6553,7 +6827,11 @@ index 9f4bb3a9..255835e4 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
+<<<<<<< HEAD
 @@ -3027,19 +3626,33 @@ namespace {
+=======
+@@ -3027,19 +3633,33 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
              .ValueOr("<error parsing data>"));
    };
  
@@ -6594,7 +6872,11 @@ index 9f4bb3a9..255835e4 100644
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
+<<<<<<< HEAD
 @@ -3047,8 +3660,9 @@ namespace {
+=======
+@@ -3047,8 +3667,9 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -6606,7 +6888,11 @@ index 9f4bb3a9..255835e4 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
+<<<<<<< HEAD
 @@ -3060,25 +3674,36 @@ namespace {
+=======
+@@ -3060,25 +3681,36 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
              .ValueOr("<error parsing data>"));
    };
  
@@ -6652,7 +6938,11 @@ index 9f4bb3a9..255835e4 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
+<<<<<<< HEAD
 @@ -3087,16 +3712,26 @@ namespace {
+=======
+@@ -3087,54 +3719,77 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
              .ValueOr("<error parsing key>"));
    };
  
@@ -6685,7 +6975,14 @@ index 9f4bb3a9..255835e4 100644
      uint32 table_id, const TableKeyInterface* table_key,
      TableDataInterface* table_data) {
    ::absl::ReaderMutexLock l(&data_lock_);
+<<<<<<< HEAD
 @@ -3106,35 +3741,47 @@ namespace {
+=======
++  LOG(ERROR) << "sample-testing-2 entering get table entries";
+   auto real_session = std::dynamic_pointer_cast<Session>(session);
+   CHECK_RETURN_IF_FALSE(real_session);
+   auto real_table_key = dynamic_cast<const TableKey*>(table_key);
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -6749,7 +7046,11 @@ index 9f4bb3a9..255835e4 100644
    table_keys->resize(0);
    table_datas->resize(0);
  
+<<<<<<< HEAD
 @@ -3148,111 +3795,147 @@ namespace {
+=======
+@@ -3148,111 +3803,147 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
    return ::util::OkStatus();
  }
  
@@ -6946,7 +7247,11 @@ index 9f4bb3a9..255835e4 100644
            if (auto notifier = weak_ref.lock()) {
              VLOG(1) << "Table counter for table " << table_id << " synced.";
              notifier->Notify();
+<<<<<<< HEAD
 @@ -3262,7 +3945,7 @@ namespace {
+=======
+@@ -3262,7 +3953,7 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
            }
          },
          nullptr));
@@ -6955,7 +7260,11 @@ index 9f4bb3a9..255835e4 100644
      // Wait until sync done or timeout.
      if (!sync_notifier->WaitForNotificationWithTimeout(timeout)) {
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
+<<<<<<< HEAD
 @@ -3270,32 +3953,43 @@ namespace {
+=======
+@@ -3270,32 +3961,43 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
               << table_id << ".";
      }
    }
@@ -7014,7 +7323,11 @@ index 9f4bb3a9..255835e4 100644
            if (auto notifier = weak_ref.lock()) {
              VLOG(1) << "Table registers for table " << table_id << " synced.";
              notifier->Notify();
+<<<<<<< HEAD
 @@ -3305,7 +3999,7 @@ namespace {
+=======
+@@ -3305,7 +4007,7 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
            }
          },
          nullptr));
@@ -7023,7 +7336,11 @@ index 9f4bb3a9..255835e4 100644
      // Wait until sync done or timeout.
      if (!sync_notifier->WaitForNotificationWithTimeout(timeout)) {
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
+<<<<<<< HEAD
 @@ -3313,20 +4007,20 @@ namespace {
+=======
+@@ -3313,20 +4015,20 @@ namespace {
+>>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
               << table_id << ".";
      }
    }
