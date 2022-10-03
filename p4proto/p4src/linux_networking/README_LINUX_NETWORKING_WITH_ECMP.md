@@ -110,7 +110,7 @@ Note: Specify the pci-bdf of the devices binded to user-space in step 1. Corresp
     gnmi-cli set "device:virtual-device,name:TAP3,pipeline-name:pipe,mempool-name:MEMPOOL0,mtu:1500,packet-dir:host,port-type:TAP"
 
 Note:
-    - Pkt-dir parameter is to specify the direction of traffic. It can take  2 values - host/network. Value 'host' specifies that traffic on this port will be internal(within the host). Value 'network' specifies that a particular port can receive traffic from network.
+    - Pkt-dir parameter is to specify the direction of traffic. It can take 2 values - host/network. Value 'host' specifies that traffic on this port will be internal(within the host). Value 'network' specifies that a particular port can receive traffic from network.
     - Ensure that no. of ports created should be power of 2 to satisfy DPDK requirements and when counting no. of ports, count control ports created along with physical link port(eg.: TAP1 and TAP2)
 ```
 #### 6. Spawn two VM's on vhost-user ports created in step 3, start the VM's and assign IP's
@@ -120,20 +120,17 @@ Note:
     ip addr add 99.0.0.2/24 dev eth0
     ip link set dev eth0 up
 ```
-#### 7. Configure TEP port of type dummy
+#### 7. Configure tunnel termination port of type dummy
 ```
     ip link add dev TEP1 type dummy
 ```
-#### 8. Bring up the TAP interfaces and assign IP to TAP interfaces
+#### 8. Bring up the TAP and dummy interfaces
 ```
     ip link set dev TAP0 up
     ip link set dev TAP1 up
     ip link set dev TAP2 up
     ip link set dev TAP3 up
     ip link set dev TEP1 up
-    ip addr add 40.1.1.1/24 dev TEP1
-    ip addr add 50.1.1.1/24 dev TAP1
-    ip addr add 60.1.1.1/24 dev TAP2
 ```
 
 #### 9. Set the pipeline and add br-int to OVS
@@ -145,9 +142,10 @@ Note:
 
 #### 10. Configure VXLAN port
 ```
-    ovs-vsctl add-port br-int vxlan1 -- set interface vxlan1 type=vxlan options:local_ip=40.1.1.1 options:remote_ip=40.1.1.2 options:dst_port=4789
+    ovs-vsctl add-port br-int vxlan1 -- set interface vxlan1 type=vxlan options:local_ip=40.1.1.1 options:remote_ip=30.1.1.1 options:dst_port=4789
 Note:
     - VXLAN destination port should always be standard port. i.e., 4789. (limitation by p4 parser)
+    - Remote IP is on another network and route to reach this can be configured statically (refer section 14.1) or dynamically learn via routing protocols supported by FRR (refer section 14.2)
 ```
 #### 11. Configure VLAN ports on TAP0 and add them to br-int
 ```
@@ -219,13 +217,56 @@ Note: Port number used in ovs-p4ctl commands are target datapath indexes(unique 
   ```
 
 #### 14. Configure ECMP for underlay connectivity
-  - **Rule for: To reach link partner multiple paths are configured, packets can be hashed to any port where the nexthop's ARP is learnt**
-  ```
-    ip route add 40.1.1.2 nexthop via 50.1.1.2 dev TAP1 weight 1 nexthop via 60.1.1.2 dev TAP2 weight 1
-  ```
+- **Rule for: To reach link partner multiple paths are configured, packets can be hashed to any port where the nexthop's ARP is learnt**
+- **Nexthop is selected based on 5 tuple parameter. Which are source IPv4 address, destination IPv4 address, protocol type, UDP source port and UDP destination port of the overlay packet**
+  - 14.1 Option1: Configure static routes.
+    ```
+    ip addr add 40.1.1.1/24 dev TEP1
+    ip addr add 50.1.1.1/24 dev TAP1
+    ip addr add 60.1.1.1/24 dev TAP2
+    ip route add 30.1.1.1 nexthop via 50.1.1.2 dev TAP1 weight 1 nexthop via 60.1.1.2 dev TAP2 weight 1
+    ```
+  - 14.2 Option2: Learn dynamic routes via FRR (iBGP route distribution)
+    - 14.2.1 Install FRR
+      - Install FRR via default package manager, like "apt install frr" for Ubuntu /"dnf install frr" for Fedora.
+      - If not, refer to official FRR documentation available at https://docs.frrouting.org/en/latest/installation.html and install according to your distribution.
+    - 14.2.2 Configure FRR
+      - Modify /etc/frr/daemons to enable bgpd daemon
+      - Restart FRR service. systemctl restart frr
+      - Start VTYSH process, which is a CLI for user configuration.
+      - Set below configuration on the DUT (host1) for Multipath scenario.
+        ```
+        interface TAP1
+        ip address 50.1.1.1/24
+        exit
+        !
+        interface TAP2
+        ip address 60.1.1.1/24
+        exit
+        !
+        interface TEP1
+        ip address 40.1.1.1/24
+        exit
+        !
+        router bgp 65000
+        bgp router-id 40.1.1.1
+        neighbor 50.1.1.2 remote-as 65000
+        neighbor 60.1.1.2 remote-as 65000
+        !
+        address-family ipv4 unicast
+          network 40.1.1.0/24
+        exit-address-family
+        ```
+      - Once Peer is also configured, we should see neighbors 50.1.1.2 and 60.1.1.2 ARP's are learnt on DUT (host1) and also route learnt on the kernel.
+        ```
+        30.1.1.0/24 nhid 72 proto bgp metric 20
+          nexthop via 60.1.1.2 dev TAP2 weight 1
+          nexthop via 50.1.1.2 dev TAP1 weight 1
+        ```
 
 #### 15. Test the ping scenarios:
   - Underlay ping for both ECMP nexthop's
   - Ping between VM's on the same host
   - Underlay ping for VxLAN tunnel termination port
-  - Overlay ping: Ping between VM's on different hosts and validate hashing 
+  - Overlay ping: Ping between VM's on different hosts and validate hashing
+

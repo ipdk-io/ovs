@@ -49,7 +49,7 @@ System under test will have above topology running P4-OVS. Link Partner can have
 ```
   p4c-dpdk --arch pna --target dpdk --p4runtime-files $OUTPUT_DIR/p4Info.txt --bf-rt-schema $OUTPUT_DIR/bf-rt.json --context $OUTPUT_DIR/context.json -o $OUTPUT_DIR/linux_networking.spec linux_networking.p4
 ```
-- Modify sample lnw.conf file available in ovs/p4proto/p4src/linux_networking/ to specify absolute path of the artifacts (json and spec files) 
+- Modify sample lnw.conf file available in ovs/p4proto/p4src/linux_networking/ to specify absolute path of the artifacts (json and spec files)
 - Generate binary execuatble using ovs-pipeline builder command below:
 ```
 ovs_pipeline_builder --p4c_conf_file=lnw.conf --bf_pipeline_config_binary_file=lnw.pb.bin
@@ -107,7 +107,7 @@ Note: Specify the pci-bdf of the devices binded to user-space in step 1. Corresp
     gnmi-cli set "device:virtual-device,name:TAP3,pipeline-name:pipe,mempool-name:MEMPOOL0,mtu:1500,packet-dir:host,port-type:TAP"
 
 Note:
-    - Pkt-dir parameter is to specify the direction of traffic. It can take  2 values - host/network. Value 'host' specifies that traffic on this port will be internal(within the host). Value 'network' specifies that a particular port can receive traffic from network.
+    - Pkt-dir parameter is to specify the direction of traffic. It can take 2 values - host/network. Value 'host' specifies that traffic on this port will be internal(within the host). Value 'network' specifies that a particular port can receive traffic from network.
     - Ensure that no. of ports created should be power of 2 to satisfy DPDK requirements and when counting no. of ports, count control ports created along with physical link port(eg.: TAP1 and TAP2)
 ```
 #### 6. Spawn two VM's on vhost-user ports created in step 3, start the VM's and assign IP's
@@ -117,14 +117,25 @@ Note:
     ip addr add 99.0.0.2/24 dev eth0
     ip link set dev eth0 up
 ```
-#### 7. Bring up the TAP interfaces and assign IP to TAP interfaces
-```
+#### 7. Bring up the TAP and or dummy interfaces
+  - 7.1 Option1: Use one of the TAP ports as tunnel termination and assign IP address to the TAP port.
+  ```
     ip link set dev TAP0 up
     ip addr add 40.1.1.1/24 dev TAP1
     ip link set dev TAP1 up
     ip link set dev TAP2 up
     ip link set dev TAP3 up
-```
+  ```
+  - 7.2 Option2: Create a dummy port and use this port for tunnel termination. Route to reach this dummy port will be statically configured on peer or this route will be re-distributed to the peer via routing protocols available from FRR.
+  ```
+    ip link add dev TEP1 type dummy
+
+    ip link set dev TAP0 up
+    ip link set dev TAP1 up
+    ip link set dev TAP2 up
+    ip link set dev TAP3 up
+    ip link set dev TEP1 up
+  ```
 
 #### 8. Set the pipeline and add br-int to OVS
 ```
@@ -134,11 +145,19 @@ Note:
 ```
 
 #### 9. Configure VXLAN port
+  - 9.1 Option1: When one of the TAP port is used for tunnel termination.
 ```
     ovs-vsctl add-port br-int vxlan1 -- set interface vxlan1 type=vxlan options:local_ip=40.1.1.1 options:remote_ip=40.1.1.2 options:dst_port=4789
 Note:
     - VXLAN destination port should always be standard port. i.e., 4789. (limitation by p4 parser)
 ```
+  - 9.2 Option2: When a dummy port is used for tunnel termination. Here remote IP is on a different network, route to reach peer need to be statically configure (refer section 13.1) or learn via FRR (refer section 13.2).
+```
+    ovs-vsctl add-port br-int vxlan1 -- set interface vxlan1 type=vxlan options:local_ip=40.1.1.1 options:remote_ip=30.1.1.1 options:dst_port=4789
+Note:
+    - VXLAN destination port should always be standard port. i.e., 4789. (limitation by p4 parser)
+```
+
 #### 10. Configure VLAN ports on TAP0 and add them to br-int
 ```
     ip link add link TAP0 name vlan1 type vlan id 1
@@ -148,7 +167,7 @@ Note:
     ip link set dev vlan1 up
     ip link set dev vlan2 up
 
-Note: 
+Note:
      - All VLAN interfaces should be created on top of TAP ports, and should always be in lowercase format "vlan+vlan_id. (Eg: vlan1, vlan2, vlan3 …. vlan4094)
 ```
 
@@ -208,7 +227,48 @@ Note: Port number used in ovs-p4ctl commands are target datapath indexes(unique 
     ovs-p4ctl add-entry br0 linux_networking_control.handle_tx_control_pkts_table "istd.input_port=5,action=linux_networking_control.set_control_dest(4)"
   ```
 
-#### 13. Test the ping scenarios:
+#### 13. Configure routes only when dummy port used for tunnel termination.
+  - 13.1 Option1: Configure static route.
+
+    ```
+    ip addr add 40.1.1.1/24 dev TEP1
+    ip addr add 50.1.1.1/24 dev TAP1
+    ip route add 30.1.1.1 nexthop via 50.1.1.2 dev TAP1
+    ```
+
+  - 13.2 Option2: Learn dynamic routes via FRR (iBGP route distribution)
+    - 13.2.1 Install FRR
+      - Install FRR via default package manager, like "apt install frr" for Ubuntu /"dnf install frr" for Fedora.
+      - If not, refer to official FRR documentation available at https://docs.frrouting.org/en/latest/installation.html and install according to your distribution.
+    - 13.2.2 Configure FRR
+      - Modify /etc/frr/daemons to enable bgpd daemon
+      - Restart FRR service. systemctl restart frr
+      - Start VTYSH process, which is a CLI provided by FRR for user configurations.
+      - Set below configuration on the DUT (host1) for singlepath scenario.
+        ```
+        interface TAP1
+        ip address 50.1.1.1/24
+        exit
+        !
+        interface TEP1
+        ip address 40.1.1.1/24
+        exit
+        !
+        router bgp 65000
+        bgp router-id 40.1.1.1
+        neighbor 50.1.1.2 remote-as 65000
+        !
+        address-family ipv4 unicast
+          network 40.1.1.0/24
+        exit-address-family
+        ```
+      - Once Peer is also configured, we should see neighbor 50.1.1.2 is learnt on DUT (host1) and also route learnt on the kernel.
+        ```
+        30.1.1.0/24 nhid 54 via 50.1.1.2 dev TAP1 proto bgp metric 20
+        ```
+
+#### 14. Test the ping scenarios:
   - Ping between VM's on the same host
   - Underlay ping
   - Overlay ping: Ping between VM's on different hosts
+
