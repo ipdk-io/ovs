@@ -2147,7 +2147,7 @@ index 4afa1532..d2e70214 100644
  };
  
 diff --git a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
-index 9f4bb3a9..b8ac3c96 100644
+index 9f4bb3a9..255835e4 100644
 --- a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 +++ b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 @@ -11,8 +11,10 @@
@@ -2912,9 +2912,8 @@ index 9f4bb3a9..b8ac3c96 100644
  
    table_keys->resize(0);
    table_datums->resize(0);
--  if (entries == 0) return ::util::OkStatus();
+   if (entries == 0) return ::util::OkStatus();
 -
-+ if (entries == 0) return ::util::OkStatus();
    // Get first entry.
    {
 -    std::unique_ptr<bfrt::BfRtTableKey> table_key;
