@@ -2149,6 +2149,7 @@ index 4afa1532..d2e70214 100644
 diff --git a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 index 9f4bb3a9..255835e4 100644
 =======
 index 9f4bb3a9..46f96c30 100644
@@ -2156,6 +2157,9 @@ index 9f4bb3a9..46f96c30 100644
 =======
 index 9f4bb3a9..01be13f4 100644
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+index 9f4bb3a9..b8ac3c96 100644
+>>>>>>> 96d478a39 (Removed unused code)
 --- a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 +++ b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 @@ -11,8 +11,10 @@
@@ -2449,6 +2453,7 @@ index 9f4bb3a9..01be13f4 100644
            bools_as_ints.push_back(b);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -238,303 +254,341 @@ inline constexpr uint64 BytesPerSecondToKbits(uint64 bytes) {
 =======
 @@ -238,303 +254,348 @@ inline constexpr uint64 BytesPerSecondToKbits(uint64 bytes) {
@@ -2456,6 +2461,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -238,303 +254,343 @@ inline constexpr uint64 BytesPerSecondToKbits(uint64 bytes) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -238,303 +254,341 @@ inline constexpr uint64 BytesPerSecondToKbits(uint64 bytes) {
+>>>>>>> 96d478a39 (Removed unused code)
    return s;
  }
  
@@ -2898,6 +2906,7 @@ index 9f4bb3a9..01be13f4 100644
 <<<<<<< HEAD
 <<<<<<< HEAD
 +  
+<<<<<<< HEAD
 =======
 +
 =======
@@ -2906,6 +2915,8 @@ index 9f4bb3a9..01be13f4 100644
 +  //const tdi::Device *device = nullptr;
 +  //tdi::DevMgr::getInstance().deviceGet(dev_id, &device);
 >>>>>>> 02421bbf8 (Implementation of flow dump for DPDK)
+=======
+>>>>>>> 96d478a39 (Removed unused code)
 +  std::unique_ptr<tdi::Target> dev_tgt;
 +  device->createTarget(&dev_tgt);
 +  uint32 entries = 0, actual = 0;
@@ -3036,6 +3047,7 @@ index 9f4bb3a9..01be13f4 100644
                         std::make_move_iterator(keys.end()));
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -546,96 +600,139 @@ template <typename T>
 =======
 @@ -546,96 +607,139 @@ template <typename T>
@@ -3043,6 +3055,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -546,96 +602,139 @@ template <typename T>
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -546,96 +600,139 @@ template <typename T>
+>>>>>>> 96d478a39 (Removed unused code)
    CHECK(table_keys->size() == table_datums->size());
    CHECK(table_keys->size() == entries);
  
@@ -3222,6 +3237,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -644,18 +741,30 @@ template <typename T>
 =======
 @@ -644,18 +748,30 @@ template <typename T>
@@ -3229,6 +3245,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -644,18 +743,30 @@ template <typename T>
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -644,18 +741,30 @@ template <typename T>
+>>>>>>> 96d478a39 (Removed unused code)
  
  ::util::Status TableKey::GetTernary(int id, std::string* value,
                                      std::string* mask) const {
@@ -3268,6 +3287,7 @@ index 9f4bb3a9..01be13f4 100644
    }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -665,16 +774,25 @@ template <typename T>
 =======
 @@ -665,16 +781,25 @@ template <typename T>
@@ -3275,6 +3295,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -665,16 +776,25 @@ template <typename T>
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -665,16 +774,25 @@ template <typename T>
+>>>>>>> 96d478a39 (Removed unused code)
  
  ::util::Status TableKey::GetLpm(int id, std::string* prefix,
                                  uint16* prefix_length) const {
@@ -3309,6 +3332,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -683,91 +801,90 @@ template <typename T>
 =======
 @@ -683,91 +808,90 @@ template <typename T>
@@ -3316,6 +3340,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -683,91 +803,90 @@ template <typename T>
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -683,91 +801,90 @@ template <typename T>
+>>>>>>> 96d478a39 (Removed unused code)
  
  ::util::Status TableKey::GetRange(int id, std::string* low,
                                    std::string* high) const {
@@ -3458,6 +3485,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -776,31 +893,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 =======
 @@ -776,31 +900,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
@@ -3465,6 +3493,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -776,31 +895,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -776,31 +893,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 96d478a39 (Removed unused code)
  }
  
  ::util::Status TableData::GetActionMemberId(uint64* action_member_id) const {
@@ -3499,6 +3530,7 @@ index 9f4bb3a9..01be13f4 100644
  ::util::Status TableData::SetSelectorGroupId(uint64 selector_group_id) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -808,31 +901,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 =======
 @@ -808,31 +908,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
@@ -3506,6 +3538,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -808,31 +903,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -808,31 +901,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 96d478a39 (Removed unused code)
  }
  
  ::util::Status TableData::GetSelectorGroupId(uint64* selector_group_id) const {
@@ -3540,6 +3575,7 @@ index 9f4bb3a9..01be13f4 100644
  // The P4Runtime `CounterData` message has no mechanism to differentiate between
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -840,36 +909,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 =======
 @@ -840,36 +916,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
@@ -3547,6 +3583,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -840,36 +911,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -840,36 +909,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 96d478a39 (Removed unused code)
  // recognize a counter reset (set, e.g., bytes to zero) request from a set
  // request for a packet-only counter. Therefore we have to be careful when
  // making set calls for those fields against the SDE.
@@ -3604,6 +3643,7 @@ index 9f4bb3a9..01be13f4 100644
  }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -877,80 +936,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 =======
 @@ -877,80 +943,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
@@ -3611,6 +3651,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -877,80 +938,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -877,80 +936,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+>>>>>>> 96d478a39 (Removed unused code)
  ::util::Status TableData::GetCounterData(uint64* bytes, uint64* packets) const {
    CHECK_RETURN_IF_FALSE(bytes);
    CHECK_RETURN_IF_FALSE(packets);
@@ -3724,6 +3767,7 @@ index 9f4bb3a9..01be13f4 100644
  }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -961,18 +1003,19 @@ namespace {
 =======
 @@ -961,18 +1010,19 @@ namespace {
@@ -3731,6 +3775,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -961,18 +1005,19 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -961,18 +1003,19 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
  bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
                                       bool up, void* cookie) {
    absl::Time timestamp = absl::Now();
@@ -3756,6 +3803,7 @@ index 9f4bb3a9..01be13f4 100644
      case kOneGigBps:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -992,6 +1035,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
 =======
 @@ -992,6 +1042,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
@@ -3763,6 +3811,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -992,6 +1037,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -992,6 +1035,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+>>>>>>> 96d478a39 (Removed unused code)
    }
  }
  
@@ -3773,6 +3824,7 @@ index 9f4bb3a9..01be13f4 100644
      case TRI_STATE_UNKNOWN:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1005,6 +1050,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
 =======
 @@ -1005,6 +1057,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
@@ -3780,6 +3832,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1005,6 +1052,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1005,6 +1050,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+>>>>>>> 96d478a39 (Removed unused code)
    }
  }
  
@@ -3789,6 +3844,7 @@ index 9f4bb3a9..01be13f4 100644
    if (fec_mode == FEC_MODE_UNKNOWN || fec_mode == FEC_MODE_OFF) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1043,52 +1089,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
 =======
 @@ -1043,52 +1096,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
@@ -3796,6 +3852,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1043,52 +1091,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1043,52 +1089,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+>>>>>>> 96d478a39 (Removed unused code)
            << ".";
    }
  }
@@ -3883,6 +3942,7 @@ index 9f4bb3a9..01be13f4 100644
    PortState state = up ? PORT_STATE_UP : PORT_STATE_DOWN;
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1103,117 +1154,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
 =======
 @@ -1103,117 +1161,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
@@ -3890,6 +3950,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1103,117 +1156,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1103,117 +1154,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
+>>>>>>> 96d478a39 (Removed unused code)
    }
  }
  
@@ -4208,6 +4271,7 @@ index 9f4bb3a9..01be13f4 100644
  }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1221,6 +1443,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
 =======
 @@ -1221,6 +1450,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
@@ -4215,6 +4279,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1221,6 +1445,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1221,6 +1443,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
+>>>>>>> 96d478a39 (Removed unused code)
  // Helper functions around reading the switch SKU.
  namespace {
  std::string GetBfChipFamilyAndType(int device) {
@@ -4224,6 +4291,7 @@ index 9f4bb3a9..01be13f4 100644
      case BF_DEV_BFNT10064Q:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1284,9 +1507,12 @@ std::string GetBfChipFamilyAndType(int device) {
 =======
 @@ -1284,9 +1514,12 @@ std::string GetBfChipFamilyAndType(int device) {
@@ -4231,6 +4299,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1284,9 +1509,12 @@ std::string GetBfChipFamilyAndType(int device) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1284,9 +1507,12 @@ std::string GetBfChipFamilyAndType(int device) {
+>>>>>>> 96d478a39 (Removed unused code)
      default:
        return "UNKNOWN";
    }
@@ -4245,6 +4316,7 @@ index 9f4bb3a9..01be13f4 100644
    switch (revision_number) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1297,22 +1523,26 @@ std::string GetBfChipRevision(int device) {
 =======
 @@ -1297,22 +1530,26 @@ std::string GetBfChipRevision(int device) {
@@ -4252,6 +4324,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1297,22 +1525,26 @@ std::string GetBfChipRevision(int device) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1297,22 +1523,26 @@ std::string GetBfChipRevision(int device) {
+>>>>>>> 96d478a39 (Removed unused code)
      default:
        return "UNKOWN";
    }
@@ -4282,6 +4357,7 @@ index 9f4bb3a9..01be13f4 100644
  #elif defined(SDE_9_2_0)
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1332,7 +1562,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 =======
 @@ -1332,7 +1569,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
@@ -4289,6 +4365,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1332,7 +1564,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1332,7 +1562,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 96d478a39 (Removed unused code)
  #endif
  }
  
@@ -4299,6 +4378,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(port >= 0)
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1358,35 +1588,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 =======
 @@ -1358,35 +1595,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
@@ -4306,6 +4386,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1358,35 +1590,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1358,35 +1588,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 96d478a39 (Removed unused code)
        << channel << " on dev " << device << ".";
  
    bf_dev_port_t dev_port;
@@ -4358,6 +4441,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(sde_install_path != "")
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1408,7 +1647,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 =======
 @@ -1408,7 +1654,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
@@ -4365,6 +4449,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1408,7 +1649,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1408,7 +1647,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 96d478a39 (Removed unused code)
    std::string bf_sysfs_fname;
    {
      char buf[128] = {};
@@ -4375,6 +4462,7 @@ index 9f4bb3a9..01be13f4 100644
    absl::StrAppend(&bf_sysfs_fname, "/dev_add");
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1417,55 +1656,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 =======
 @@ -1417,55 +1663,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
@@ -4382,6 +4470,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1417,55 +1658,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1417,55 +1656,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 96d478a39 (Removed unused code)
      // Override previous parsing if bf_kpkt KLM was loaded.
      LOG(INFO)
          << "kernel mode packet driver present, forcing kernel_pkt option!";
@@ -4460,6 +4551,7 @@ index 9f4bb3a9..01be13f4 100644
        const auto& pipeline = program.pipelines(j);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1496,10 +1738,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 =======
 @@ -1496,10 +1745,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
@@ -4467,6 +4559,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1496,10 +1740,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1496,10 +1738,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 96d478a39 (Removed unused code)
      }
    }
  
@@ -4481,6 +4576,7 @@ index 9f4bb3a9..01be13f4 100644
    // TODO(max): create story around SDE logs. How to get them into glog? What
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1510,114 +1751,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 =======
 @@ -1510,114 +1758,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
@@ -4488,6 +4584,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1510,114 +1753,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1510,114 +1751,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+>>>>>>> 96d478a39 (Removed unused code)
        bf_sys_log_level_set(BF_MOD_PKT, BF_LOG_DEST_STDOUT, BF_LOG_WARN) == 0);
    CHECK_RETURN_IF_FALSE(
        bf_sys_log_level_set(BF_MOD_PIPE, BF_LOG_DEST_STDOUT, BF_LOG_WARN) == 0);
@@ -4645,6 +4744,7 @@ index 9f4bb3a9..01be13f4 100644
    auto rx_writer = gtl::FindOrNull(device_to_packet_rx_writer_, device);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1635,7 +1885,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
 =======
 @@ -1635,7 +1892,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
@@ -4652,6 +4752,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1635,7 +1887,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1635,7 +1885,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -4662,6 +4765,7 @@ index 9f4bb3a9..01be13f4 100644
                                                  uint32 status) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1647,34 +1897,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
 =======
 @@ -1647,34 +1904,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
@@ -4669,6 +4773,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1647,34 +1899,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1647,34 +1897,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
+>>>>>>> 96d478a39 (Removed unused code)
    return bf_pkt_free(device, pkt);
  }
  
@@ -4714,6 +4821,7 @@ index 9f4bb3a9..01be13f4 100644
    // Data: $MULTICAST_NODE_L1_XID_VALID
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1684,6 +1928,7 @@ namespace {
 =======
 @@ -1684,6 +1935,7 @@ namespace {
@@ -4721,6 +4829,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1684,6 +1930,7 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1684,6 +1928,7 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
  
    LOG(INFO) << "Multicast group id " << multicast_group_id << " has "
              << mc_node_list.size() << " nodes.";
@@ -4730,6 +4841,7 @@ index 9f4bb3a9..01be13f4 100644
    }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1691,12 +1936,12 @@ namespace {
 =======
 @@ -1691,12 +1943,12 @@ namespace {
@@ -4737,6 +4849,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1691,12 +1938,12 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1691,12 +1936,12 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -4756,6 +4871,7 @@ index 9f4bb3a9..01be13f4 100644
    RETURN_IF_ERROR(GetField(*table_data, kMcReplicationId, &rid));
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1715,41 +1960,44 @@ namespace {
 =======
 @@ -1715,41 +1967,44 @@ namespace {
@@ -4763,6 +4879,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1715,41 +1962,44 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1715,41 +1960,44 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
  }
  }  // namespace
  
@@ -4827,6 +4946,7 @@ index 9f4bb3a9..01be13f4 100644
      LOG(INFO) << "###################";
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1757,51 +2005,90 @@ namespace {
 =======
 @@ -1757,51 +2012,90 @@ namespace {
@@ -4834,6 +4954,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1757,51 +2007,90 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1757,51 +2005,90 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -4953,6 +5076,7 @@ index 9f4bb3a9..01be13f4 100644
    ::absl::ReaderMutexLock l(&data_lock_);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1809,22 +2096,25 @@ namespace {
 =======
 @@ -1809,22 +2103,25 @@ namespace {
@@ -4960,6 +5084,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1809,22 +2098,25 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1809,22 +2096,25 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -4998,6 +5125,7 @@ index 9f4bb3a9..01be13f4 100644
        SetField(table_data.get(), kMcReplicationId, mc_replication_id));
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1832,68 +2122,107 @@ namespace {
 =======
 @@ -1832,68 +2129,107 @@ namespace {
@@ -5005,6 +5133,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1832,68 +2124,107 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1832,68 +2122,107 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeLagId, mc_lag_ids));
    // Data: $DEV_PORT
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeDevPort, ports));
@@ -5146,6 +5277,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(replication_id);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1903,51 +2232,69 @@ namespace {
 =======
 @@ -1903,51 +2239,69 @@ namespace {
@@ -5153,6 +5285,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1903,51 +2234,69 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1903,51 +2232,69 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5250,6 +5385,7 @@ index 9f4bb3a9..01be13f4 100644
    std::vector<bool> l1_xid_valid_list;
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1959,7 +2306,7 @@ namespace {
 =======
 @@ -1959,7 +2313,7 @@ namespace {
@@ -5257,6 +5393,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1959,7 +2308,7 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1959,7 +2306,7 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
      l1_xid_list.push_back(0);
    }
    // Key: $MGID
@@ -5267,6 +5406,7 @@ index 9f4bb3a9..01be13f4 100644
    // Data: $MULTICAST_NODE_L1_XID_VALID
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -1968,54 +2315,73 @@ namespace {
 =======
 @@ -1968,54 +2322,73 @@ namespace {
@@ -5274,6 +5414,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -1968,54 +2317,73 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -1968,54 +2315,73 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    // Data: $MULTICAST_NODE_L1_XID
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeL1Xid, l1_xid_list));
  
@@ -5373,6 +5516,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(group_ids);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2024,39 +2390,49 @@ namespace {
 =======
 @@ -2024,39 +2397,49 @@ namespace {
@@ -5380,6 +5524,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2024,39 +2392,49 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2024,39 +2390,49 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5450,6 +5597,7 @@ index 9f4bb3a9..01be13f4 100644
    }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2067,24 +2443,32 @@ namespace {
 =======
 @@ -2067,24 +2450,32 @@ namespace {
@@ -5457,6 +5605,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2067,24 +2445,32 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2067,24 +2443,32 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -5503,6 +5654,7 @@ index 9f4bb3a9..01be13f4 100644
    // Data: $session_enable
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2100,62 +2484,85 @@ namespace {
 =======
 @@ -2100,62 +2491,85 @@ namespace {
@@ -5510,6 +5662,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2100,62 +2486,85 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2100,62 +2484,85 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    // Data: $max_pkt_len
    RETURN_IF_ERROR(SetField(table_data.get(), "$max_pkt_len", max_pkt_len));
  
@@ -5625,6 +5780,7 @@ index 9f4bb3a9..01be13f4 100644
      std::vector<int>* max_pkt_lens) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2165,29 +2572,43 @@ namespace {
 =======
 @@ -2165,29 +2579,43 @@ namespace {
@@ -5632,6 +5788,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2165,29 +2574,43 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2165,29 +2572,43 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    CHECK_RETURN_IF_FALSE(max_pkt_lens);
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
@@ -5692,6 +5851,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2196,32 +2617,30 @@ namespace {
 =======
 @@ -2196,32 +2624,30 @@ namespace {
@@ -5699,6 +5859,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2196,32 +2619,30 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2196,32 +2617,30 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    coss->resize(0);
    max_pkt_lens->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5741,6 +5904,7 @@ index 9f4bb3a9..01be13f4 100644
          << "Found a unicase egress port that is not set valid.";
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2235,51 +2654,66 @@ namespace {
 =======
 @@ -2235,51 +2661,66 @@ namespace {
@@ -5748,6 +5912,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2235,51 +2656,66 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2235,51 +2654,66 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -5839,6 +6006,7 @@ index 9f4bb3a9..01be13f4 100644
      std::vector<absl::optional<uint64>>* byte_counts,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2292,29 +2726,41 @@ namespace {
 =======
 @@ -2292,29 +2733,41 @@ namespace {
@@ -5846,6 +6014,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2292,29 +2728,41 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2292,29 +2726,41 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5902,6 +6073,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2322,31 +2768,31 @@ namespace {
 =======
 @@ -2322,31 +2775,31 @@ namespace {
@@ -5909,6 +6081,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2322,31 +2770,31 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2322,31 +2768,31 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    byte_counts->resize(0);
    packet_counts->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5960,6 +6135,7 @@ index 9f4bb3a9..01be13f4 100644
    }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2362,87 +2808,122 @@ namespace {
 =======
 @@ -2362,87 +2815,122 @@ namespace {
@@ -5967,6 +6143,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2362,87 +2810,122 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2362,87 +2808,122 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
  // Helper function to get the field ID of the "f1" register data field.
  // TODO(max): Maybe use table name and strip off "pipe." at the beginning?
  // std::string table_name;
@@ -6128,6 +6307,7 @@ index 9f4bb3a9..01be13f4 100644
      absl::Duration timeout) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2452,58 +2933,73 @@ namespace {
 =======
 @@ -2452,58 +2940,73 @@ namespace {
@@ -6135,6 +6315,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2452,58 +2935,73 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2452,58 +2933,73 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6234,6 +6417,7 @@ index 9f4bb3a9..01be13f4 100644
      }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2515,21 +3011,21 @@ namespace {
 =======
 @@ -2515,21 +3018,21 @@ namespace {
@@ -6241,6 +6425,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2515,21 +3013,21 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2515,21 +3011,21 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -6272,6 +6459,7 @@ index 9f4bb3a9..01be13f4 100644
    if (in_pps) {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2549,36 +3045,63 @@ namespace {
 =======
 @@ -2549,36 +3052,63 @@ namespace {
@@ -6279,6 +6467,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2549,36 +3047,63 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2549,36 +3045,63 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
                               BytesPerSecondToKbits(pburst)));
    }
  
@@ -6359,6 +6550,7 @@ index 9f4bb3a9..01be13f4 100644
      std::vector<uint64>* cbursts, std::vector<uint64>* pirs,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2592,26 +3115,37 @@ namespace {
 =======
 @@ -2592,26 +3122,37 @@ namespace {
@@ -6366,6 +6558,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2592,26 +3117,37 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2592,26 +3115,37 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6418,6 +6613,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2622,55 +3156,58 @@ namespace {
 =======
 @@ -2622,55 +3163,58 @@ namespace {
@@ -6425,6 +6621,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2622,55 +3158,58 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2622,55 +3156,58 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    pbursts->resize(0);
    in_pps->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6502,6 +6701,7 @@ index 9f4bb3a9..01be13f4 100644
        }
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2687,8 +3224,8 @@ namespace {
 =======
 @@ -2687,8 +3231,8 @@ namespace {
@@ -6509,6 +6709,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2687,8 +3226,8 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2687,8 +3224,8 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -6521,6 +6724,7 @@ index 9f4bb3a9..01be13f4 100644
    auto real_session = std::dynamic_pointer_cast<Session>(session);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2696,12 +3233,14 @@ namespace {
 =======
 @@ -2696,12 +3240,14 @@ namespace {
@@ -6528,6 +6732,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2696,12 +3235,14 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2696,12 +3233,14 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6548,6 +6755,7 @@ index 9f4bb3a9..01be13f4 100644
          DumpTableMetadata(table).ValueOr("<error reading table>"),
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2710,54 +3249,63 @@ namespace {
 =======
 @@ -2710,54 +3256,63 @@ namespace {
@@ -6555,6 +6763,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2710,54 +3251,63 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2710,54 +3249,63 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
          DumpTableData(real_table_data->table_data_.get())
              .ValueOr("<error parsing data>"));
    };
@@ -6644,6 +6855,7 @@ index 9f4bb3a9..01be13f4 100644
      return absl::StrCat(
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2767,18 +3315,28 @@ namespace {
 =======
 @@ -2767,18 +3322,28 @@ namespace {
@@ -6651,6 +6863,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2767,18 +3317,28 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2767,18 +3315,28 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    };
  
    // Key: $ACTION_MEMBER_ID
@@ -6689,6 +6904,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(member_ids);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2787,24 +3345,34 @@ namespace {
 =======
 @@ -2787,24 +3352,34 @@ namespace {
@@ -6696,6 +6912,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2787,24 +3347,34 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2787,24 +3345,34 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6744,6 +6963,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2812,8 +3380,8 @@ namespace {
 =======
 @@ -2812,8 +3387,8 @@ namespace {
@@ -6751,6 +6971,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2812,8 +3382,8 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2812,8 +3380,8 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    table_datas->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
      // Key: $sid
@@ -6763,6 +6986,7 @@ index 9f4bb3a9..01be13f4 100644
      // Data: action params
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2827,21 +3395,21 @@ namespace {
 =======
 @@ -2827,21 +3402,21 @@ namespace {
@@ -6770,6 +6994,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2827,21 +3397,21 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2827,21 +3395,21 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -6801,6 +7028,7 @@ index 9f4bb3a9..01be13f4 100644
    auto dump_args = [&]() -> std::string {
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2854,7 +3422,7 @@ namespace {
 =======
 @@ -2854,7 +3429,7 @@ namespace {
@@ -6808,6 +7036,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2854,7 +3424,7 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2854,7 +3422,7 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6818,6 +7049,7 @@ index 9f4bb3a9..01be13f4 100644
    // Data: $ACTION_MEMBER_STATUS
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2864,53 +3432,63 @@ namespace {
 =======
 @@ -2864,53 +3439,63 @@ namespace {
@@ -6825,6 +7057,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2864,53 +3434,63 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2864,53 +3432,63 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    RETURN_IF_ERROR(
        SetField(table_data.get(), "$MAX_GROUP_SIZE", max_group_size));
  
@@ -6910,6 +7145,7 @@ index 9f4bb3a9..01be13f4 100644
      return absl::StrCat(
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2920,18 +3498,28 @@ namespace {
 =======
 @@ -2920,18 +3505,28 @@ namespace {
@@ -6917,6 +7153,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2920,18 +3500,28 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2920,18 +3498,28 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6954,6 +7193,7 @@ index 9f4bb3a9..01be13f4 100644
      std::vector<std::vector<uint32>>* member_ids,
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2944,24 +3532,35 @@ namespace {
 =======
 @@ -2944,24 +3539,35 @@ namespace {
@@ -6961,6 +7201,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2944,24 +3534,35 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2944,24 +3532,35 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -7010,6 +7253,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -2970,27 +3569,26 @@ namespace {
 =======
 @@ -2970,27 +3576,26 @@ namespace {
@@ -7017,6 +7261,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -2970,27 +3571,26 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -2970,27 +3569,26 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    member_ids->resize(0);
    member_status->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -7054,6 +7301,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3002,10 +3600,11 @@ namespace {
 =======
 @@ -3002,10 +3607,11 @@ namespace {
@@ -7061,6 +7309,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3002,10 +3602,11 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3002,10 +3600,11 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -7076,6 +7327,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(real_session);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3014,8 +3613,8 @@ namespace {
 =======
 @@ -3014,8 +3620,8 @@ namespace {
@@ -7083,6 +7335,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3014,8 +3615,8 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3014,8 +3613,8 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -7095,6 +7350,7 @@ index 9f4bb3a9..01be13f4 100644
      return absl::StrCat(
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3027,19 +3626,33 @@ namespace {
 =======
 @@ -3027,19 +3633,33 @@ namespace {
@@ -7102,6 +7358,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3027,19 +3628,33 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3027,19 +3626,33 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
              .ValueOr("<error parsing data>"));
    };
  
@@ -7144,6 +7403,7 @@ index 9f4bb3a9..01be13f4 100644
    CHECK_RETURN_IF_FALSE(real_session);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3047,8 +3660,9 @@ namespace {
 =======
 @@ -3047,8 +3667,9 @@ namespace {
@@ -7151,6 +7411,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3047,8 +3662,9 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3047,8 +3660,9 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -7164,6 +7427,7 @@ index 9f4bb3a9..01be13f4 100644
      return absl::StrCat(
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3060,25 +3674,36 @@ namespace {
 =======
 @@ -3060,25 +3681,36 @@ namespace {
@@ -7171,6 +7435,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3060,25 +3676,36 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3060,25 +3674,36 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
              .ValueOr("<error parsing data>"));
    };
  
@@ -7218,6 +7485,7 @@ index 9f4bb3a9..01be13f4 100644
      return absl::StrCat(
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3087,16 +3712,26 @@ namespace {
 =======
 @@ -3087,54 +3719,77 @@ namespace {
@@ -7225,6 +7493,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3087,16 +3714,26 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3087,16 +3712,26 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
              .ValueOr("<error parsing key>"));
    };
  
@@ -7259,6 +7530,7 @@ index 9f4bb3a9..01be13f4 100644
    ::absl::ReaderMutexLock l(&data_lock_);
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3106,35 +3741,47 @@ namespace {
 =======
 +  LOG(ERROR) << "sample-testing-2 entering get table entries";
@@ -7269,6 +7541,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3106,35 +3743,47 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3106,35 +3741,47 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -7334,6 +7609,7 @@ index 9f4bb3a9..01be13f4 100644
  
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3148,111 +3795,147 @@ namespace {
 =======
 @@ -3148,111 +3803,147 @@ namespace {
@@ -7341,6 +7617,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3148,111 +3797,147 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3148,111 +3795,147 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
    return ::util::OkStatus();
  }
  
@@ -7539,6 +7818,7 @@ index 9f4bb3a9..01be13f4 100644
              notifier->Notify();
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3262,7 +3945,7 @@ namespace {
 =======
 @@ -3262,7 +3953,7 @@ namespace {
@@ -7546,6 +7826,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3262,7 +3947,7 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3262,7 +3945,7 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
            }
          },
          nullptr));
@@ -7556,6 +7839,7 @@ index 9f4bb3a9..01be13f4 100644
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3270,32 +3953,43 @@ namespace {
 =======
 @@ -3270,32 +3961,43 @@ namespace {
@@ -7563,6 +7847,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3270,32 +3955,43 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3270,32 +3953,43 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
               << table_id << ".";
      }
    }
@@ -7623,6 +7910,7 @@ index 9f4bb3a9..01be13f4 100644
              notifier->Notify();
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3305,7 +3999,7 @@ namespace {
 =======
 @@ -3305,7 +4007,7 @@ namespace {
@@ -7630,6 +7918,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3305,7 +4001,7 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3305,7 +3999,7 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
            }
          },
          nullptr));
@@ -7640,6 +7931,7 @@ index 9f4bb3a9..01be13f4 100644
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 @@ -3313,20 +4007,20 @@ namespace {
 =======
 @@ -3313,20 +4015,20 @@ namespace {
@@ -7647,6 +7939,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 @@ -3313,20 +4009,20 @@ namespace {
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+@@ -3313,20 +4007,20 @@ namespace {
+>>>>>>> 96d478a39 (Removed unused code)
               << table_id << ".";
      }
    }
