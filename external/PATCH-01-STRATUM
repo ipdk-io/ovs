@@ -2150,6 +2150,7 @@ diff --git a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc b/stratum/hal/lib/barefo
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 index 9f4bb3a9..255835e4 100644
 =======
 index 9f4bb3a9..46f96c30 100644
@@ -2160,6 +2161,9 @@ index 9f4bb3a9..01be13f4 100644
 =======
 index 9f4bb3a9..b8ac3c96 100644
 >>>>>>> 96d478a39 (Removed unused code)
+=======
+index 9f4bb3a9..255835e4 100644
+>>>>>>> fa5dc410c (deleted the additional line)
 --- a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 +++ b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 @@ -11,8 +11,10 @@
@@ -2950,6 +2954,7 @@ index 9f4bb3a9..b8ac3c96 100644
    table_keys->resize(0);
    table_datums->resize(0);
 <<<<<<< HEAD
+<<<<<<< HEAD
    if (entries == 0) return ::util::OkStatus();
 -
 =======
@@ -2964,6 +2969,10 @@ index 9f4bb3a9..b8ac3c96 100644
 -
 + if (entries == 0) return ::util::OkStatus();
 >>>>>>> dcc9dc28b (These commit contains the changes mentioned in the PR comments)
+=======
+   if (entries == 0) return ::util::OkStatus();
+-
+>>>>>>> fa5dc410c (deleted the additional line)
    // Get first entry.
    {
 -    std::unique_ptr<bfrt::BfRtTableKey> table_key;
