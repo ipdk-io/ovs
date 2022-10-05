@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 diff --git a/stratum/glue/status/status_macros.h b/stratum/glue/status/status_macros.h
 index cf8723d2..695a0365 100644
 --- a/stratum/glue/status/status_macros.h
