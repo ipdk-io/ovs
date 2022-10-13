@@ -170,11 +170,7 @@
       "name": "NS_VM0",
       "veth_if": "veth_vm0",
       "peer_name": "veth_host_vm0",
-      "ip": "99.0.0.3",
-      "cmds": [
-        "ip addr add 99.0.0.3/24 dev veth_vm0",
-        "ip link set dev veth_vm0 up"
-      ],
+      "ip": "99.0.0.3/24",
       "remote_ping": [
         "99.0.0.1",
         "99.0.0.2"
@@ -185,11 +181,7 @@
       "name": "NS_VM1",
       "veth_if": "veth_vm1",
       "peer_name": "veth_host_vm1",
-      "ip": "99.0.0.4",
-      "cmds": [
-        "ip addr add 99.0.0.4/24 dev veth_vm1",
-        "ip link set dev veth_vm1 up"
-      ],
+      "ip": "99.0.0.4/24",
       "remote_ping": [
         "99.0.0.1",
         "99.0.0.2"
@@ -208,4 +200,4 @@
       "vxlan1"
     ]
   }
-}
+} 

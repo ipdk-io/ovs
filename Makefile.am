@@ -118,6 +118,7 @@ EXTRA_DIST = \
 	p4ovs_env_setup.sh \
 	uninstall_dep_packages.sh \
 	build-p4ovs.sh \
+	set_hugepages.sh \
 	component.sh \
 	fix_sde_libs.sh \
 	OVS_WITH_P4_ARCH.rst \
@@ -194,12 +195,19 @@ EXTRA_DIST = \
 	ptf_tests/common/config/lnt_2vm_vxlan_2nsvm_5min_ping.json \
 	ptf_tests/common/config/lnt_1hotplugvm_vxlan_1nsvm.json \
 	ptf_tests/common/config/config_control_port_with_link.json \
+	ptf_tests/common/config/ct_multiple_connection_tap_link_ports.json \
+  ptf_tests/common/config/ct_multiple_connection_vhost_ports_with_netperf.json \
+  ptf_tests/common/config/ct_rule_del_add_test.json \
+  ptf_tests/common/config/ct_single_connection_tap_link_ports.json \
+  ptf_tests/common/config/ct_single_connection_vhost_ports_with_netperf.json \
+  ptf_tests/common/config/nt_ct_unsupported_arguments_values.json \
+	ptf_tests/common/config/ct_timer_test.json \
 	ptf_tests/common/config/dpdk_l3em_indirect_counter_psa.json \
 	ptf_tests/common/config/dpdk_l3em_indirect_counter_pna.json \
 	ptf_tests/common/config/dpdk_l3em_indirect_counter_help.json \
 	ptf_tests/common/config/l3_dpdk_port_flapping_with_link_ports.json \
-    ptf_tests/common/config/l2l3_unsupport_tbl_port_match_action.json \
-    ptf_tests/common/config/l2l3_unsupport_tbl_port_proto_action.json \
+  ptf_tests/common/config/l2l3_unsupport_tbl_port_match_action.json \
+  ptf_tests/common/config/l2l3_unsupport_tbl_port_proto_action.json \
 	ptf_tests/common/config/LNT_Hot_Plug_Add_Remove.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_ping.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_del_add.json \
@@ -225,7 +233,10 @@ EXTRA_DIST = \
 	ptf_tests/common/p4c_artifacts/linux_networking/tunnel.p4 \
 	ptf_tests/common/p4c_artifacts/l3_exact_match_add_del/l3_exact_match_add_del.conf \
 	ptf_tests/common/p4c_artifacts/l3_exact_match_add_del/l3_exact_match_add_del.p4 \
-	ptf_tests/common/p4c_artifacts/l3em_indirect_counter_psa/l3em_indirect_counter_psa.p4\
+	ptf_tests/common/p4c_artifacts/pna_tcp_connection_tracking/pipe/.gitkeep \
+        ptf_tests/common/p4c_artifacts/pna_tcp_connection_tracking/pna_tcp_connection_tracking.conf \
+        ptf_tests/common/p4c_artifacts/pna_tcp_connection_tracking/pna_tcp_connection_tracking.p4 \
+	ptf_tests/common/p4c_artifacts/l3em_indirect_counter_psa/l3em_indirect_counter_psa.p4 \
 	ptf_tests/common/p4c_artifacts/l3em_indirect_counter_psa/l3em_indirect_counter_psa.conf \
 	ptf_tests/common/p4c_artifacts/l3em_indirect_counter_pna/l3em_indirect_counter_pna.p4 \
 	ptf_tests/common/p4c_artifacts/l3em_indirect_counter_pna/l3em_indirect_counter_pna.conf \
@@ -279,17 +290,28 @@ EXTRA_DIST = \
 	ptf_tests/tests/lnt_2vm_vxlan_2nsvm_5min_ping.py \
 	ptf_tests/tests/lnt_1hotplugvm_vxlan_1nsvm.py \
 	ptf_tests/tests/config_control_port_with_link.py \
-	ptf_tests/tests/l3_dpdk_port_flapping_with_link_ports.py \
-    ptf_tests/tests/l2l3_unsupport_tbl_port_match_action.py \
-    ptf_tests/tests/l2l3_unsupport_tbl_port_proto_action.py \
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multi_port.py \
 	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multiple_times.py \
-    ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
+  ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
+	ptf_tests/tests/ct_multiple_connection_tap_link_ports.py \
+  ptf_tests/tests/ct_multiple_connection_vhost_ports_with_netperf.py \
+  ptf_tests/tests/ct_rule_del_add_test.py \
+  ptf_tests/tests/ct_single_connection_tap_link_ports.py \
+  ptf_tests/tests/ct_single_connection_vhost_ports_with_netperf.py \
+  ptf_tests/tests/nt_ct_unsupported_arguments_values.py \
+	ptf_tests/tests/ct_timer_test.py \
+	ptf_tests/tests/l3_dpdk_port_flapping_with_link_ports.py \
+  ptf_tests/tests/l2l3_unsupport_tbl_port_match_action.py \
+  ptf_tests/tests/l2l3_unsupport_tbl_port_proto_action.py \
+	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multi_port.py \
+	ptf_tests/tests/LNT_Hot_Plug_Add_Remove_multiple_times.py \
+  ptf_tests/tests/LNT_ECMP_2VM_2Host_ping.py \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_del_add.py \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_hotplug.py \
 	ptf_tests/tests/LNT_ECMP_2VM_2Host_netperf.py \
 	ptf_tests/tests/LNT_ECMP_2HotPlugVM_2Host_netperf.py \ 
-    ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
+  ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
+  ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
 	ptf_tests/common/lib/tcpdump.py \
 	ptf_tests/common/utils/tcpdump_utils.py \
 	ptf_tests/tests/mtu_config_test_with_tap.py \

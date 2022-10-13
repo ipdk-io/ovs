@@ -260,13 +260,13 @@ class LNT_Ctrl_Vhost_Port_Flap(BaseTest):
             if not gnmi_cli_utils.ip_set_dev_up(self.link_port_list[0]['control-port'], status_to_change="down"):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail("Failed to bring up {self.link_port_list[0]['control-port']")
-       
+            
             print (f"Verify traffic drop after bring down control port")
             for ns in self.config_data['net_namespace']:
                 print (f"Execute ping from {self.config_data['port'][i]['ip'].split('/')[0]} on " +\
                        f"{self.config_data['vm'][i]['vm_name']} to " + \
-                       f"{ns['ip']} on {ns['name']}" )
-                if not test_utils.vm_to_vm_ping_drop_test(self.conn_obj_list[i], ns['ip']):
+                       f"{ns['ip'].split('/')[0]} on {ns['name']}" )
+                if not test_utils.vm_to_vm_ping_drop_test(self.conn_obj_list[i], ns['ip'].split('/')[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"FAIL: Ping test expect to drop for VM{i} but Pass")
                     
@@ -279,8 +279,8 @@ class LNT_Ctrl_Vhost_Port_Flap(BaseTest):
             for ns in self.config_data['net_namespace']:
                 print (f"Execute ping from {self.config_data['port'][i]['ip'].split('/')[0]} on " +\
                        f"{self.config_data['vm'][i]['vm_name']} to " + \
-                       f"{ns['ip']} on {ns['name']}" )
-                if not test_utils.vm_to_vm_ping_test(self.conn_obj_list[i], ns['ip']):
+                       f"{ns['ip'].split('/')[0]} on {ns['name']}" )
+                if not test_utils.vm_to_vm_ping_test(self.conn_obj_list[i], ns['ip'].split('/')[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"FAIL: Ping test expect to drop for VM{i} but Pass")
         print ("Complete flaping control port case")

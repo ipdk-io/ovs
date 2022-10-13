@@ -145,6 +145,57 @@ def gen_dep_files_p4c_dpdk_pna_ovs_pipeline_builder(config_data):
 
     return True
 
+def gen_dep_files_p4c_dpdk_pna_ovs_pipeline_builder_ct_timer(config_data):
+    """
+    util function to generate p4 artifacts for dpdk pna architecture
+    :params: config_data --> dict --> dictionary with all config data loaded from json
+    :needs to update spec file for time usage
+    :returns: Boolean True/False
+    """
+    local = Local()
+    p4file = config_data['p4file']
+    conf_file = p4file + ".conf"
+    output_dir = os.sep.join(["common", "p4c_artifacts", p4file])
+    pb_bin_file = config_data['p4file']+'.pb.bin'
+    config_data['pb_bin'] = output_dir + "/" + pb_bin_file
+    config_data['p4_info'] = output_dir + "/p4Info.txt"
+    spec_file = p4file + ".spec"
+    p4file = p4file + ".p4"
+    cmd = f'''p4c-dpdk -I p4include -I p4include/dpdk --p4v=16 --p4runtime-files \
+            {output_dir}/p4Info.txt -o {output_dir}/pipe/{spec_file} --arch pna --bf-rt-schema {output_dir}/bf-rt.json --context \
+            {output_dir}/pipe/context.json {output_dir}/{p4file}'''
+    print (cmd)
+    out, returncode, err = local.execute_command(cmd)
+    if returncode:
+        print(f"Failed to run p4c: {out} {err}")
+        return False
+
+    print(f"PASS: {cmd}")
+
+    with open(f'{output_dir}/pipe/{spec_file}', 'r', encoding='utf-8') as file:
+         data = file.readlines()
+
+    data[155] = "\t\t60\n"
+    data[157] = "\t\t180\n"
+
+    with open(f'{output_dir}/pipe/{spec_file}', 'w', encoding='utf-8') as file:
+         file.writelines(data)
+
+    cmd = f'''cd {output_dir}; ovs_pipeline_builder --p4c_conf_file={conf_file} \
+            --bf_pipeline_config_binary_file={pb_bin_file}'''
+
+    out, returncode, err = local.execute_command(cmd)
+    if returncode:
+        print(f"Failed to run ovs_pipeline_builder: {out} {err}")
+        return False
+
+    cmd = f'''ovs_pipeline_builder --p4c_conf_file={conf_file} \
+            --bf_pipeline_config_binary_file={pb_bin_file}'''
+
+    print(f"PASS: {cmd}")
+
+    return True
+
 def qemu_version(ver="6.1.0"):
     """
     To Add/Del same Hotplug mutiple times need to check qemu version >= 6.1.0.
@@ -696,7 +747,7 @@ def get_ovs_p4ctl_help(option):
         return output 
     else:
         return False
-    
+
 def ipnetns_eth_offload(nsname, interface, remote=False, hostname="",username="",password=""):
     """
     :Function to offload interface

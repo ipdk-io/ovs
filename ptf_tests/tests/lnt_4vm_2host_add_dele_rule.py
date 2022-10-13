@@ -262,11 +262,11 @@ class LNT_4VM_2host_add_del_rule(BaseTest):
                 
             details = f"Execute ping from {self.config_data['port'][i]['ip'].split('/')[0]} on " + \
                       f"{self.config_data['vm'][i]['vm_name']} to " + \
-                      f"{self.config_data['net_namespace'][i]['ip']} on " + \
+                      f"{self.config_data['net_namespace'][i]['ip'].split('/')[0]} on " + \
                       f"{self.config_data['net_namespace'][i]['name']}"
     
             print (details)
-            if not test_utils.vm_to_vm_ping_drop_test(self.conn_obj_list[i],self.config_data['net_namespace'][i]['ip']):
+            if not test_utils.vm_to_vm_ping_drop_test(self.conn_obj_list[i],self.config_data['net_namespace'][i]['ip'].split("/")[0]):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: Ping expected failt but succeed after deleting rule")
 
@@ -276,7 +276,7 @@ class LNT_4VM_2host_add_del_rule(BaseTest):
                 self.fail(f"Failed to add table entry {table['match_action'][0]}")
         
             print (details)
-            if not test_utils.vm_to_vm_ping_test(self.conn_obj_list[i], self.config_data['net_namespace'][i]['ip']):
+            if not test_utils.vm_to_vm_ping_test(self.conn_obj_list[i], self.config_data['net_namespace'][i]['ip'].split("/")[0]):
                 self.result.addFailure(self, sys.exc_info())
                 self.fail(f"FAIL: Ping test failed for VM after adding back rule")
             i +=1
@@ -301,44 +301,44 @@ class LNT_4VM_2host_add_del_rule(BaseTest):
                 time.sleep(7)     
                 details = f"Execute ping from {self.config_data['port'][i]['ip'].split('/')[0]} on " +\
                         f"{self.config_data['vm'][i]['vm_name']} to " + \
-                        f"{self.config_data['net_namespace'][i]['ip']} on " + \
+                        f"{self.config_data['net_namespace'][i]['ip'].split('/')[0]} on " + \
                         f"{self.config_data['net_namespace'][i]['name']}"         
                 print (details)
-                if not test_utils.vm_to_vm_ping_drop_test(conn0, self.config_data['net_namespace'][i]['ip']):
+                if not test_utils.vm_to_vm_ping_drop_test(conn0, self.config_data['net_namespace'][i]['ip'].split('/')[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"FAIL: Ping expected failt but succeed after deleting rule")
                     
                 time.sleep(7)
                 details = f"Execute ping from {self.config_data['port'][n]['ip'].split('/')[0]} on " +\
                           f"{self.config_data['vm'][n]['vm_name']} to " + \
-                          f"{self.config_data['net_namespace'][i]['ip']} on " + \
+                          f"{self.config_data['net_namespace'][i]['ip'].split('/')[0]} on " + \
                           f"{self.config_data['net_namespace'][i]['name']}"       
                 print (details)
-                if not test_utils.vm_ping_less_than_100_loss(conn1, self.config_data['net_namespace'][i]['ip']):
+                if not test_utils.vm_ping_less_than_100_loss(conn1, self.config_data['net_namespace'][i]['ip'].split('/')[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"FAIL: Ping test failed for VM after adding back rule")
               
                 print(f"Add back rule {table['match_action'][i]}")
-                if not ovs_p4ctl.ovs_p4ctl_add_entry(table['switch'], table['name'], table['match_action'][i]):
+                if not ovs_p4ctl.ovs_p4ctl_add_entry(table['switch'], table['name'], table['match_action'][i].split('/')[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"Failed to add table entry {table['match_action'][i]}")
                     
                 time.sleep(7)
                 details = f"Execute ping from {self.config_data['port'][i]['ip'].split('/')[0]} on " +\
                           f"{self.config_data['vm'][i]['vm_name']} to " + \
-                          f"{self.config_data['net_namespace'][i]['ip']} on " + \
+                          f"{self.config_data['net_namespace'][i]['ip'].split('/')[0]} on " + \
                           f"{self.config_data['net_namespace'][i]['name']}"
                 print (details)
-                if not test_utils.vm_ping_less_than_100_loss(conn0, self.config_data['net_namespace'][i]['ip']):
+                if not test_utils.vm_ping_less_than_100_loss(conn0, self.config_data['net_namespace'][i]['ip'].split("/")[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"FAIL: Ping test failed for VM after adding back rule")
                     
                 details = f"Execute ping from {self.config_data['port'][n]['ip'].split('/')[0]} on " +\
                           f"{self.config_data['vm'][n]['vm_name']} to " + \
-                          f"{self.config_data['net_namespace'][i]['ip']} on " + \
+                          f"{self.config_data['net_namespace'][i]['ip'].split('/')[0]} on " + \
                           f"{self.config_data['net_namespace'][i]['name']}"
                 print (details)
-                if not test_utils.vm_to_vm_ping_test(conn1, self.config_data['net_namespace'][i]['ip']):
+                if not test_utils.vm_to_vm_ping_test(conn1, self.config_data['net_namespace'][i]['ip'].split('/')[0]):
                     self.result.addFailure(self, sys.exc_info())
                     self.fail(f"FAIL: Ping test failed for VM after adding back rule")
           

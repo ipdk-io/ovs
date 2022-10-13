@@ -144,13 +144,14 @@ class Dpdk_Link_Flapping(BaseTest):
         portconfig_obj.Ip.ip_neigh_add(phy_interface1, self.config_data['port'][1]['remote_ip'], self.config_data['port'][1]['mac_local'])
 
         # ping test between VM to link port
+        time.sleep(5)
         print("------------------------------")
         print("Ping Test from VM to Link port")
         print("------------------------------")
         result = test_utils.vm_to_vm_ping_test(self.conn_obj_list[0], self.config_data['vm'][0]['remote_ip'])
         if not result:
             self.result.addFailure(self, sys.exc_info())
-            print("FAIL: Ping test failed for VM0")
+            self.fail("FAIL: Ping test failed for VM0")
 
         print("------------------------------")
         print("Ping Test from Link port to VM")
@@ -189,7 +190,7 @@ class Dpdk_Link_Flapping(BaseTest):
         result = test_utils.vm_to_vm_ping_test(self.conn_obj_list[0], self.config_data['vm'][0]['remote_ip'])
         if not result:
             self.result.addFailure(self, sys.exc_info())
-            print("FAIL: Ping test failed for VM0")
+            self.fail("FAIL: Ping test failed for VM0")
 
               
         print ("close VM telnet session")
