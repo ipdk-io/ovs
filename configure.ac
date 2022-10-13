@@ -1,4 +1,5 @@
 # Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Nicira, Inc.
+# Copyright (c) 2021 Intel Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -203,6 +204,8 @@ OVS_CHECK_LINUX_VIRTIO_TYPES
 OVS_CHECK_DPDK
 OVS_CHECK_PRAGMA_MESSAGE
 OVS_CHECK_VERSION_SUFFIX
+OVS_CHECK_P4OVS
+
 AC_SUBST([CFLAGS])
 AC_SUBST([OVS_CFLAGS])
 AC_SUBST([OVS_LDFLAGS])

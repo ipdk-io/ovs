@@ -1,19 +1,42 @@
-sbin_PROGRAMS += vswitchd/ovs-vswitchd
+# vswitchd
 man_MANS += vswitchd/ovs-vswitchd.8
 CLEANFILES += \
 	vswitchd/ovs-vswitchd.8
 
-vswitchd_ovs_vswitchd_SOURCES = \
+vswitchd_sources = \
 	vswitchd/bridge.c \
 	vswitchd/bridge.h \
 	vswitchd/ovs-vswitchd.c \
 	vswitchd/system-stats.c \
 	vswitchd/system-stats.h
+
+if P4OVS
+# Build a static library instead of an executable.
+lib_LTLIBRARIES += vswitchd/libvswitchd.la
+
+vswitchd_libvswitchd_la_CPPFLAGS = $(AM_CPPFLAGS)
+
+vswitchd_libvswitchd_la_SOURCES = \
+	$(vswitchd_sources)
+
+vswitchd_libvswitchd_la_LIBADD = \
+	ofproto/libofproto.la \
+	lib/libsflow.la \
+	lib/libopenvswitch.la
+else
+sbin_PROGRAMS += vswitchd/ovs-vswitchd
+
+vswitchd_ovs_vswitchd_SOURCES = \
+	$(vswitchd_sources)
+
 vswitchd_ovs_vswitchd_LDADD = \
 	ofproto/libofproto.la \
 	lib/libsflow.la \
 	lib/libopenvswitch.la
+
 vswitchd_ovs_vswitchd_LDFLAGS = $(AM_LDFLAGS) $(DPDK_vswitchd_LDFLAGS)
+endif
+
 MAN_ROOTS += vswitchd/ovs-vswitchd.8.in
 
 # vswitch schema and IDL
