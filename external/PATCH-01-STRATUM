@@ -2147,7 +2147,7 @@ index 4afa1532..d2e70214 100644
  };
  
 diff --git a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
-index 9f4bb3a9..122ac68f 100644
+index 9f4bb3a9..1fbafcdb 100644
 --- a/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 +++ b/stratum/hal/lib/barefoot/bf_sde_wrapper.cc
 @@ -11,8 +11,10 @@
@@ -2910,7 +2910,7 @@ index 9f4bb3a9..122ac68f 100644
    }
  
    table_keys->resize(0);
-@@ -507,14 +544,21 @@ template <typename T>
+@@ -507,14 +544,24 @@ template <typename T>
  
    // Get first entry.
    {
@@ -2935,12 +2935,15 @@ index 9f4bb3a9..122ac68f 100644
 +        *flags, table_key.get(),
 +        table_data.get());
 +    if (tdi_status != TDI_SUCCESS) {
++        if (tdi_status == TDI_OBJECT_NOT_FOUND) {
++            return ::util::OkStatus();
++        }
 +       goto internal_error;
 +    }
  
      table_keys->push_back(std::move(table_key));
      table_datums->push_back(std::move(table_data));
-@@ -523,119 +567,176 @@ template <typename T>
+@@ -523,119 +570,176 @@ template <typename T>
  
    // Get all entries following the first.
    {
@@ -3168,7 +3171,7 @@ index 9f4bb3a9..122ac68f 100644
      *value = ByteStringToP4RuntimeByteString(*value);
    }
  
-@@ -644,18 +745,30 @@ template <typename T>
+@@ -644,18 +748,30 @@ template <typename T>
  
  ::util::Status TableKey::GetTernary(int id, std::string* value,
                                      std::string* mask) const {
@@ -3206,7 +3209,7 @@ index 9f4bb3a9..122ac68f 100644
      *value = ByteStringToP4RuntimeByteString(*value);
      *mask = ByteStringToP4RuntimeByteString(*mask);
    }
-@@ -665,16 +778,25 @@ template <typename T>
+@@ -665,16 +781,25 @@ template <typename T>
  
  ::util::Status TableKey::GetLpm(int id, std::string* prefix,
                                  uint16* prefix_length) const {
@@ -3239,7 +3242,7 @@ index 9f4bb3a9..122ac68f 100644
      *prefix = ByteStringToP4RuntimeByteString(*prefix);
    }
  
-@@ -683,91 +805,90 @@ template <typename T>
+@@ -683,91 +808,90 @@ template <typename T>
  
  ::util::Status TableKey::GetRange(int id, std::string* low,
                                    std::string* high) const {
@@ -3380,7 +3383,7 @@ index 9f4bb3a9..122ac68f 100644
    return ::util::OkStatus();
  }
  
-@@ -776,31 +897,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+@@ -776,31 +900,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
  }
  
  ::util::Status TableData::GetActionMemberId(uint64* action_member_id) const {
@@ -3413,7 +3416,7 @@ index 9f4bb3a9..122ac68f 100644
  }
  
  ::util::Status TableData::SetSelectorGroupId(uint64 selector_group_id) {
-@@ -808,31 +905,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+@@ -808,31 +908,7 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
  }
  
  ::util::Status TableData::GetSelectorGroupId(uint64* selector_group_id) const {
@@ -3446,7 +3449,7 @@ index 9f4bb3a9..122ac68f 100644
  }
  
  // The P4Runtime `CounterData` message has no mechanism to differentiate between
-@@ -840,36 +913,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+@@ -840,36 +916,26 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
  // recognize a counter reset (set, e.g., bytes to zero) request from a set
  // request for a packet-only counter. Therefore we have to be careful when
  // making set calls for those fields against the SDE.
@@ -3502,7 +3505,7 @@ index 9f4bb3a9..122ac68f 100644
  
    return ::util::OkStatus();
  }
-@@ -877,80 +940,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
+@@ -877,80 +943,63 @@ TableKey::CreateTableKey(const bfrt::BfRtInfo* bfrt_info_, int table_id) {
  ::util::Status TableData::GetCounterData(uint64* bytes, uint64* packets) const {
    CHECK_RETURN_IF_FALSE(bytes);
    CHECK_RETURN_IF_FALSE(packets);
@@ -3614,7 +3617,7 @@ index 9f4bb3a9..122ac68f 100644
        new TableData(std::move(table_data)));
    return data;
  }
-@@ -961,18 +1007,19 @@ namespace {
+@@ -961,18 +1010,19 @@ namespace {
  bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
                                       bool up, void* cookie) {
    absl::Time timestamp = absl::Now();
@@ -3638,7 +3641,7 @@ index 9f4bb3a9..122ac68f 100644
  ::util::StatusOr<bf_port_speed_t> PortSpeedHalToBf(uint64 speed_bps) {
    switch (speed_bps) {
      case kOneGigBps:
-@@ -992,6 +1039,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+@@ -992,6 +1042,8 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
    }
  }
  
@@ -3647,7 +3650,7 @@ index 9f4bb3a9..122ac68f 100644
  ::util::StatusOr<int> AutonegHalToBf(TriState autoneg) {
    switch (autoneg) {
      case TRI_STATE_UNKNOWN:
-@@ -1005,6 +1054,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+@@ -1005,6 +1057,7 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
    }
  }
  
@@ -3655,7 +3658,7 @@ index 9f4bb3a9..122ac68f 100644
  ::util::StatusOr<bf_fec_type_t> FecModeHalToBf(FecMode fec_mode,
                                                 uint64 speed_bps) {
    if (fec_mode == FEC_MODE_UNKNOWN || fec_mode == FEC_MODE_OFF) {
-@@ -1043,52 +1093,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
+@@ -1043,52 +1096,57 @@ bf_status_t sde_port_status_callback(bf_dev_id_t device, bf_dev_port_t dev_port,
            << ".";
    }
  }
@@ -3741,7 +3744,7 @@ index 9f4bb3a9..122ac68f 100644
                                                 absl::Time timestamp) {
    // Create PortStatusEvent message.
    PortState state = up ? PORT_STATE_UP : PORT_STATE_DOWN;
-@@ -1103,117 +1158,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
+@@ -1103,117 +1161,288 @@ BfSdeWrapper::BfSdeWrapper() : port_status_event_writer_(nullptr) {}
    }
  }
  
@@ -4058,7 +4061,7 @@ index 9f4bb3a9..122ac68f 100644
  
    return is_sw_model;
  }
-@@ -1221,6 +1447,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
+@@ -1221,6 +1450,7 @@ bool BfSdeWrapper::IsValidPort(int device, int port) {
  // Helper functions around reading the switch SKU.
  namespace {
  std::string GetBfChipFamilyAndType(int device) {
@@ -4066,7 +4069,7 @@ index 9f4bb3a9..122ac68f 100644
    bf_dev_type_t dev_type = lld_sku_get_dev_type(device);
    switch (dev_type) {
      case BF_DEV_BFNT10064Q:
-@@ -1284,9 +1511,12 @@ std::string GetBfChipFamilyAndType(int device) {
+@@ -1284,9 +1514,12 @@ std::string GetBfChipFamilyAndType(int device) {
      default:
        return "UNKNOWN";
    }
@@ -4079,7 +4082,7 @@ index 9f4bb3a9..122ac68f 100644
    bf_sku_chip_part_rev_t revision_number;
    lld_sku_get_chip_part_revision_number(device, &revision_number);
    switch (revision_number) {
-@@ -1297,22 +1527,26 @@ std::string GetBfChipRevision(int device) {
+@@ -1297,22 +1530,26 @@ std::string GetBfChipRevision(int device) {
      default:
        return "UNKOWN";
    }
@@ -4108,7 +4111,7 @@ index 9f4bb3a9..122ac68f 100644
  #if defined(SDE_9_1_0)
    return "9.1.0";
  #elif defined(SDE_9_2_0)
-@@ -1332,7 +1566,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+@@ -1332,7 +1569,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
  #endif
  }
  
@@ -4117,7 +4120,7 @@ index 9f4bb3a9..122ac68f 100644
      int device, const PortKey& port_key) {
    const int port = port_key.port;
    CHECK_RETURN_IF_FALSE(port >= 0)
-@@ -1358,35 +1592,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+@@ -1358,35 +1595,44 @@ std::string BfSdeWrapper::GetSdeVersion() const {
        << channel << " on dev " << device << ".";
  
    bf_dev_port_t dev_port;
@@ -4168,7 +4171,7 @@ index 9f4bb3a9..122ac68f 100644
                                             const std::string& sde_config_file,
                                             bool run_in_background) {
    CHECK_RETURN_IF_FALSE(sde_install_path != "")
-@@ -1408,7 +1651,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+@@ -1408,7 +1654,7 @@ std::string BfSdeWrapper::GetSdeVersion() const {
    std::string bf_sysfs_fname;
    {
      char buf[128] = {};
@@ -4177,7 +4180,7 @@ index 9f4bb3a9..122ac68f 100644
      bf_sysfs_fname = buf;
    }
    absl::StrAppend(&bf_sysfs_fname, "/dev_add");
-@@ -1417,55 +1660,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+@@ -1417,55 +1663,58 @@ std::string BfSdeWrapper::GetSdeVersion() const {
      // Override previous parsing if bf_kpkt KLM was loaded.
      LOG(INFO)
          << "kernel mode packet driver present, forcing kernel_pkt option!";
@@ -4213,11 +4216,11 @@ index 9f4bb3a9..122ac68f 100644
 -  // if (pipeline_initialized_) {
 -  // RETURN_IF_BFRT_ERROR(bf_device_remove(device));
 -  // }
--
--  bfrt_device_manager_ = &bfrt::BfRtDevMgr::getInstance();
--  bfrt_id_mapper_.reset();
 +  tdirt_id_mapper_.reset();
  
+-  bfrt_device_manager_ = &bfrt::BfRtDevMgr::getInstance();
+-  bfrt_id_mapper_.reset();
+-
 -  RETURN_IF_BFRT_ERROR(bf_pal_device_warm_init_begin(
 -      device, BF_DEV_WARM_INIT_FAST_RECFG, BF_DEV_SERDES_UPD_NONE,
 +  RETURN_IF_TDI_ERROR(bf_pal_device_warm_init_begin(
@@ -4254,7 +4257,7 @@ index 9f4bb3a9..122ac68f 100644
      CHECK_RETURN_IF_FALSE(program.pipelines_size() > 0);
      for (int j = 0; j < program.pipelines_size(); ++j) {
        const auto& pipeline = program.pipelines(j);
-@@ -1496,10 +1742,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+@@ -1496,10 +1745,9 @@ std::string BfSdeWrapper::GetSdeVersion() const {
      }
    }
  
@@ -4267,7 +4270,7 @@ index 9f4bb3a9..122ac68f 100644
  
    // Set SDE log levels for modules of interest.
    // TODO(max): create story around SDE logs. How to get them into glog? What
-@@ -1510,114 +1755,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
+@@ -1510,114 +1758,123 @@ std::string BfSdeWrapper::GetSdeVersion() const {
        bf_sys_log_level_set(BF_MOD_PKT, BF_LOG_DEST_STDOUT, BF_LOG_WARN) == 0);
    CHECK_RETURN_IF_FALSE(
        bf_sys_log_level_set(BF_MOD_PIPE, BF_LOG_DEST_STDOUT, BF_LOG_WARN) == 0);
@@ -4423,7 +4426,7 @@ index 9f4bb3a9..122ac68f 100644
                                              bf_pkt_rx_ring_t rx_ring) {
    absl::ReaderMutexLock l(&packet_rx_callback_lock_);
    auto rx_writer = gtl::FindOrNull(device_to_packet_rx_writer_, device);
-@@ -1635,7 +1889,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
+@@ -1635,7 +1892,7 @@ BfSdeWrapper::CreateTableData(int table_id, int action_id) {
    return ::util::OkStatus();
  }
  
@@ -4432,7 +4435,7 @@ index 9f4bb3a9..122ac68f 100644
                                                  bf_pkt_tx_ring_t tx_ring,
                                                  uint64 tx_cookie,
                                                  uint32 status) {
-@@ -1647,34 +1901,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
+@@ -1647,34 +1904,28 @@ bf_status_t BfSdeWrapper::BfPktTxNotifyCallback(bf_dev_id_t device,
    return bf_pkt_free(device, pkt);
  }
  
@@ -4476,7 +4479,7 @@ index 9f4bb3a9..122ac68f 100644
    // Data: $MULTICAST_NODE_ID
    RETURN_IF_ERROR(GetField(*table_data, kMcNodeId, &mc_node_list));
    // Data: $MULTICAST_NODE_L1_XID_VALID
-@@ -1684,6 +1932,7 @@ namespace {
+@@ -1684,6 +1935,7 @@ namespace {
  
    LOG(INFO) << "Multicast group id " << multicast_group_id << " has "
              << mc_node_list.size() << " nodes.";
@@ -4484,7 +4487,7 @@ index 9f4bb3a9..122ac68f 100644
    for (const auto& node : mc_node_list) {
      LOG(INFO) << "\tnode id " << node;
    }
-@@ -1691,12 +1940,12 @@ namespace {
+@@ -1691,12 +1943,12 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -4502,7 +4505,7 @@ index 9f4bb3a9..122ac68f 100644
    // Data: $MULTICAST_RID (16 bit)
    uint64 rid;
    RETURN_IF_ERROR(GetField(*table_data, kMcReplicationId, &rid));
-@@ -1715,41 +1964,44 @@ namespace {
+@@ -1715,41 +1967,44 @@ namespace {
  }
  }  // namespace
  
@@ -4565,7 +4568,7 @@ index 9f4bb3a9..122ac68f 100644
        PrintMcNodeEntry(table, table_key.get(), table_data.get());
      }
      LOG(INFO) << "###################";
-@@ -1757,51 +2009,90 @@ namespace {
+@@ -1757,51 +2012,90 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -4683,7 +4686,7 @@ index 9f4bb3a9..122ac68f 100644
      int mc_replication_id, const std::vector<uint32>& mc_lag_ids,
      const std::vector<uint32>& ports) {
    ::absl::ReaderMutexLock l(&data_lock_);
-@@ -1809,22 +2100,25 @@ namespace {
+@@ -1809,22 +2103,25 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -4720,7 +4723,7 @@ index 9f4bb3a9..122ac68f 100644
    // Data: $MULTICAST_RID (16 bit)
    RETURN_IF_ERROR(
        SetField(table_data.get(), kMcReplicationId, mc_replication_id));
-@@ -1832,68 +2126,107 @@ namespace {
+@@ -1832,68 +2129,107 @@ namespace {
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeLagId, mc_lag_ids));
    // Data: $DEV_PORT
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeDevPort, ports));
@@ -4860,7 +4863,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 mc_node_id, int* replication_id, std::vector<uint32>* lag_ids,
      std::vector<uint32>* ports) {
    CHECK_RETURN_IF_FALSE(replication_id);
-@@ -1903,51 +2236,69 @@ namespace {
+@@ -1903,51 +2239,69 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -4956,7 +4959,7 @@ index 9f4bb3a9..122ac68f 100644
  
    std::vector<uint32> mc_node_list;
    std::vector<bool> l1_xid_valid_list;
-@@ -1959,7 +2310,7 @@ namespace {
+@@ -1959,7 +2313,7 @@ namespace {
      l1_xid_list.push_back(0);
    }
    // Key: $MGID
@@ -4965,7 +4968,7 @@ index 9f4bb3a9..122ac68f 100644
    // Data: $MULTICAST_NODE_ID
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeId, mc_node_list));
    // Data: $MULTICAST_NODE_L1_XID_VALID
-@@ -1968,54 +2319,73 @@ namespace {
+@@ -1968,54 +2322,73 @@ namespace {
    // Data: $MULTICAST_NODE_L1_XID
    RETURN_IF_ERROR(SetField(table_data.get(), kMcNodeL1Xid, l1_xid_list));
  
@@ -5063,7 +5066,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 group_id, std::vector<uint32>* group_ids,
      std::vector<std::vector<uint32>>* mc_node_ids) {
    CHECK_RETURN_IF_FALSE(group_ids);
-@@ -2024,39 +2394,49 @@ namespace {
+@@ -2024,39 +2397,49 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5132,7 +5135,7 @@ index 9f4bb3a9..122ac68f 100644
      RETURN_IF_ERROR(GetField(*table_data, kMcNodeId, &mc_node_list));
      mc_node_ids->push_back(mc_node_list);
    }
-@@ -2067,24 +2447,32 @@ namespace {
+@@ -2067,24 +2450,32 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -5177,7 +5180,7 @@ index 9f4bb3a9..122ac68f 100644
    // Data: $direction
    RETURN_IF_ERROR(SetField(table_data.get(), "$direction", "BOTH"));
    // Data: $session_enable
-@@ -2100,62 +2488,85 @@ namespace {
+@@ -2100,62 +2491,85 @@ namespace {
    // Data: $max_pkt_len
    RETURN_IF_ERROR(SetField(table_data.get(), "$max_pkt_len", max_pkt_len));
  
@@ -5291,7 +5294,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 session_id, std::vector<uint32>* session_ids,
      std::vector<int>* egress_ports, std::vector<int>* coss,
      std::vector<int>* max_pkt_lens) {
-@@ -2165,29 +2576,43 @@ namespace {
+@@ -2165,29 +2579,43 @@ namespace {
    CHECK_RETURN_IF_FALSE(max_pkt_lens);
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
@@ -5350,7 +5353,7 @@ index 9f4bb3a9..122ac68f 100644
                                    table, &keys, &datums));
    }
  
-@@ -2196,32 +2621,30 @@ namespace {
+@@ -2196,32 +2624,30 @@ namespace {
    coss->resize(0);
    max_pkt_lens->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5391,7 +5394,7 @@ index 9f4bb3a9..122ac68f 100644
                               &ucast_egress_port_valid));
      CHECK_RETURN_IF_FALSE(ucast_egress_port_valid)
          << "Found a unicase egress port that is not set valid.";
-@@ -2235,51 +2658,66 @@ namespace {
+@@ -2235,51 +2661,66 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -5481,7 +5484,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 counter_id, absl::optional<uint32> counter_index,
      std::vector<uint32>* counter_indices,
      std::vector<absl::optional<uint64>>* byte_counts,
-@@ -2292,29 +2730,41 @@ namespace {
+@@ -2292,29 +2733,41 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5536,7 +5539,7 @@ index 9f4bb3a9..122ac68f 100644
                                    table, &keys, &datums));
    }
  
-@@ -2322,31 +2772,31 @@ namespace {
+@@ -2322,31 +2775,31 @@ namespace {
    byte_counts->resize(0);
    packet_counts->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -5586,7 +5589,7 @@ index 9f4bb3a9..122ac68f 100644
      }
      packet_counts->push_back(packet_count);
    }
-@@ -2362,87 +2812,122 @@ namespace {
+@@ -2362,87 +2815,122 @@ namespace {
  // Helper function to get the field ID of the "f1" register data field.
  // TODO(max): Maybe use table name and strip off "pipe." at the beginning?
  // std::string table_name;
@@ -5746,7 +5749,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 table_id, absl::optional<uint32> register_index,
      std::vector<uint32>* register_indices, std::vector<uint64>* register_datas,
      absl::Duration timeout) {
-@@ -2452,58 +2937,73 @@ namespace {
+@@ -2452,58 +2940,73 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -5844,7 +5847,7 @@ index 9f4bb3a9..122ac68f 100644
              << "Unsupported register data type " << static_cast<int>(data_type)
              << " for register in table " << table_id;
      }
-@@ -2515,21 +3015,21 @@ namespace {
+@@ -2515,21 +3018,21 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -5874,7 +5877,7 @@ index 9f4bb3a9..122ac68f 100644
  
    // Meter data: $METER_SPEC_*
    if (in_pps) {
-@@ -2549,36 +3049,63 @@ namespace {
+@@ -2549,36 +3052,63 @@ namespace {
                               BytesPerSecondToKbits(pburst)));
    }
  
@@ -5953,7 +5956,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 table_id, absl::optional<uint32> meter_index,
      std::vector<uint32>* meter_indices, std::vector<uint64>* cirs,
      std::vector<uint64>* cbursts, std::vector<uint64>* pirs,
-@@ -2592,26 +3119,37 @@ namespace {
+@@ -2592,26 +3122,37 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6004,7 +6007,7 @@ index 9f4bb3a9..122ac68f 100644
                                    table, &keys, &datums));
    }
  
-@@ -2622,55 +3160,58 @@ namespace {
+@@ -2622,55 +3163,58 @@ namespace {
    pbursts->resize(0);
    in_pps->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6080,7 +6083,7 @@ index 9f4bb3a9..122ac68f 100644
              << "Unknown meter field " << field_name << " in meter with id "
              << table_id << ".";
        }
-@@ -2687,8 +3228,8 @@ namespace {
+@@ -2687,8 +3231,8 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6091,7 +6094,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 table_id, int member_id, const TableDataInterface* table_data,
      bool insert) {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
-@@ -2696,12 +3237,14 @@ namespace {
+@@ -2696,12 +3240,14 @@ namespace {
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6110,7 +6113,7 @@ index 9f4bb3a9..122ac68f 100644
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
          DumpTableMetadata(table).ValueOr("<error reading table>"),
-@@ -2710,54 +3253,63 @@ namespace {
+@@ -2710,54 +3256,63 @@ namespace {
          DumpTableData(real_table_data->table_data_.get())
              .ValueOr("<error parsing data>"));
    };
@@ -6198,7 +6201,7 @@ index 9f4bb3a9..122ac68f 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -2767,18 +3319,28 @@ namespace {
+@@ -2767,18 +3322,28 @@ namespace {
    };
  
    // Key: $ACTION_MEMBER_ID
@@ -6235,7 +6238,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 table_id, int member_id, std::vector<int>* member_ids,
      std::vector<std::unique_ptr<TableDataInterface>>* table_datas) {
    CHECK_RETURN_IF_FALSE(member_ids);
-@@ -2787,24 +3349,34 @@ namespace {
+@@ -2787,24 +3352,34 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6282,7 +6285,7 @@ index 9f4bb3a9..122ac68f 100644
                                    table, &keys, &datums));
    }
  
-@@ -2812,8 +3384,8 @@ namespace {
+@@ -2812,8 +3387,8 @@ namespace {
    table_datas->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
      // Key: $sid
@@ -6293,7 +6296,7 @@ index 9f4bb3a9..122ac68f 100644
      member_ids->push_back(member_id);
  
      // Data: action params
-@@ -2827,21 +3399,21 @@ namespace {
+@@ -2827,21 +3402,21 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6323,7 +6326,7 @@ index 9f4bb3a9..122ac68f 100644
  
    // We have to capture the std::unique_ptrs by reference [&] here.
    auto dump_args = [&]() -> std::string {
-@@ -2854,7 +3426,7 @@ namespace {
+@@ -2854,7 +3429,7 @@ namespace {
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6332,7 +6335,7 @@ index 9f4bb3a9..122ac68f 100644
    // Data: $ACTION_MEMBER_ID
    RETURN_IF_ERROR(SetField(table_data.get(), kActionMemberId, member_ids));
    // Data: $ACTION_MEMBER_STATUS
-@@ -2864,53 +3436,63 @@ namespace {
+@@ -2864,53 +3439,63 @@ namespace {
    RETURN_IF_ERROR(
        SetField(table_data.get(), "$MAX_GROUP_SIZE", max_group_size));
  
@@ -6416,7 +6419,7 @@ index 9f4bb3a9..122ac68f 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -2920,18 +3502,28 @@ namespace {
+@@ -2920,18 +3505,28 @@ namespace {
    };
  
    // Key: $SELECTOR_GROUP_ID
@@ -6452,7 +6455,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 table_id, int group_id, std::vector<int>* group_ids,
      std::vector<int>* max_group_sizes,
      std::vector<std::vector<uint32>>* member_ids,
-@@ -2944,24 +3536,35 @@ namespace {
+@@ -2944,24 +3539,35 @@ namespace {
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
  
@@ -6500,7 +6503,7 @@ index 9f4bb3a9..122ac68f 100644
                                    table, &keys, &datums));
    }
  
-@@ -2970,27 +3573,26 @@ namespace {
+@@ -2970,27 +3576,26 @@ namespace {
    member_ids->resize(0);
    member_status->resize(0);
    for (size_t i = 0; i < keys.size(); ++i) {
@@ -6536,7 +6539,7 @@ index 9f4bb3a9..122ac68f 100644
      member_status->push_back(member_enabled);
    }
  
-@@ -3002,10 +3604,11 @@ namespace {
+@@ -3002,10 +3607,11 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6550,7 +6553,7 @@ index 9f4bb3a9..122ac68f 100644
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
-@@ -3014,8 +3617,8 @@ namespace {
+@@ -3014,8 +3620,8 @@ namespace {
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
  
@@ -6561,7 +6564,7 @@ index 9f4bb3a9..122ac68f 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -3027,19 +3630,33 @@ namespace {
+@@ -3027,19 +3633,33 @@ namespace {
              .ValueOr("<error parsing data>"));
    };
  
@@ -6602,7 +6605,7 @@ index 9f4bb3a9..122ac68f 100644
    ::absl::ReaderMutexLock l(&data_lock_);
    auto real_session = std::dynamic_pointer_cast<Session>(session);
    CHECK_RETURN_IF_FALSE(real_session);
-@@ -3047,8 +3664,9 @@ namespace {
+@@ -3047,8 +3667,9 @@ namespace {
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -6614,7 +6617,7 @@ index 9f4bb3a9..122ac68f 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -3060,25 +3678,36 @@ namespace {
+@@ -3060,25 +3681,36 @@ namespace {
              .ValueOr("<error parsing data>"));
    };
  
@@ -6660,7 +6663,7 @@ index 9f4bb3a9..122ac68f 100644
  
    auto dump_args = [&]() -> std::string {
      return absl::StrCat(
-@@ -3087,16 +3716,26 @@ namespace {
+@@ -3087,16 +3719,26 @@ namespace {
              .ValueOr("<error parsing key>"));
    };
  
@@ -6693,7 +6696,7 @@ index 9f4bb3a9..122ac68f 100644
      uint32 table_id, const TableKeyInterface* table_key,
      TableDataInterface* table_data) {
    ::absl::ReaderMutexLock l(&data_lock_);
-@@ -3106,35 +3745,47 @@ namespace {
+@@ -3106,35 +3748,47 @@ namespace {
    CHECK_RETURN_IF_FALSE(real_table_key);
    auto real_table_data = dynamic_cast<const TableData*>(table_data);
    CHECK_RETURN_IF_FALSE(real_table_data);
@@ -6757,7 +6760,7 @@ index 9f4bb3a9..122ac68f 100644
    table_keys->resize(0);
    table_datas->resize(0);
  
-@@ -3148,111 +3799,147 @@ namespace {
+@@ -3148,111 +3802,147 @@ namespace {
    return ::util::OkStatus();
  }
  
@@ -6954,7 +6957,7 @@ index 9f4bb3a9..122ac68f 100644
            if (auto notifier = weak_ref.lock()) {
              VLOG(1) << "Table counter for table " << table_id << " synced.";
              notifier->Notify();
-@@ -3262,7 +3949,7 @@ namespace {
+@@ -3262,7 +3952,7 @@ namespace {
            }
          },
          nullptr));
@@ -6963,7 +6966,7 @@ index 9f4bb3a9..122ac68f 100644
      // Wait until sync done or timeout.
      if (!sync_notifier->WaitForNotificationWithTimeout(timeout)) {
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
-@@ -3270,32 +3957,43 @@ namespace {
+@@ -3270,32 +3960,43 @@ namespace {
               << table_id << ".";
      }
    }
@@ -7022,7 +7025,7 @@ index 9f4bb3a9..122ac68f 100644
            if (auto notifier = weak_ref.lock()) {
              VLOG(1) << "Table registers for table " << table_id << " synced.";
              notifier->Notify();
-@@ -3305,7 +4003,7 @@ namespace {
+@@ -3305,7 +4006,7 @@ namespace {
            }
          },
          nullptr));
@@ -7031,7 +7034,7 @@ index 9f4bb3a9..122ac68f 100644
      // Wait until sync done or timeout.
      if (!sync_notifier->WaitForNotificationWithTimeout(timeout)) {
        return MAKE_ERROR(ERR_OPER_TIMEOUT)
-@@ -3313,20 +4011,20 @@ namespace {
+@@ -3313,20 +4014,20 @@ namespace {
               << table_id << ".";
      }
    }
