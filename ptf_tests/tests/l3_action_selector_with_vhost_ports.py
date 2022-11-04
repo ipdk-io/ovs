@@ -90,7 +90,7 @@ class L3_Action_Selector_Vhost(BaseTest):
         vm_id = 0
         for vm, port in zip(self.config_data['vm'], self.config_data['port']):
            globals()["conn"+str(vm_id+1)] = connectionManager("127.0.0.1", f"655{vm_id}", vm['vm_username'], vm['vm_password'], timeout=30)
-           globals()["vm"+str(vm_id+1)+"_command_list"] = [f"ip addr add {port['ip']} dev {port['interface']}", f"ip link set dev {port['interface']} address {port['mac']}" , f"ip route add 0.0.0.0/0 via {vm['dst_gw']} dev {port['interface']}"]
+           globals()["vm"+str(vm_id+1)+"_command_list"] = [f"ip addr add {port['ip']} dev {port['interface']}", f"ip link set dev {port['interface']} up", f"ip link set dev {port['interface']} address {port['mac']}" , f"ip route add 0.0.0.0/0 via {vm['dst_gw']} dev {port['interface']}"]
            vm_id+=1
         
 
@@ -122,26 +122,59 @@ class L3_Action_Selector_Vhost(BaseTest):
         print("Configuring VM1 ....")
         test_utils.configure_vm(conn2, vm2_command_list)
 
-
-        # verify whether traffic hits group-1
-        print("Verify whether traffic hits group-1 from VM0 to VM1")
+        # Verify Unicast Traffic VM0 to VM1
+        print("Verify Unicast Traffic from VM0 to VM1")
         dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][0]
         result = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
         if not result:
             self.result.addFailure(self, sys.exc_info())
-            print("FAIL: Traffic test failed for group-1")
+            print("FAIL: Unicast traffic not received on VM1")
             
-        # verify whether traffic hits group-1
-        print("Verify whether traffic hits group-1 from VM1 to VM0")
+        # Verify Unicast Traffic VM1 to VM0
+        print("Verify Unicast Traffic from VM1 to VM0")
         dst_ip=self.config_data['traffic']['in_pkt_header']['ip_src'][0]
         result = test_utils.vm_to_vm_ping_test(conn2, dst_ip)
         if not result:
             self.result.addFailure(self, sys.exc_info())
-            print("FAIL: Traffic test failed for group-1")
+            print("FAIL: Unicast traffic not received on VM0")
 
+        print("Verify Multicast Traffic")
+        sender_vm_id = self.config_data['traffic']['send_port'][1]
+        receiver_vm_id= self.config_data['traffic']['receive_port'][1]
+        sender_conn, receiver_conn = eval("conn"+str(sender_vm_id+1)), eval("conn"+str(receiver_vm_id+1))
+        #verify Multicast Traffic
+        send_result = test_utils.send_scapy_traffic_from_vm(sender_vm_id, sender_conn, receiver_conn, self.config_data,'multicast')
+        if send_result:
+            result = test_utils.verify_scapy_traffic_from_vm(receiver_vm_id,receiver_conn,self.config_data,'multicast')
+            if not result:
+                self.result.addFailure(self, sys.exc_info())
+                print("FAIL: Multicast Traffic not received")
+            else:
+                print(f"PASS: Multicast Traffic received on receiver_vm VM{receiver_vm_id}")
+        else:
+            print(f"FAIL: Multicast Packets are not sent from Sender_vm VM{sender_vm_id}")
+            self.result.addFailure(self, sys.exc_info())
+        
+        time.sleep(3)
 
+        #verify Broadcast Traffic
+        print("Verify Broadcast Traffic")
+        sender_vm_id = self.config_data['traffic']['send_port'][2]
+        receiver_vm_id= self.config_data['traffic']['receive_port'][2]
+        sender_conn, receiver_conn = eval("conn"+str(sender_vm_id+1)), eval("conn"+str(receiver_vm_id+1))
+        send_result = test_utils.send_scapy_traffic_from_vm(sender_vm_id, sender_conn, receiver_conn, self.config_data,'broadcast')
+        if send_result:
+            result = test_utils.verify_scapy_traffic_from_vm(receiver_vm_id,receiver_conn,self.config_data,'broadcast')
+            if not result:
+                self.result.addFailure(self, sys.exc_info())
+                print("FAIL: Broadcast Traffic not received")
+            else:
+                print(f"PASS: Broadcast Traffic received on receiver_vm VM{receiver_vm_id}")
+        else:
+            print(f"FAIL: Broadcast Packets are not sent from sender_vm with id {sender_vm_id}")
+            self.result.addFailure(self, sys.exc_info())
 
-        # close telnet connections
+        # Close telnet connections
         conn1.close()
         conn2.close()
 
