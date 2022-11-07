@@ -10,7 +10,7 @@
             "port-type": "LINK",
             "pipeline-name": "pipe",
             "packet-dir": "network",
-            "ip_address": "1.1.1.2/24",
+            "ip_address": "15.0.0.2/24",
             "interface": "ens3",
       "mac": "00:e8:ca:11:aa:01",
             "single_cmd": "TRUE"
@@ -26,9 +26,9 @@
             "port-type": "LINK",
             "single-cmd": "TRUE",
             "interface": "ens3",
-            "ip_address": "1.1.1.1/24",
+            "ip_address": "15.0.0.1/24",
             "mac_local": "00:e8:ca:11:aa:01",
-            "remote_ip": "1.1.1.2"
+            "remote_ip": "15.0.0.2"
        }
     ],
     "table": [ 
@@ -38,8 +38,8 @@
      "name": "ingress.ipv4_host_dst",
             "type": "entry",
             "match_action": [
-                    "headers.ipv4.dst_addr=1.1.1.1,action=ingress.send(0)",
-                    "headers.ipv4.dst_addr=1.1.1.2,action=ingress.send(1)"
+                    "headers.ipv4.dst_addr=15.0.0.1,action=ingress.send(0)",
+                    "headers.ipv4.dst_addr=15.0.0.2,action=ingress.send(1)"
             ]
    }
      ],
@@ -47,7 +47,7 @@
     "vm":[ 
      {
          "id": "1",
-         "remote_ip": "1.1.1.1",
+         "remote_ip": "15.0.0.1",
          "mac_remote": "00:e8:ca:11:bb:01"
     
        }
