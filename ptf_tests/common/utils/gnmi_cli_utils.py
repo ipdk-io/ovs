@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 from common.lib.port_config import PortConfig
 from common.lib.local_connection import Local
 
@@ -86,7 +87,7 @@ def gnmi_get_params_counter(param):
     results=[]
     port_counter= dict()
     mandatory_param = ",".join(param.split(',')[:2])
-
+    
     value = port_config.GNMICLI.gnmi_cli_get_counter(mandatory_param,"counters").strip()
     for va in value.split("\n"):
             _, counter =va.split(":")
@@ -97,7 +98,7 @@ def gnmi_get_params_counter(param):
          port_counter[each] = int(next(iter_rslt))
 
     if port_counter:
-           return port_counter
+        return port_counter
     else:
         return False
 

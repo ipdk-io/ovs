@@ -170,7 +170,6 @@ def get_device_type(port):
         print("Invalid 'device' or 'port-type' in json")
         return None
 
-
 def get_gnmi_params_simple(data):
     """
     util function to parse 'data' dictionary and return list of 'params' string for gnmi-cli set/get
@@ -188,7 +187,6 @@ def get_gnmi_params_simple(data):
     optional = ['pipeline-name', 'mempool-name', 'control-port', 'mtu', 'packet-dir']
 
     params = []
-
     for port in data['port']:
         param = ""
         for field in common:
@@ -199,14 +197,71 @@ def get_gnmi_params_simple(data):
             return None
         for field in mandatory[device_type]:
             param += f"{field}:{port[field]},"
-
+        
         for field in optional:
             if field in port.keys():
                 param += f"{field}:{port[field]},"
-
+   
         param += f"port-type:{port['port-type']}"
-
         params.append(param)
+
+    return params
+    
+def get_gnmi_phy_with_ctrl_port(data):
+    """
+    util function to parse 'data' dictionary and return list of 'params' string for gnmi-cli set/get
+    It's an improvement for get_gnmi_params_simple to handel physical port come with control port. It
+    strip out control TAP from physical port gnmi param as an individual port to build right target DP index 
+    :param data: dictionary obtained from config json file
+    :return: list --> list of params
+                --> ["device:virtual-device,name:net_vhost0,host:host1,device-type:VIRTIO_NET,queues:1,socket-path:/tmp/vhost-user-0,port-type:LINK",
+                "device:virtual-device,name:net_vhost1,host:host2,device-type:VIRTIO_NET,queues:1,socket-path:/tmp/vhost-user-1,port-type:LINK",
+                'device:physical-device,name:PORT0,pci-bdf:0000:af:00.0,control-port:TAP1,mtu:1500,packet-dir:network,port-type:LINK',
+                'device:virtual-device,name:TAP0,pipeline-name:pipe,mempool-name:MEMPOOL0,mtu:1500,packet-dir:host,port-type:TAP'
+                ...]
+    """
+    common = ['device', 'name']
+    mandatory = {'tap': [],
+                 'vhost': ['host', 'device-type', 'queues', 'socket-path'],
+                 'link': ['pci-bdf']
+                 }
+    optional = ['pipeline-name', 'mempool-name', 'control-port', 'mtu', 'packet-dir']
+
+    params = []
+   
+    for port in data['port']:
+        param = ""
+        
+        device_type = get_device_type(port)
+        if not device_type:
+            return None
+        
+        for field in common:
+            param += f"{field}:{port[field]},"
+
+        for field in mandatory[device_type]:
+            param += f"{field}:{port[field]},"
+        
+        for field in optional:
+            if field in port.keys():
+                param += f"{field}:{port[field]},"
+                
+        param += f"port-type:{port['port-type']}" 
+        params.append(param) 
+        
+        # This is a partial gnmi example 'device:physical-device,control-port:TAP1,port-type:LINK'
+        # Below code is to strip out 'control-port:TAP1' as an individaul port and build its target ID
+        # index at that order.
+        if device_type =="link" and port.get('control-port'):
+            ctrl_port = f"device:virtual-device,name:{port['control-port']},"
+            
+            for field in optional:
+                if field in port.keys():
+                    if field != 'control-port' or field != 'packet-dir':
+                       ctrl_port += f"{field}:{port[field]},"
+                        
+            ctrl_port += f"packet-dir:host:port-type:TAP" 
+            params.append(ctrl_port)
 
     return params
 

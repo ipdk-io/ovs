@@ -25,7 +25,7 @@ import json
 import os
 import subprocess
 import re
-import asyncio
+import pexpect
 import time
 import platform
 import scapy.all as scapy
@@ -286,7 +286,7 @@ def vm_to_vm_ping_test(conn, dst_ip, count="4"):
     """
     cmd = f"ping {dst_ip} -c {count}"
     dummy_ping(conn, cmd)
-
+ 
     conn.sendCmd(cmd)
     result = conn.readResult()
     pkt_loss = 100
@@ -643,7 +643,7 @@ def local_ping(*args):
     local = Local()
     cmd = " ".join(args)
     result,_,_  = local.execute_command(cmd)
-
+  
     pkt_loss = 100
     if result:
         match = re.search('(\d*)% packet loss', result)
@@ -810,69 +810,48 @@ def ipnetns_netperf_client(nsname, host, testlen, testname, option="", remote=Fa
     :Function to start netperf on linux name space
     :returns boolean True or False
     """
-    counter ={}
-    err_list, data = [],[]
-    max = 5
-    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
-    output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
-
+    max = 6
+    found = False
+    err_list,data, counter =[],[], {}
+ 
     if testname == "UDP_STREAM":
         cnt_name=['sckt_byte','msg_byte','elapsed','msg_ok','msg_erro','throput']
         n, data_len = 1, 6
-        try:
-            data = output.strip().split("\n")[-2].split()
-        except IndexError as e:
-            err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            n += 1
-        # try max of 5 times
-        while len(data) != data_len:
-            output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
-            try:
-                data = output.strip().split("\n")[-2].split()
-            except IndexError as e:
-                err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            err_list.append(f"The {n} try failure: {output}")
-            if n >= max:
-                break
-            n += 1       
     elif testname == "TCP_STREAM":
+        found = False
         cnt_name=['recv_sckt_byte','send_sckt_byte','sned_msg_byte','elapsed','throput']
         n, data_len =1, 5
-        try:
-            data = output.strip().split("\n")[-1].split()
-        except IndexError as e:
-            err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            n += 1
-        # try max 5 times
-        while len(data) != data_len:
-            output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
-            try:
-                data = output.strip().split("\n")[-1].split()
-            except IndexError as e:
-                err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            err_list.append(f"The {n} try failure: {output}")
-            if n >= max:
-                break
-            n += 1
     else:
-        print(f"FAIL: No expect netperf execution data collected {output}")
+        print(f"FAIL: the stream {testname} is not defined. Please correct it")
         return False
   
-    if len(data) == data_len:
-        for i in range(len(data)):
-            #all data  should be either fload or int
-            if type(float(data[i])) == float:
-                    counter[cnt_name[i]] = float(data[i])
-            elif type(int(data[i])) == int:
-                counter[cnt_name[i]] = int(data[i])
-            else:
-                print(f"FAIL: Send netperf client failed with {output}")
-                return False
-    else:
-        print(f"FAIL: Send netperf client had {n} failure with error list \n\n{err_list}")
+    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
+    while n < max:
+        output = gnmi_cli_utis.ip_link_netns_exec(nsname, cmd,remote=remote,hostname=hostname, username=username, password=password)[1]
+        for each in output.strip().split("\n"):
+            data=each.strip().split()
+            if len(data) == data_len:
+                try:
+                    if all(isinstance(float(item),float) for item in data):
+                        found=True
+                        for i in range(len(data)):
+                            counter[cnt_name[i]] = float(data[i])
+                        break
+                except:
+                    #checking netperf output data having all float number that indicate sucess
+                    # of netperf.do nothing and continue to check
+                    pass
+        if found:
+            break
+        else:
+            err_list.append(f"The {n} failure and its output {output}")          
+    
+        n +=1 
+    if found == False:
+        print(f"FAIL: unable to collect netperf execution data after {n} tries due output\n{err_list}")
         return False
     
-    print (f"PASS: send ip netns exec {nsname} {cmd} succeed with below output \n\n {output}") 
+    print (f"PASS: successfully executed \"{cmd}\" with below output \n {output}")
     return counter
 
 def vm_check_netperf(conn, vmname):
@@ -909,8 +888,10 @@ def vm_start_netserver(conn):
 
 def vm_netperf_client(conn, host, testlen, testname, option=""):
     """
-    Start netperf client to send traffic and process last few lines of 
-    each type stream ouput to determine pass or fail
+    A function to determine if sending netperf succeed or fail.
+    As netperf doesn't provide explict status of success or failure, 
+    this function is to serach if a line of netperf output has a float number
+    in all fiels. If yes, sending netperf succeed and a counter
     
       Example 1:  Netperf UDP_STRAM output 
         root@TRAFFICGEN:~# netperf -H 99.0.0.3 -l 10 -t UDP_STREAM -- -m 64
@@ -922,73 +903,49 @@ def vm_netperf_client(conn, host, testlen, testname, option=""):
         .... omitted ....
         131072  16384     64    10.00     610.03
     """
-    max = 5
-    err_list,data =[],[]
-    counter ={}
-    conn.readResult()
-    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
-    conn.sendCmd(cmd)
-    output = conn.readResult()
-    
+    max = 6
+    found = False
+    err_list,data, counter =[],[],{}
+    conn.readResult() # read to clear previous buffer
     if testname == "UDP_STREAM":
         cnt_name=['sckt_byte','msg_byte','elapsed','msg_ok','msg_erro','throput']
         n, data_len = 1, 6
-        try:
-            data = output.split("\n")[-4].strip().split()
-        except IndexError as e:
-            err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            n += 1
-        # try max 5 times if failed
-        while len(data) != data_len:
-            conn.sendCmd(cmd)
-            output = conn.readResult()
-            try:
-                data = output.split("\n")[-4].strip().split()
-            except IndexError as e:
-                err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            err_list.append(f"The {n} try failure: {output}")
-            if n >= max:
-                break
-            n +=1    
     elif testname == "TCP_STREAM":
+        found = False
         cnt_name=['recv_sckt_byte','send_sckt_byte','sned_msg_byte','elapsed','throput']
         n, data_len =1, 5
-        # try max 5 times if failed
-        try:
-            data = output.split("\n")[-2].strip().split()
-        except IndexError as e:
-            err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            n += 1
-        while len(data) != data_len:
-            conn.sendCmd(cmd)
-            output = conn.readResult()
-            try:
-                data = output.split("\n")[-2].strip().split()
-            except IndexError as e:
-                err_list.append(f"The {n} try error {e} and output \n\n{output}")
-            if n >= max:
-                break
-            err_list.append(f"The {n} try failure: {output}")
-            n += 1
     else:
-        print(f"FAIL: No expect netperf execution data collected {output}")
-        return False
-  
-    if len(data) == data_len:
-        for i in range(len(data)):
-            #all data  should be either fload or int
-            if type(float(data[i])) == float:
-                 counter[cnt_name[i]] = float(data[i])
-            elif type(int(data[i])) == int:
-                counter[cnt_name[i]] = int(data[i])
-            else:
-                print(f"FAIL: Send netperf client failed with {output}")
-                return False
-    else:  
-        print(f"FAIL: Send netperf client had {n} failure with error list \n\n{err_list}")
+        print(f"FAIL: the stream {testname} is not defined. Please correct it")
         return False
     
-    print (f"PASS: send {cmd} succeed with below output \n\n{output}\n") 
+    cmd = f"netperf -H {host} -l {testlen} -t {testname} {option}".replace(u'\xa0', u' ')
+    conn.sendCmd(cmd)
+    while n < max:
+        output = conn.readResult()
+        for each in output.strip().split("\n"):
+            data=each.strip().split()
+            if len(data) == data_len:
+                try:
+                    if all(isinstance(float(item),float) for item in data):
+                        found=True
+                        for i in range(len(data)):
+                            counter[cnt_name[i]] = float(data[i])
+                        break
+                except:
+                    #checking netperf output data having all float number that indicate sucess
+                    # of netperf.do nothing and continue to check
+                    pass
+        if found:
+            break
+        else:
+            err_list.append(f"The {n} failure and its output {output}")          
+    
+        n +=1 
+    if found == False:
+        print(f"FAIL: Unable to collect netperf execution data after {n} tries due output\n{err_list}")
+        return False
+    
+    print (f"PASS: successfully executed \"{cmd}\" with below output \n {output}")
     return counter
 
 def vm_netperf_client_fail(conn, host, testlen, testname, option=""):
@@ -1006,7 +963,7 @@ def vm_netperf_client_fail(conn, host, testlen, testname, option=""):
     conn.sendCmd(cmd)
     output = conn.readResult().split("\n")
     if "are you sure there is a netserver listening" in output[-3]:
-        print(f"PASS: {cmd} not established as netserver is not expected reachable")
+        print(f"PASS: \"{cmd}\" not established as netserver is not expected reachable")
         return True  
    
     print (f"FAIL: netserver is expected not reachable but it's reached") 
@@ -1037,9 +994,249 @@ def host_check_netperf(remote=False, hostname="",username="",password=""):
         print (f"FAILED: faild to pkill -9 netserver")
         connection.tear_down()
         return False
-    print (f"PASS: pkill -9 netserver and ready to restart netserver on {hostname}")
+    print (f"PASS: \"pkill -9 netserver\" and ready to restart netserver on {hostname}")
     
     connection.tear_down()
+    return True
+
+def get_vm_interface_counter(conn, interface):
+    """
+    A function to build a counter directory for a VM interface statistics
+    """
+    counter ={}
+    cmd= f"ip -s -s link show dev {interface}"
+    print (f"Execute cmd \"{cmd}\"")
+    
+    j=1
+    while j<3:
+        if j>2: print (f"{j} try to execute cmd \"{cmd}\"")
+        conn.sendCmd(cmd)
+        output = conn.readResult()
+        if len(output.split("\n")) <8:
+            j +=1
+        else:
+            break
+    if j>3:
+        print (f"FAIL: failed to execue \"{cmd}\" after {j} times")
+        return False
+   
+    iter_rslt = iter(output.split("\n"))
+    # Build  port counter dict
+    for each in iter_rslt:
+        each = each.strip()
+        if each.isspace() or len(each)==0:
+            continue
+        if "RX:" in each:
+            key="RX"
+            counter[key]=dict()
+            name_list = each.split(":")[1].strip().split()
+            val_list = next(iter_rslt, None).split()
+            for i in range(len(name_list)):
+                counter[key][name_list[i]]=int(val_list[i])
+        elif "RX errors" in each:
+            key="RX errors"
+            counter[key]=dict()
+            name_list = each.split(":")[1].strip().split()
+            val_list = next(iter_rslt, None).split()
+            for i in range(len(name_list)):
+                counter[key][name_list[i]]=int(val_list[i])
+        elif "TX:" in each:
+            key="TX"
+            counter[key]=dict()
+            name_list = each.split(":")[1].strip().split()
+            val_list = next(iter_rslt, None).split()
+            for i in range(len(name_list)):
+                counter[key][name_list[i]]=int(val_list[i])
+        elif "TX errors" in each:
+            key="TX errors"
+            counter[key]=dict()
+            name_list = each.split(":")[1].strip().split()
+            val_list = next(iter_rslt, None).split()
+            for i in range(len(name_list)):
+                counter[key][name_list[i]]=int(val_list[i])
+    if counter:        
+        return counter
+   
+    return False
+
+def vtysh_config_frr_bgp_attr(asnumber, neighbor="",addr_family="",
+                router_id="", network="",hostname="",username="",password=""):
+    """
+    A funtion to configure frr BGP attributes
+    """
+    BGP_AS_UPLIMIT=4294967295
+    print (f"Configure BGP attributes")
+    if hostname and username and password:
+        remote=f"{username}@{hostname}"
+        config = pexpect.spawn("ssh " + remote) 
+        config.expect("password:")
+        config.sendline(password)
+        i = config.expect (['Permission denied', '[~#\]\$]'])
+        if i == 0:
+            print(f"Permission denied by {hostname}. Unable to login")
+            config.kill(0)
+        elif i == 1:
+            print('Connected Successfully.')
+            config.sendline("vtysh")
+            config.expect("#")
+    else:
+        config= pexpect.spawn("vtysh")
+        config.expect("#")
+    try:
+        if asnumber not in range(1,BGP_AS_UPLIMIT+1):
+            print (f"FAIL: a as-number must be in range of 1 ~ {BGP_AS_UPLIMIT}")
+            config.close()
+            return False
+        config.sendline("config t")
+        config.expect("config\)#")
+        config.sendline(f"router bgp {asnumber}")
+        config.expect("#")
+        if neighbor:
+            config.sendline(f"neighbor {neighbor} remote-as {asnumber}")
+            config.expect("#")
+        if addr_family: 
+            config.sendline(f"address-family {addr_family}")
+            config.expect("router-af\)#")
+            if router_id:
+                config.sendline(f"bgp router-id {router_id}")
+                config.expect("config-router\)#")
+            if network:
+                config.sendline(f"network {network}")
+                config.expect("\)#")
+                
+        config.sendline(f"end")
+        config.expect("#")             
+    except pexpect.ExceptionPexpect as e:
+        print (f"FAIL: unable to configure bgp due to {e}")
+        config.close()
+        return False
+  
+    print (f"PSSS: successfuly configure BGP attributes with below configuration")
+    config.sendline("show run")
+    config.expect("end")
+    print (config.before.decode("utf-8"))
+    print ("\n")
+    config.close()
+    
+    return True
+
+def vtysh_config_frr_delete_bgp(asnumber, hostname="",username="",password=""):
+    """
+    A funtion to delete frr BGP configuration
+    Returns: boolean True or False
+    """
+    print (f"Delete router interface")
+    if hostname and username and password:
+        remote=f"{username}@{hostname}"
+        config = pexpect.spawn("ssh " + remote) 
+        config.expect("password:")
+        config.sendline(password)
+        i = config.expect (['Permission denied', '[~#\]\$]'])
+        if i == 0:
+            print(f"Permission denied by {hostname}. Unable to login")
+            config.kill(0)
+        elif i == 1:
+            print(f'Connected Successfully to {hostname}')
+            config.sendline("vtysh")
+            config.expect("#")
+    else:
+        config= pexpect.spawn("vtysh")
+        config.expect("#")
+    try:
+        cmd=f"no router bgp {asnumber}"
+        config.sendline("config t")
+        config.expect("config\)#")
+        config.sendline(cmd)
+        config.expect("config\)#")
+        config.sendline(f"end")
+        config.expect("#")
+    except pexpect.ExceptionPexpect as e:
+        print (f"FAIL: unable to execute {cmd} due to {e}")
+        config.close()
+        return False
+    
+    print (f"PSSS: successfuly execute\"{cmd}\"with below configuration")
+    config.sendline("show run")
+    config.expect("end")
+    print (config.before.decode("utf-8"))
+    print ("\n")
+    config.close()
+    
+    return True
+
+def vtysh_config_frr_router_interface(interface, action="",ip="", hostname="",username="",password=""):
+    """
+    A funtion to configure frr router interface
+    Returns: boolean True or False
+    """
+    print (f"configure router interface")
+    if hostname and username and password:
+        remote=f"{username}@{hostname}"
+        config = pexpect.spawn("ssh " + remote) 
+        config.expect("password:")
+        config.sendline(password)
+        i = config.expect (['Permission denied', '[~#\]\$]'])
+        if i == 0:
+            print(f"Permission denied by {hostname}. Unable to login")
+            config.kill(0)
+        elif i == 1:
+            print(f'Connected Successfully to {hostname}')
+            config.sendline("vtysh")
+            config.expect("#")
+    else:
+        config= pexpect.spawn("vtysh")
+        config.expect("#")
+    try:
+        if not interface:
+            print ("FAIL: an interface must be provided")
+            config.close()
+            return False
+        config.sendline("config t")
+        config.expect("config\)#")
+        config.sendline(f"interface {interface}")
+        config.expect("config-if\)#")
+        if ip:
+            config.sendline(f"{action} ip address {ip}")
+            config.expect("config-if\)#")
+        
+        config.sendline(f"end")
+        config.expect("#")
+    except pexpect.ExceptionPexpect as e:
+        print (f"FAIL: unable to configure frr router interface due to {e}")
+        config.close()
+        return False
+    
+    print (f"PSSS: successfuly configure frr router interface with below configuration")
+    config.sendline("show run")
+    config.expect("end")
+    print (config.before.decode("utf-8"))
+    print ("\n")
+    config.close()
+    
+    return True
+
+def restart_frr_service(remote=False, hostname="",username="",password=""):
+    """
+    A function to restart frr service by executing "service frr restart" 
+    on local or remote host.
+    Returns: boolean True or False
+    """
+    if remote:
+        connection = Ssh(hostname=hostname, username=username, passwrd=password)
+        connection.setup_ssh_connection()
+    else:
+        hostname="local host"
+        connection = Local()
+    _, _, err = connection.execute_command("service frr restart")
+
+    if err:
+        print (f"FAILED: faild to restart frr service")
+        connection.tear_down()
+        return False
+    print (f"PASS: successfuly execute cmd \"service frr restart\" on {hostname}")
+    
+    connection.tear_down()
+    
     return True
 
 

@@ -212,6 +212,13 @@ EXTRA_DIST = \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_ping.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_del_add.json \
 	ptf_tests/common/config/LNT_ECMP_2VM_2Host_netperf.json \
+	ptf_tests/common/config/LNT_FRR_without_ECMP_ping_10min_LinkFlap.json \
+	ptf_tests/common/config/LNT_FRR_without_ECMP_netperf.json \
+	ptf_tests/common/config/LNT_FRR_with_ECMP_netperf_LinkFlap.json \
+	ptf_tests/common/config/LNT_FRR_with_ECMP_Hotplug_netperf.json \
+	ptf_tests/common/config/LNT_FRR_with_ECMP_ping_10min.json \
+	ptf_tests/common/config/LNT_FRR_with_ECMP_modify_TEP_IP.json \
+	ptf_tests/common/config/LNT_FRR_with_ECMP_modify_BGP_ASN.json \
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.p4 \
 	ptf_tests/common/p4c_artifacts/l3_action_profile/l3_action_profile.conf \
 	ptf_tests/common/p4c_artifacts/l3_action_selector/l3_action_selector.p4 \
@@ -312,6 +319,13 @@ EXTRA_DIST = \
 	ptf_tests/tests/LNT_ECMP_2HotPlugVM_2Host_netperf.py \ 
   ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
   ptf_tests/tests/LNT_ECMP_2VM_2Host_link_flap_netperf.py \
+    ptf_tests/tests/LNT_FRR_without_ECMP_ping_10min_LinkFlap.py \
+	ptf_tests/tests/LNT_FRR_without_ECMP_netperf.py \
+	ptf_tests/tests/LNT_FRR_with_ECMP_ping_10min.py \
+	ptf_tests/tests/LNT_FRR_with_ECMP_netperf_LinkFlap.py \
+	ptf_tests/tests/LNT_FRR_with_ECMP_Hotplug_netperf.py \
+	ptf_tests/tests/LNT_FRR_with_ECMP_modify_TEP_IP.py \
+	ptf_tests/tests/LNT_FRR_with_ECMP_modify_BGP_ASN.py \
 	ptf_tests/common/lib/tcpdump.py \
 	ptf_tests/common/utils/tcpdump_utils.py \
 	ptf_tests/tests/mtu_config_test_with_tap.py \
