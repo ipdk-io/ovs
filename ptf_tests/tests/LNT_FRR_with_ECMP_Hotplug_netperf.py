@@ -159,7 +159,7 @@ class LNT_FRR_with_ECMP_Hotplug_netperf(BaseTest):
                                           self.config_data['pb_bin'], self.config_data['p4_info']):
             self.result.addFailure(self, sys.exc_info())
             self.fail("Failed to set pipe")
-  
+      
         #bring up TAP
         if not gnmi_cli_utils.ip_set_dev_up(self.tap_port_list[0]):
             self.result.addFailure(self, sys.exc_info())
@@ -391,18 +391,26 @@ class LNT_FRR_with_ECMP_Hotplug_netperf(BaseTest):
            self.fail(f"FAIL: Ping test failed for underlay network")
         else:
             print (f"PASS: \"{ping_cmd}\" succeed")
-        
+            
+        time.sleep(10)
         print("Execute netperf from remote netns VM")
         for namespace in self.config_data['net_namespace']:                      
             for testname in self.config_data['netperf']['testname']:
                 print(f"execute netperf {testname} on net namespace {namespace['name']}")
                 for ip in namespace['remote_ip']:
-                    if not test_utils.ipnetns_netperf_client(namespace['name'], ip, self.config_data['netperf']['testlen'], 
-                        testname, remote=True, option = self.config_data['netperf']['cmd_option'], 
-                            hostname=self.config_data['client_hostname'], username=self.config_data['client_username'], 
-                                                                                  password=self.config_data['client_password'] ):
+                    j =1; max=3
+                    while j <=max:
+                        if not test_utils.ipnetns_netperf_client(namespace['name'], ip, self.config_data['netperf']['testlen'], 
+                                testname, remote=True, option = self.config_data['netperf']['cmd_option'], 
+                                    hostname=self.config_data['client_hostname'], username=self.config_data['client_username'], 
+                                                                                   password=self.config_data['client_password']):
+                            j +=1
+                            print (f"Try one more time to execute netperf due to previous failure")
+                        else:
+                            break
+                    if j>max:
                         self.result.addFailure(self, sys.exc_info())
-                        self.fail(f"FAIL: failed to get netperf data on name space {namespace['name']}")
+                        self.fail(f"FAIL: netperf test failed on VM{i} after {j} try")
         
         print("Starting to send underlay netperf traffic and check ECMP path")
         for i in range(len(self.conn_obj_list)):

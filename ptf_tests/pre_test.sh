@@ -42,7 +42,7 @@ echo "set hugepages"
 echo "starting OVS"
 if [ $3 ]
 then
-  ./run_ovs.sh $SDE_INSTALL
+  ./run_ovs.sh $P4OVS_DEPS_INSTALL
 else
   ./run_ovs.sh
 fi

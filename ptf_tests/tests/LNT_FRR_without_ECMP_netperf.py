@@ -24,7 +24,6 @@ from itertools import dropwhile
 
 # Unittest related imports
 import unittest
-from matplotlib import test
 
 # ptf related imports
 from ptf.base_tests import BaseTest
@@ -107,18 +106,13 @@ class LNT_FRR_without_ECMP_Netperf(BaseTest):
         for i in range(len(self.conn_obj_list)):
             print ("Configuring VM....")
             test_utils.configure_vm(self.conn_obj_list[i], vm_cmd_list[i])
-        
-        # Generate P4c artifacts
-        if not test_utils.gen_dep_files_p4c_dpdk_pna_ovs_pipeline_builder(self.config_data):
-            self.result.addFailure(self, sys.exc_info())
-            self.fail("Failed to generate P4C artifacts or pb.bin")
               
         # Set pipe line
         if not ovs_p4ctl.ovs_p4ctl_set_pipe(self.config_data['switch'], 
                                           self.config_data['pb_bin'], self.config_data['p4_info']):
             self.result.addFailure(self, sys.exc_info())
             self.fail("Failed to set pipe")
-
+       
         # Bring up TAP ports 
         if not gnmi_cli_utils.ip_set_dev_up(self.tap_port_list[0]):
             self.result.addFailure(self, sys.exc_info())
@@ -346,29 +340,29 @@ class LNT_FRR_without_ECMP_Netperf(BaseTest):
            self.fail(f"FAIL: Ping test failed for underlay network")
         else:
             print (f"PASS: \"{ping_cmd}\" succeed")
-       
+      
         print("Send netperf from remote netns VM to local VM")
         for namespace in self.config_data['net_namespace']:                      
             for testname in self.config_data['netperf']['testname']:
                 print(f"Excute netperf {testname} on remote namespace {namespace['name']}")
                 for ip in namespace['remote_ip']:
-                    j =1; max=3
+                    j=1; max=3
                     while j <=max:
-                        if not test_utils.vm_netperf_client(self.conn_obj_list[i], ip,
-                            self.config_data['netperf']['testlen'], testname,
-                                    option = self.config_data['netperf']['cmd_option']):
+                        if not test_utils.ipnetns_netperf_client(namespace['name'], ip, self.config_data['netperf']['testlen'], 
+                                testname, remote=True, option = self.config_data['netperf']['cmd_option'], 
+                                    hostname=self.config_data['client_hostname'], username=self.config_data['client_username'], 
+                                                                                   password=self.config_data['client_password']):
                             j +=1
-                            print (f"will have {j} try to execute netperf")
+                            print (f"Try one more time to execute netperf due to previous failure")
                         else:
                             break
                     if j>max:
                         self.result.addFailure(self, sys.exc_info())
-                        self.fail(f"FAIL: netperf test failed for VM{i}")
+                        self.fail(f"FAIL: netperf test failed on VM{i} after {j} try")
     
         print("Starting to send netperf traffic and check ECMP path")
         for i in range(len(self.conn_obj_list)):
             print(f"Execute netperf from VM{i} to other VMs")
-         
             for m in range(len(self.config_data['vm'][i]['remote_ip'])):
                 ip = self.config_data['vm'][i]['remote_ip'][m]
                 for testname in self.config_data['netperf']['testname']:  

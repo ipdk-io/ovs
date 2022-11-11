@@ -95,7 +95,7 @@ class L3_Action_Profile_Vhost(BaseTest):
         vm_id = 0
         for vm, port in zip(self.config_data['vm'], self.config_data['port']):
            globals()["conn"+str(vm_id+1)] = connectionManager("127.0.0.1", f"655{vm_id}", vm['vm_username'], vm['vm_password'], timeout=30)
-           globals()["vm"+str(vm_id+1)+"_command_list"] = [f"ip addr add {port['ip']} dev {port['interface']}", f"ip link set dev {port['interface']} address {port['mac']}" , f"ip route add 0.0.0.0/0 via {vm['dst_gw']} dev {port['interface']}"]
+           globals()["vm"+str(vm_id+1)+"_command_list"] = [f"ip addr add {port['ip']} dev {port['interface']}", f"ip link set dev {port['interface']} up", f"ip link set dev {port['interface']} address {port['mac']}" , f"ip route add 0.0.0.0/0 via {vm['dst_gw']} dev {port['interface']}"]
            vm_id+=1
 
 
@@ -119,50 +119,67 @@ class L3_Action_Profile_Vhost(BaseTest):
                 function_dict[table['description']](table['switch'],table['name'], match_action)
 
         time.sleep(100)
-        # configuring VMs
+        # Configuring VMs
         print("Configuring VM0 ....")
         test_utils.configure_vm(conn1, vm1_command_list)
 
         print("Configuring VM1 ....")
         test_utils.configure_vm(conn2, vm2_command_list)
 
-        # verify whether traffic hits group-1
+        # Verify Unicast traffic from VM0 to VM1
+        print("Verify Unicast traffic from VM0 to VM1")
         for src in self.config_data['traffic']['in_pkt_header']['ip_src']:
             dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][0]
-            print("sending packet to check if it hit group 1")
+            print("Sending Unicast Traffic")
             try:
                 pkt = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
             except Exception as err:
                 print(f"FAIL: Verification of packets sent failed with exception {err}")
                 self.PASSED = False
 
-        # verify whether traffic hits group-2
-        for src in self.config_data['traffic']['in_pkt_header']['ip_src']:
-
-            dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][1]
-            print("sending packet to check if it hit group 1")
-            try:
-                pkt = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
-            except Exception as err:
-                print(f"FAIL: Verification of packets sent failed with exception {err}")
-                self.PASSED = False
+        #verify Multicast Traffic
+        print("Verify Multicast Traffic")
+        sender_vm_id = self.config_data['traffic']['send_port'][1]
+        receiver_vm_id= self.config_data['traffic']['receive_port'][1]
+        sender_conn, receiver_conn = eval("conn"+str(sender_vm_id+1)), eval("conn"+str(receiver_vm_id+1))
         
-        # verify whether traffic hits group-3
-        for src in self.config_data['traffic']['in_pkt_header']['ip_src']:
+        send_result = test_utils.send_scapy_traffic_from_vm(sender_vm_id, sender_conn, receiver_conn, self.config_data,'multicast')
+        if send_result:
+            result = test_utils.verify_scapy_traffic_from_vm(receiver_vm_id,conn2,self.config_data,'multicast')
+            if not result:
+                print(f"FAIL: Multicast Traffic not received on receiver_vm VM{receiver_vm_id}")
+                self.result.addFailure(self, sys.exc_info())
+            else:
+                print(f"PASS: Multicast Traffic received on receiver_vm VM{receiver_vm_id}")
+        else:
+            print(f"FAIL: Multicast Packets not sent from sender_vm VM{sender_vm_id}")
+            self.result.addFailure(self, sys.exc_info())
 
-            dst_ip=self.config_data['traffic']['in_pkt_header']['ip_dst'][2]
-            print("sending packet to check if it hit group 2")
-            try:
-                pkt = test_utils.vm_to_vm_ping_test(conn1, dst_ip)
-            except Exception as err:
-                print(f"FAIL: Verification of packets sent failed with exception {err}")
-                self.PASSED = False
+        print("Sleeping for 3 seconds")
+        time.sleep(3)
+        # Verify Broadcast Traffic
+        print("Verify Broadcast Traffic")
+        sender_vm_id = self.config_data['traffic']['send_port'][2]
+        receiver_vm_id= self.config_data['traffic']['receive_port'][2]
+        sender_conn, receiver_conn = eval("conn"+str(sender_vm_id+1)), eval("conn"+str(receiver_vm_id+1))
+        send_result = test_utils.send_scapy_traffic_from_vm(sender_vm_id, sender_conn, receiver_conn, self.config_data,'broadcast')
+        if send_result:
+            result = test_utils.verify_scapy_traffic_from_vm(receiver_vm_id,receiver_conn,self.config_data,'broadcast')
+            if not result:
+                self.result.addFailure(self, sys.exc_info())
+                print(f"FAIL: Broadcast Traffic not received on receiver_vm VM{receiver_vm_id} ")
+                self.result.addFailure(self, sys.exc_info())
+            else:
+                print(f"PASS: Broadcast Traffic Received on receiver_vm VM{receiver_vm_id}")
+        else:
+            print(f"FAIL: Broadcast Packets not sent from sender_vm VM{sender_vm_id}")
+            self.result.addFailure(self, sys.exc_info())
 
         conn1.close()
         conn2.close()
 
     def tearDown(self):
-        
+
         table = self.config_data['table'][0]
         print("Deleting members")
         for del_member in table['del_member']:

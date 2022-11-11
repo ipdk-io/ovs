@@ -24,10 +24,8 @@ from datetime import datetime,timedelta
 
 # Unittest related imports
 import unittest
-from matplotlib import test
 
 # ptf related imports
-import ptf.dataplane as dataplane
 from ptf.base_tests import BaseTest
 from ptf.testutils import *
 

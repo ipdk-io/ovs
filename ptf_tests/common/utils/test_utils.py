@@ -27,6 +27,8 @@ import subprocess
 import re
 import pexpect
 import time
+import platform
+import scapy.all as scapy
 
 from common.lib.local_connection import Local
 from common.lib.telnet_connection import connectionManager
@@ -34,6 +36,8 @@ from common.lib.ovs import Ovs
 from common.utils.ovs_utils import get_connection_object
 import common.utils.gnmi_cli_utils as gnmi_cli_utis
 from common.lib.ssh import Ssh
+import common.utils.tcpdump_utils as tcpdump_utils
+
 
 
 def add_port_to_dataplane(port_list):
@@ -221,11 +225,27 @@ def vm_create(vm_location_list, memory="512M"):
     """
     num_of_vms = len(vm_location_list)
     vm_list = []
+    uname_obj = platform.uname()
+    machine = uname_obj.machine
+
     for i in range(num_of_vms):
         vm_name = f"VM{i}"
         vm_list.append(vm_name)
 
-        cmd = f"(qemu-kvm -smp 2 -m {memory} \
+        if 'x86_64' in machine: 
+            cmd = f"(qemu-system-x86_64 -smp 2 -m {memory} \
+-boot c -cpu host -enable-kvm -nographic \
+-L /root/pc-bios -name VM{i} \
+-hda {vm_location_list[i]} \
+-object memory-backend-file,id=mem,size={memory},mem-path=/dev/hugepages,share=on \
+-mem-prealloc \
+-numa node,memdev=mem \
+-chardev socket,id=char{i},path=/tmp/vhost-user-{i} \
+-netdev type=vhost-user,id=netdev{i},chardev=char{i},vhostforce \
+-device virtio-net-pci,netdev=netdev{i} \
+-serial telnet::655{i},server,nowait &)"
+        else:
+            cmd = f"(qemu-kvm -smp 2 -m {memory} \
 -boot c -cpu host -enable-kvm -nographic \
 -L /root/pc-bios -name VM{i} \
 -hda {vm_location_list[i]} \
@@ -790,7 +810,7 @@ def ipnetns_netperf_client(nsname, host, testlen, testname, option="", remote=Fa
     :Function to start netperf on linux name space
     :returns boolean True or False
     """
-    max = 5
+    max = 6
     found = False
     err_list,data, counter =[],[], {}
  
@@ -883,7 +903,7 @@ def vm_netperf_client(conn, host, testlen, testname, option=""):
         .... omitted ....
         131072  16384     64    10.00     610.03
     """
-    max = 5
+    max = 6
     found = False
     err_list,data, counter =[],[],{}
     conn.readResult() # read to clear previous buffer
@@ -1044,6 +1064,7 @@ def vtysh_config_frr_bgp_attr(asnumber, neighbor="",addr_family="",
     """
     A funtion to configure frr BGP attributes
     """
+    BGP_AS_UPLIMIT=4294967295
     print (f"Configure BGP attributes")
     if hostname and username and password:
         remote=f"{username}@{hostname}"
@@ -1062,8 +1083,8 @@ def vtysh_config_frr_bgp_attr(asnumber, neighbor="",addr_family="",
         config= pexpect.spawn("vtysh")
         config.expect("#")
     try:
-        if asnumber not in range(1,4294967296):
-            print ("FAIL: a as-number must be in range of 1 ~ 4294967295")
+        if asnumber not in range(1,BGP_AS_UPLIMIT+1):
+            print (f"FAIL: a as-number must be in range of 1 ~ {BGP_AS_UPLIMIT}")
             config.close()
             return False
         config.sendline("config t")
@@ -1217,3 +1238,184 @@ def restart_frr_service(remote=False, hostname="",username="",password=""):
     connection.tear_down()
     
     return True
+
+
+def send_ctrl_c(conn):
+
+    conn.sendCmd('\x03')
+
+    return True
+
+def send_ctrl_d(conn):
+
+    conn.sendCmd('\x04')
+
+    return True
+
+def send_scapy_traffic_from_vm(vm_id,conn,remote_conn,config_data,traffic_type="unicast"):
+    """
+    To send scapy traffic from sender vm and initialize tcpdump on the receiver vm
+    STEPS:
+    1. Start TCPdump on receiver_vm[conn2]
+    2. send scapy traffic using scapy.sendp from sender_vm[conn1]
+    3. Verify packets sents as expected[count]
+    """
+
+    vm = config_data['vm'][vm_id]
+    port = config_data['port'][vm_id]
+    pcap_file=''
+    tcpdump_cmd =''
+    
+    num = config_data['traffic']['number_pkts'][0]
+    eth_src = '\"%s\"' % port['mac'] 
+    eth_dst = '\"%s\"' % vm['mac_remote']
+    ip_src = '\"%s\"' % vm['dst_gw']
+    ip_dst= '\"%s\"' % vm['remote_ip']
+    iface = '%s' % port['interface']
+    vm_name = vm['name']
+
+    if traffic_type=='multicast':
+        ip_dst= '\"%s\"' % config_data['traffic']['in_pkt_header']['ip_dst'][1]
+        eth_dst='\"01:00:5e:00:00:01\"'
+        pcap_file= config_data['traffic']['pcap_file_name'][1]
+    elif traffic_type=='broadcast':
+        ip_dst= '\"%s\"' % config_data['traffic']['in_pkt_header']['ip_dst'][2]
+        eth_dst='\"FF:FF:FF:FF:FF\"'
+        pcap_file= config_data['traffic']['pcap_file_name'][2]
+    
+    #STEP1: starting TCPDUMP on remote_vm/receiver_vm using tcpdump
+    print(f"Starting TCPDUMP on Receiver VM")
+    tcpdump_cmd = "tcpdump -i %s -w %s host %s" % (iface, pcap_file, ip_dst)
+    print(f"tcpdump_Cmd:{tcpdump_cmd}")
+    remote_conn.sendCmd(tcpdump_cmd)
+    time.sleep(10)
+
+    #packet build    
+    command_list = ['python3','import scapy.all as scapy']
+
+    for cmd in command_list:
+        status = conn.sendCmd(cmd)
+        if status:
+            print(f"Command: {cmd} executed ")
+        else:
+            print("Failed to execute command {cmd}")
+
+    print(f"Sending Scapy Traffic from the sender_vm {vm_name}")
+    # Packet Building using scapy
+    conn.sendCmd('pkt=scapy.Ether(dst=%s,src=%s)/scapy.IP(dst=%s,src=%s)/\
+                  scapy.TCP()/scapy.Raw(\'0\'*50)' %(eth_dst,eth_src,ip_dst,ip_src))
+
+    status = conn.sendCmd('scapy.sendp(pkt,iface=\"%s\",count=%s)' % (iface,num))
+    # status = conn.sendCmd(cmd)
+    if status:
+        print(f"PASS:Traffic Successfully sent from {vm_name} ")
+    else:
+        print(f"FAIL: Failed to send traffic from {vm_name}")
+
+    result = conn.readResult()
+    if result:
+        match = re.search('Sent (\d*) packets', result)
+        if match:
+            pkt_sent = int(match.group(1))
+
+    ##Killing python3 terminal
+    status = conn.sendCmd('exit()')
+    if not status:
+        print("Failed to exit from python prompt")
+
+    if f"Sent {num} packets" in result:
+        print(f"PASS: Sent {num} packets to dst_ip: {ip_dst}")
+        print(f"result:{result}")
+        return True
+    else:
+        print(f"FAIL: {num} Packets are not sent to dst_ip: {ip_dst}")
+        return False
+
+
+def verify_scapy_traffic_from_vm(vm_id,conn,config_data,traffic_type="unicast"):
+    """
+    To verify packets captured on pcap file at receiver vm
+    STEPS:
+    1. Verify if pcap file exists on receiver_vm
+    2. use scapy.sniff to decode packets on the pcap file
+    3. verify the pkt_count on pcap file == expected_pkt_count (count)
+    """
+
+    result = False
+    packets = []
+    count = config_data['traffic']['number_pkts'][0]
+    pcap_file = config_data['traffic']['pcap_file_name'][0]
+    vm = config_data['vm'][vm_id]
+    vm_name = vm['name']
+
+    if traffic_type=='multicast':
+        pcap_file= config_data['traffic']['pcap_file_name'][1]
+    elif traffic_type=='broadcast':
+        pcap_file= config_data['traffic']['pcap_file_name'][2]
+
+    send_ctrl_c(conn)
+    print(f"Verify Traffic Received on receiver_vm {vm_name}")
+
+    #STEP1 : Looking for the PCAP file on the receiver VM
+    print(f"Checking for Pcap file {pcap_file} on receiver_vm {vm_name}")
+  
+    cmd_list = ['python3', "from scapy.all import *", 
+                'ls %s' % pcap_file]
+
+    for cmd in cmd_list:
+        conn.sendCmd(cmd)
+    if conn.readResult():
+        print(f"Pcap file {pcap_file} exists on receiver_vm {vm_name}")
+    else:
+        print("Pcap file {pcap_file} does not exist on receiver_vm {vm_name}")
+
+    #STEP2: Use scapy.sniff to decode packets on the pcap file
+    print(f"Decoding packets from pcap file {pcap_file}")
+    cmd_list = ['python3', "from scapy.all import *",
+                'packets=[x for x in sniff(offline=\"%s\")]' %pcap_file]
+    for cmd in cmd_list:
+        conn.sendCmd(cmd)
+
+    conn.sendCmd('out_pkts= [1 for pkt in packets if pkt.version==4]')
+    conn.sendCmd('print out_pkts ')
+    conn.sendCmd('len(out_pkts)')
+    out1 = conn.readResult()
+    out= out1.split('\n')
+    if out:
+        match = re.search('.*(\d+).*', out[-2])
+        if match:
+            pkt_count = int(match.group(0)[:-1])
+
+    print(f"{pkt_count} Packets capture on receiver_vm {vm_name} ")
+
+    #Verify the pkt_count receiver on receiver vm from Pcap file
+    print(f"Verify the packet count")
+
+    if pkt_count ==  count:
+        result = True
+        print(f"PASS: Successfully received {pkt_count} Packets on receiver_vm {vm_name}")
+    else:
+        print(f"FAIL: Expected: {count} packets vs Received {pkt_count} packets on receiver_vm {vm_name}")
+
+    #printing summary of the packets
+    print_scapy_pcap_summary(conn)
+    ##Killing python3 terminal
+    status = conn.sendCmd('exit()')
+    if not status:
+        print("Failed to exit from python prompt")
+
+    return result
+
+def print_scapy_pcap_summary(conn):
+
+    cmd_list = ['pkt_summary=[]',
+                'pkt_summary = [x.summary() for x in packets]',
+                'print(pkt_summary)']
+    for cmd in cmd_list:
+        conn.sendCmd(cmd)
+    
+    output = conn.readResult()
+    print(f"Printing Packet Capture Summary\n: {output}")
+
+
+
