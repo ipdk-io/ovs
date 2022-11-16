@@ -2880,7 +2880,7 @@ index 9f4bb3a9..00bf8d04 100644
 +  std::unique_ptr<tdi::TableData> table_data;
 +  tdi_status_t tdi_status;
 +  std::unique_ptr<tdi::Target> dev_tgt;
-+  device->createTarget(&dev_tgt);  
++  device->createTarget(&dev_tgt);
 +  uint32 entries = 0, actual = 0;
 +  auto table_type = static_cast<tdi_rt_table_type_e>(table->tableInfoGet()->tableTypeGet());
 +
@@ -2935,7 +2935,7 @@ index 9f4bb3a9..00bf8d04 100644
 +        *flags, table_key.get(),
 +        table_data.get());
 +    if (tdi_status != TDI_SUCCESS) {
-+	//SDE iterates through all the tables, and if no entry is present for that table, 
++	//SDE iterates through all the tables, and if no entry is present for that table,
 +	//TDI_OBJECT_NOT_FOUND is returned in which case it's no operation for flow dump for that table.
 +        if (tdi_status == TDI_OBJECT_NOT_FOUND) {
 +            return ::util::OkStatus();
