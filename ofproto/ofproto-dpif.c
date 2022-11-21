@@ -75,6 +75,13 @@
 #include "uuid.h"
 #include "vlan-bitmap.h"
 
+#if defined(P4OVS)
+#include "openvswitch/ovs-p4rt.h"
+static int32_t
+get_tunnel_data(struct netdev *netdev,
+                struct tunnel_info *tnl_info);
+#endif
+
 VLOG_DEFINE_THIS_MODULE(ofproto_dpif);
 
 COVERAGE_DEFINE(ofproto_dpif_expired);
@@ -2355,6 +2362,18 @@ port_destruct(struct ofport *port_, bool del)
     }
 
     tnl_port_del(port, port->odp_port);
+#if defined(P4OVS)
+    if (port->is_tunnel) {
+        struct tunnel_info tnl_info;
+        memset(&tnl_info, 0, sizeof(tnl_info));
+        if (!get_tunnel_data(port->up.netdev, &tnl_info)) {
+            ConfigTunnelTableEntry(tnl_info, false);
+        } else {
+            VLOG_ERR("Error retrieving tunnel information, skipping programming "
+                     "P4 entry");
+        }
+    }
+#endif  
     sset_find_and_delete(&ofproto->ports, devname);
     sset_find_and_delete(&ofproto->ghost_ports, devname);
     bundle_remove(port_);
@@ -4123,6 +4142,32 @@ port_query_by_name(const struct ofproto *ofproto_, const char *devname,
     return error;
 }
 
+#if defined(P4OVS)
+static int32_t
+get_tunnel_data(struct netdev *netdev,
+                struct tunnel_info *tnl_info)
+{
+     const struct netdev_tunnel_config *underlay_tnl = NULL;
+     underlay_tnl = netdev_get_tunnel_config(netdev);
+     if (!underlay_tnl) {
+         VLOG_ERR("Error retrieving netdev tunnel config");
+         return -1;
+     }
+     int underlay_ifindex = netdev_get_ifindex(netdev);
+     if (underlay_ifindex < 0) {
+         VLOG_ERR("Invalid tunnel ifindex");
+         return -1;
+     }
+     tnl_info->ifindex = (uint32_t)underlay_ifindex;
+     tnl_info->local_ip.v4addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
+     tnl_info->remote_ip.v4addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
+     tnl_info->dst_port = underlay_tnl->dst_port;
+     tnl_info->vni = underlay_tnl->vni;
+
+    return 0;
+}
+#endif
+
 static int
 port_add(struct ofproto *ofproto_, struct netdev *netdev)
 {
@@ -4160,6 +4205,19 @@ port_add(struct ofproto *ofproto_, struct netdev *netdev)
     } else {
         sset_add(&ofproto->ports, devname);
     }
+
+#if defined(P4OVS)
+    if (netdev_get_tunnel_config(netdev)) {
+        struct tunnel_info tnl_info;
+        memset(&tnl_info, 0, sizeof(tnl_info));
+        if (!get_tunnel_data(netdev, &tnl_info)) {
+            ConfigTunnelTableEntry(tnl_info, true);
+        } else {
+            VLOG_ERR("Error retrieving tunnel information, skipping programming "
+                     "P4 entry");
+        }
+    }
+#endif
     return 0;
 }
 

@@ -30,6 +30,10 @@
 #include "util.h"
 #include "vlan-bitmap.h"
 
+#if defined(P4OVS)
+#include "openvswitch/ovs-p4rt.h"
+#endif
+
 COVERAGE_DEFINE(mac_learning_learned);
 COVERAGE_DEFINE(mac_learning_expired);
 COVERAGE_DEFINE(mac_learning_evicted);
@@ -617,6 +621,13 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
     mac_entry_set_port(ml, e, NULL);
     hmap_remove(&ml->table, &e->hmap_node);
     ovs_list_remove(&e->lru_node);
+#if defined(P4OVS)
+    struct mac_learning_info fdb_info;
+    memset(&fdb_info, 0, sizeof(struct mac_learning_info));
+    memcpy(fdb_info.mac_addr, e->mac.ea, sizeof(fdb_info.mac_addr));
+    fdb_info.is_vlan = true;
+    ConfigFdbTableEntry(fdb_info, false);
+#endif
     free(e);
 }
 

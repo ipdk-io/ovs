@@ -378,17 +378,6 @@ dpif_netlink_rtnl_create(const struct netdev_tunnel_config *tnl_cfg,
     /* tunnel unique info */
     switch (type) {
     case OVS_VPORT_TYPE_VXLAN:
-        nl_msg_put_u8(&request, IFLA_VXLAN_TTL, tnl_cfg->ttl);
-        nl_msg_put_u32(&request, IFLA_VXLAN_ID, tnl_cfg->vni);
-        if (tnl_cfg->ipv6_dst.__in6_u.__u6_addr32[0] == 0) {
-            nl_msg_put_be32(&request, IFLA_VXLAN_GROUP,
-                            tnl_cfg->ipv6_dst.__in6_u.__u6_addr32[3]);
-        }
-        if (tnl_cfg->ipv6_src.__in6_u.__u6_addr32[0] == 0) {
-            nl_msg_put_be32(&request, IFLA_VXLAN_LOCAL,
-                            tnl_cfg->ipv6_src.__in6_u.__u6_addr32[3]);
-        }
-
         nl_msg_put_u8(&request, IFLA_VXLAN_LEARNING, 0);
         nl_msg_put_u8(&request, IFLA_VXLAN_COLLECT_METADATA, 1);
         nl_msg_put_u8(&request, IFLA_VXLAN_UDP_ZERO_CSUM6_RX, 1);
