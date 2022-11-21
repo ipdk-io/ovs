@@ -68,6 +68,15 @@
 #include "uuid.h"
 #include "vlan-bitmap.h"
 
+#if defined(P4OVS)
+#include "lib/netdev.h"
+#include <linux/if_vlan.h>
+#include <linux/sockios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include "openvswitch/ovs-p4rt.h"
+#endif //P4OVS
+
 COVERAGE_DEFINE(xlate_actions);
 COVERAGE_DEFINE(xlate_actions_oversize);
 COVERAGE_DEFINE(xlate_actions_too_many_output);
@@ -3092,6 +3101,67 @@ is_ip_local_multicast(const struct flow *flow, struct flow_wildcards *wc)
     }
 }
 
+#if defined(P4OVS)
+static int32_t
+get_fdb_data(struct xport *port, struct eth_addr mac_addr,
+             struct mac_learning_info *fdb_info)
+{
+    if (!port || !port->netdev || !port->xbundle) {
+        return -1;
+    }
+
+    memcpy(fdb_info->mac_addr, mac_addr.ea, sizeof(fdb_info->mac_addr));
+    if (port->is_tunnel) {
+        fdb_info->is_tunnel = port->is_tunnel;
+        const struct netdev_tunnel_config *underlay_tnl = NULL;
+        underlay_tnl = netdev_get_tunnel_config(port->netdev);
+        if (!underlay_tnl) {
+            VLOG_ERR("Error retrieving netdev tunnel config");
+            return -1;
+        }
+
+        int underlay_ifindex = netdev_get_ifindex(port->netdev);
+        if (underlay_ifindex < 0) {
+            VLOG_ERR("Invalid tunnel ifindex");
+            return -1;
+        }
+
+        fdb_info->tnl_info.ifindex = (uint32_t)underlay_ifindex;
+        fdb_info->tnl_info.local_ip.v4addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
+        fdb_info->tnl_info.remote_ip.v4addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
+        fdb_info->tnl_info.dst_port = underlay_tnl->dst_port;
+        fdb_info->tnl_info.vni = underlay_tnl->vni;
+    } else {
+        const char *port_name = port->xbundle->name;
+        if (strncmp(port_name, "vlan", strlen("vlan"))) {
+            VLOG_ERR("Not a VLAN interface, port name = %s", port_name);
+            return -1;
+        } else {
+           fdb_info->is_vlan = true;
+           int fd = socket(AF_INET, SOCK_DGRAM, 0);
+           if (fd == -1) {
+              VLOG_ERR("socket creation failed");
+              return -1;
+           }
+           struct vlan_ioctl_args if_request;
+           memset(&if_request, 0, sizeof(if_request));
+           strncpy(if_request.device1, port_name, sizeof(if_request.device1)-1);
+
+           if_request.cmd = GET_VLAN_VID_CMD;
+           if (ioctl(fd, SIOCSIFVLAN, &if_request) == -1) {
+               close(fd);
+               VLOG_ERR("Error retrieving vlan id through ioctl");
+               return -1;
+           }       
+           fdb_info->vln_info.vlan_id = if_request.u.VID;
+           close(fd);
+        }
+    }
+
+    return 0;
+}
+#endif
+
 static void
 xlate_normal(struct xlate_ctx *ctx)
 {
@@ -3163,6 +3233,22 @@ xlate_normal(struct xlate_ctx *ctx)
         update_learning_table(ctx, in_xbundle, flow->dl_src, vlan,
                               is_grat_arp);
     }
+
+#if defined(P4OVS)
+    //MAC is learnt, program P4 forwarding table
+    struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
+                                          flow->in_port.ofp_port);
+    struct mac_learning_info fdb_info;
+    memset(&fdb_info, 0, sizeof(fdb_info));
+
+    if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
+        ConfigFdbTableEntry(fdb_info, true);
+    } else {
+        VLOG_ERR("Error retrieving FDB information, skipping programming "
+                 "P4 entry");
+    }
+#endif
+    
     if (ctx->xin->xcache && in_xbundle != &ofpp_none_bundle) {
         struct xc_entry *entry;
 

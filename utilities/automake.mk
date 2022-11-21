@@ -1,9 +1,18 @@
 bin_PROGRAMS += \
 	utilities/ovs-appctl \
-	utilities/ovs-testcontroller \
 	utilities/ovs-dpctl \
 	utilities/ovs-ofctl \
 	utilities/ovs-vsctl
+
+# Disable ovs-testcontroller when built in P4OVS mode since
+# testcontroller references mac learning library.
+# TODO:Build test controller as static library and
+# link to sidecar before building it's executable
+
+if !P4OVS
+bin_PROGRAMS += utilities/ovs-testcontroller
+endif
+
 bin_SCRIPTS += utilities/ovs-docker \
 	utilities/ovs-pki \
 	utilities/ovs-pcap \
@@ -74,17 +83,20 @@ EXTRA_DIST += \
 	utilities/usdt-scripts/upcall_cost.py \
 	utilities/usdt-scripts/upcall_monitor.py
 MAN_ROOTS += \
-	utilities/ovs-testcontroller.8.in \
 	utilities/ovs-dpctl.8.in \
 	utilities/ovs-dpctl-top.8.in \
 	utilities/ovs-kmod-ctl.8 \
 	utilities/ovs-ofctl.8.in \
 	utilities/ovs-pcap.1.in \
 	utilities/ovs-vsctl.8.in
+
+if !P4OVS
+MAN_ROOTS += utilities/ovs-testcontroller.8.in
+endif
+
 CLEANFILES += \
 	utilities/ovs-ctl \
 	utilities/ovs-check-dead-ifs \
-	utilities/ovs-testcontroller.8 \
 	utilities/ovs-dpctl.8 \
 	utilities/ovs-dpctl-top \
 	utilities/ovs-dpctl-top.8 \
@@ -103,8 +115,12 @@ CLEANFILES += \
 	utilities/ovs-vlan-test \
 	utilities/ovs-vsctl.8
 
+if !P4OVS
+CLEANFILES += \
+        utilities/ovs-testcontroller.8
+endif
+
 man_MANS += \
-	utilities/ovs-testcontroller.8 \
 	utilities/ovs-dpctl.8 \
 	utilities/ovs-dpctl-top.8 \
 	utilities/ovs-kmod-ctl.8 \
@@ -112,11 +128,18 @@ man_MANS += \
 	utilities/ovs-pcap.1 \
 	utilities/ovs-vsctl.8
 
+if !P4OVS
+man_MANS += \
+        utilities/ovs-testcontroller.8
+endif
+
 utilities_ovs_appctl_SOURCES = utilities/ovs-appctl.c
 utilities_ovs_appctl_LDADD = lib/libopenvswitch.la
 
+if !P4OVS
 utilities_ovs_testcontroller_SOURCES = utilities/ovs-testcontroller.c
 utilities_ovs_testcontroller_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+endif
 
 utilities_ovs_dpctl_SOURCES = utilities/ovs-dpctl.c
 utilities_ovs_dpctl_LDADD = lib/libopenvswitch.la
