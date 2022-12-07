@@ -4,12 +4,11 @@ bin_PROGRAMS += \
 	utilities/ovs-ofctl \
 	utilities/ovs-vsctl
 
-# Disable ovs-testcontroller when built in P4OVS mode since
-# testcontroller references mac learning library.
-# TODO:Build test controller as static library and
-# link to sidecar before building it's executable
-
-if !P4OVS
+# Build test controller as static library and
+# link to sidecar before building its executable
+if P4OVS
+lib_LTLIBRARIES += utilities/libtestcontroller.la
+else
 bin_PROGRAMS += utilities/ovs-testcontroller
 endif
 
@@ -80,11 +79,8 @@ MAN_ROOTS += \
 	utilities/ovs-kmod-ctl.8 \
 	utilities/ovs-ofctl.8.in \
 	utilities/ovs-pcap.1.in \
-	utilities/ovs-vsctl.8.in
-
-if !P4OVS
-MAN_ROOTS += utilities/ovs-testcontroller.8.in
-endif
+	utilities/ovs-vsctl.8.in \
+        utilities/ovs-testcontroller.8.in
 
 CLEANFILES += \
 	utilities/ovs-ctl \
@@ -105,12 +101,8 @@ CLEANFILES += \
 	utilities/ovs-tcpundump \
 	utilities/ovs-test \
 	utilities/ovs-vlan-test \
-	utilities/ovs-vsctl.8
-
-if !P4OVS
-CLEANFILES += \
+	utilities/ovs-vsctl.8 \
         utilities/ovs-testcontroller.8
-endif
 
 man_MANS += \
 	utilities/ovs-dpctl.8 \
@@ -118,17 +110,17 @@ man_MANS += \
 	utilities/ovs-kmod-ctl.8 \
 	utilities/ovs-ofctl.8 \
 	utilities/ovs-pcap.1 \
-	utilities/ovs-vsctl.8
-
-if !P4OVS
-man_MANS += \
+	utilities/ovs-vsctl.8 \
         utilities/ovs-testcontroller.8
-endif
 
 utilities_ovs_appctl_SOURCES = utilities/ovs-appctl.c
 utilities_ovs_appctl_LDADD = lib/libopenvswitch.la
 
-if !P4OVS
+if P4OVS
+utilities_libtestcontroller_la_CPPFLAGS = $(AM_CPPFLAGS)
+utilities_libtestcontroller_la_SOURCES = utilities/ovs-testcontroller.c
+utilities_libtestcontroller_la_LIBADD = lib/libopenvswitch.la $(SSL_LIBS)
+else
 utilities_ovs_testcontroller_SOURCES = utilities/ovs-testcontroller.c
 utilities_ovs_testcontroller_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
 endif
