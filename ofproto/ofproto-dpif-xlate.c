@@ -3185,10 +3185,24 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
         }
 
         fdb_info->tnl_info.ifindex = (uint32_t)underlay_ifindex;
-        fdb_info->tnl_info.local_ip.v4addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
-        fdb_info->tnl_info.remote_ip.v4addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
         fdb_info->tnl_info.dst_port = underlay_tnl->dst_port;
         fdb_info->tnl_info.vni = underlay_tnl->vni;
+
+        if (underlay_tnl->ipv6_src.__in6_u.__u6_addr32[0]) {
+            /* IPv6 tunnel configuration */
+            fdb_info->tnl_info.local_ip.family = AF_INET6;
+            fdb_info->tnl_info.local_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_src;
+
+            fdb_info->tnl_info.remote_ip.family = AF_INET6;
+            fdb_info->tnl_info.remote_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_dst;
+        } else {
+            /* IPv4 tunnel configuration */
+            fdb_info->tnl_info.local_ip.family = AF_INET;
+            fdb_info->tnl_info.local_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
+
+            fdb_info->tnl_info.remote_ip.family = AF_INET;
+            fdb_info->tnl_info.remote_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
+        }
     } else {
         const char *port_name = port->xbundle->name;
         if (strncmp(port_name, "vlan", strlen("vlan"))) {
@@ -3293,7 +3307,7 @@ xlate_normal(struct xlate_ctx *ctx)
     }
 
 #if defined(P4OVS)
-    //MAC is learnt, program P4 forwarding table
+    /* Dynamic MAC is learnt, program P4 forwarding table */
     struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
                                           flow->in_port.ofp_port);
     struct mac_learning_info fdb_info;
@@ -8860,6 +8874,21 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
     if (!xbundle || (xbundle == &ofpp_none_bundle)) {
         return false;
     }
+
+#if defined(P4OVS)
+    /* Static MAC is configured, program P4 forwarding table */
+    struct xport *ovs_port = get_ofp_port(xbundle->xbridge,
+                                          in_port);
+    struct mac_learning_info fdb_info;
+    memset(&fdb_info, 0, sizeof(fdb_info));
+
+    if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
+        ConfigFdbTableEntry(fdb_info, true);
+    } else {
+        VLOG_ERR("Error retrieving FDB information, skipping programming "
+                 "P4 entry");
+    }
+#endif
 
     return mac_learning_add_static_entry(ofproto->ml, dl_src, vlan,
                                          xbundle->ofbundle);
