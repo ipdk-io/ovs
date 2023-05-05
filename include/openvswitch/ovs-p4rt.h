@@ -18,7 +18,10 @@ extern "C" {
 struct p4_ipaddr {
   uint8_t family;
   uint8_t prefix_len;
-  uint32_t v4addr;
+  union {
+    struct in_addr v4addr;
+    struct in6_addr v6addr;
+  } ip;
 };
 
 struct tunnel_info {
