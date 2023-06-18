@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2017, 2019-2020 Nicira, Inc.
+ * Copyright (c) 2022-2023 Intel Corporation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -74,7 +75,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include "openvswitch/ovs-p4rt.h"
-#endif //P4OVS
+#endif // P4OVS
 
 COVERAGE_DEFINE(xlate_actions);
 COVERAGE_DEFINE(xlate_actions_oversize);

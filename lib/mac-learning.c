@@ -24,6 +24,7 @@
 #include "coverage.h"
 #include "hash.h"
 #include "openvswitch/list.h"
+#include "openvswitch/ovs-p4rt.h"
 #include "openvswitch/poll-loop.h"
 #include "timeval.h"
 #include "unaligned.h"
