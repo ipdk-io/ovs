@@ -205,7 +205,7 @@ ALL_LOCAL += dist-hook-git
 dist-hook-git: distfiles
 	@if test -e $(srcdir)/.git && (git --version) >/dev/null 2>&1; then \
 	  (cd $(srcdir) && git ls-files) | grep -v '\.gitignore$$' | \
-	    grep -v '\.gitattributes$$' | \
+	    grep -v '\.gitattributes$$' | grep -v 'CODEOWNERS' | \
 	    LC_ALL=C sort -u > all-gitfiles; \
 	  LC_ALL=C comm -1 -3 distfiles all-gitfiles > missing-distfiles; \
 	  if test -s missing-distfiles; then \
