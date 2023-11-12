@@ -620,6 +620,7 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
     memset(&fdb_info, 0, sizeof(struct mac_learning_info));
     memcpy(fdb_info.mac_addr, e->mac.ea, sizeof(fdb_info.mac_addr));
     fdb_info.is_vlan = true;
+    fdb_info.bridge_id = ml->p4_bridge_id;
     ConfigFdbTableEntry(fdb_info, false);
 #endif
     free(e);
