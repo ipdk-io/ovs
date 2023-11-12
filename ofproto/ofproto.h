@@ -470,6 +470,9 @@ struct ofproto_bundle_settings {
     struct lacp_member_settings *lacp_members; /* Array of n_members elements. */
 
     bool protected;             /* Protected port mode */
+#if defined(P4OVS)
+    uint8_t p4_bridge_id;       /* Unique bridge ID used by P4 tables */
+#endif
 };
 
 int ofproto_bundle_register(struct ofproto *, void *aux,

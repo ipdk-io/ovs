@@ -75,6 +75,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include "openvswitch/ovs-p4rt.h"
+struct ofbundle;
 #endif //P4OVS
 
 COVERAGE_DEFINE(xlate_actions);
@@ -163,6 +164,9 @@ struct xbundle {
                                    /* Use 802.1p tag for frames in VLAN 0? */
     bool floodable;                /* No port has OFPUTIL_PC_NO_FLOOD set? */
     bool protected;                /* Protected port mode */
+#if defined(P4OVS)
+    uint8_t p4_bridge_id;
+#endif
 };
 
 struct xport {
@@ -696,6 +700,15 @@ static void xlate_xbridge_set(struct xbridge *, struct dpif *,
                               bool forward_bpdu, bool has_in_band,
                               const struct dpif_backer_support *,
                               const struct xbridge_addr *);
+#if defined(P4OVS)
+static void xlate_xbundle_set(struct xbundle *xbundle,
+                              enum port_vlan_mode vlan_mode,
+                              uint16_t qinq_ethtype, int vlan,
+                              unsigned long *trunks, unsigned long *cvlans,
+                              enum port_priority_tags_mode,
+                              const struct bond *bond, const struct lacp *lacp,
+                              bool floodable, bool protected, uint8_t p4_bridge_id);
+#elif
 static void xlate_xbundle_set(struct xbundle *xbundle,
                               enum port_vlan_mode vlan_mode,
                               uint16_t qinq_ethtype, int vlan,
@@ -703,6 +716,7 @@ static void xlate_xbundle_set(struct xbundle *xbundle,
                               enum port_priority_tags_mode,
                               const struct bond *bond, const struct lacp *lacp,
                               bool floodable, bool protected);
+#endif
 static void xlate_xport_set(struct xport *xport, odp_port_t odp_port,
                             const struct netdev *netdev, const struct cfm *cfm,
                             const struct bfd *bfd, const struct lldp *lldp,
@@ -1102,6 +1116,15 @@ xlate_xbridge_set(struct xbridge *xbridge,
     xbridge->support = *support;
 }
 
+#if defined(P4OVS)
+static void
+xlate_xbundle_set(struct xbundle *xbundle,
+                  enum port_vlan_mode vlan_mode, uint16_t qinq_ethtype,
+                  int vlan, unsigned long *trunks, unsigned long *cvlans,
+                  enum port_priority_tags_mode use_priority_tags,
+                  const struct bond *bond, const struct lacp *lacp,
+                  bool floodable, bool protected, uint8_t p4_bridge_id)
+#elif
 static void
 xlate_xbundle_set(struct xbundle *xbundle,
                   enum port_vlan_mode vlan_mode, uint16_t qinq_ethtype,
@@ -1109,6 +1132,7 @@ xlate_xbundle_set(struct xbundle *xbundle,
                   enum port_priority_tags_mode use_priority_tags,
                   const struct bond *bond, const struct lacp *lacp,
                   bool floodable, bool protected)
+#endif
 {
     ovs_assert(xbundle->xbridge);
 
@@ -1123,6 +1147,10 @@ xlate_xbundle_set(struct xbundle *xbundle,
     xbundle->use_priority_tags = use_priority_tags;
     xbundle->floodable = floodable;
     xbundle->protected = protected;
+
+#if defined(P4OVS)
+    xbundle->p4_bridge_id = p4_bridge_id;
+#endif
 
     if (xbundle->bond != bond) {
         bond_unref(xbundle->bond);
@@ -1215,10 +1243,18 @@ xlate_xbundle_copy(struct xbridge *xbridge, struct xbundle *xbundle)
     new_xbundle->name = xstrdup(xbundle->name);
     xlate_xbundle_init(new_xcfg, new_xbundle);
 
+#if defined(P4OVS)
+    xlate_xbundle_set(new_xbundle, xbundle->vlan_mode, xbundle->qinq_ethtype,
+                      xbundle->vlan, xbundle->trunks, xbundle->cvlans,
+                      xbundle->use_priority_tags, xbundle->bond, xbundle->lacp,
+                      xbundle->floodable, xbundle->protected,
+                      xbundle->p4_bridge_id);
+#elif
     xlate_xbundle_set(new_xbundle, xbundle->vlan_mode, xbundle->qinq_ethtype,
                       xbundle->vlan, xbundle->trunks, xbundle->cvlans,
                       xbundle->use_priority_tags, xbundle->bond, xbundle->lacp,
                       xbundle->floodable, xbundle->protected);
+#endif
     LIST_FOR_EACH (xport, bundle_node, &xbundle->xports) {
         xlate_xport_copy(xbridge, new_xbundle, xport);
     }
@@ -1425,6 +1461,16 @@ xlate_remove_ofproto(struct ofproto_dpif *ofproto)
     xlate_xbridge_remove(new_xcfg, xbridge);
 }
 
+#if defined(P4OVS)
+void
+xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
+                 const char *name, enum port_vlan_mode vlan_mode,
+                 uint16_t qinq_ethtype, int vlan,
+                 unsigned long *trunks, unsigned long *cvlans,
+                 enum port_priority_tags_mode use_priority_tags,
+                 const struct bond *bond, const struct lacp *lacp,
+                 bool floodable, bool protected, uint8_t p4_bridge_id)
+#elif
 void
 xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
                  const char *name, enum port_vlan_mode vlan_mode,
@@ -1433,6 +1479,7 @@ xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
                  enum port_priority_tags_mode use_priority_tags,
                  const struct bond *bond, const struct lacp *lacp,
                  bool floodable, bool protected)
+#endif
 {
     struct xbundle *xbundle;
 
@@ -1450,8 +1497,14 @@ xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
     free(xbundle->name);
     xbundle->name = xstrdup(name);
 
+#if defined(P4OVS)
+    xlate_xbundle_set(xbundle, vlan_mode, qinq_ethtype, vlan, trunks, cvlans,
+                      use_priority_tags, bond, lacp, floodable, protected,
+                      p4_bridge_id);
+#elif
     xlate_xbundle_set(xbundle, vlan_mode, qinq_ethtype, vlan, trunks, cvlans,
                       use_priority_tags, bond, lacp, floodable, protected);
+#endif
 }
 
 static void
@@ -3102,6 +3155,22 @@ is_ip_local_multicast(const struct flow *flow, struct flow_wildcards *wc)
 }
 
 #if defined(P4OVS)
+static enum p4_vlan_mode
+get_p4_vlan_mode(enum port_vlan_mode vlan_mode) {
+    if (vlan_mode == PORT_VLAN_ACCESS)
+        return P4_PORT_VLAN_ACCESS;
+    else if (vlan_mode == PORT_VLAN_TRUNK)
+        return P4_PORT_VLAN_TRUNK;
+    else if (vlan_mode == PORT_VLAN_NATIVE_TAGGED)
+        return P4_PORT_VLAN_NATIVE_TAGGED;
+    else if (vlan_mode == PORT_VLAN_NATIVE_UNTAGGED)
+        return P4_PORT_VLAN_NATIVE_UNTAGGED;
+    else if (vlan_mode == PORT_VLAN_DOT1Q_TUNNEL)
+        return P4_PORT_VLAN_DOT1Q_TUNNEL;
+    else
+        return -1;
+}
+
 static int32_t
 get_fdb_data(struct xport *port, struct eth_addr mac_addr,
              struct mac_learning_info *fdb_info)
@@ -3111,8 +3180,13 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
     }
 
     memcpy(fdb_info->mac_addr, mac_addr.ea, sizeof(fdb_info->mac_addr));
+    fdb_info->bridge_id = port->xbundle->p4_bridge_id;
+    fdb_info->vlan_info.port_vlan_mode = get_p4_vlan_mode(port->xbundle->vlan_mode);
+    fdb_info->vlan_info.port_vlan = port->xbundle->vlan;
+
     if (port->is_tunnel) {
         fdb_info->is_tunnel = port->is_tunnel;
+
         const struct netdev_tunnel_config *underlay_tnl = NULL;
         underlay_tnl = netdev_get_tunnel_config(port->netdev);
         if (!underlay_tnl) {
@@ -3148,8 +3222,7 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
     } else {
         const char *port_name = port->xbundle->name;
         if (strncmp(port_name, "vlan", strlen("vlan"))) {
-            VLOG_ERR("Not a VLAN interface, port name = %s", port_name);
-            return -1;
+            VLOG_DBG("Continue, this is latest LNW");
         } else {
            fdb_info->is_vlan = true;
            int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -3257,6 +3330,7 @@ xlate_normal(struct xlate_ctx *ctx)
 
     if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
         ConfigFdbTableEntry(fdb_info, true);
+        ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
     } else {
         VLOG_ERR("Error retrieving FDB information, skipping programming "
                  "P4 entry");
@@ -8660,7 +8734,12 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
     memset(&fdb_info, 0, sizeof(fdb_info));
 
     if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
-        ConfigFdbTableEntry(fdb_info, true);
+        struct eth_addr smac;
+        int err = netdev_get_etheraddr(ovs_port->netdev, &smac);
+        if (!err) {
+            ConfigFdbTableEntry(fdb_info, true);
+        }
+        ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
     } else {
         VLOG_ERR("Error retrieving FDB information, skipping programming "
                  "P4 entry");

@@ -75,9 +75,6 @@
 
 #if defined(P4OVS)
 #include "openvswitch/ovs-p4rt.h"
-static int32_t
-get_tunnel_data(struct netdev *netdev,
-                struct tunnel_info *tnl_info);
 #endif
 
 VLOG_DEFINE_THIS_MODULE(ofproto_dpif);
@@ -115,6 +112,9 @@ struct ofbundle {
 
     /* Status. */
     bool floodable;          /* True if no port has OFPUTIL_PC_NO_FLOOD set. */
+#if defined(P4OVS)
+    uint8_t p4_bridge_id;
+#endif
 };
 
 static void bundle_remove(struct ofport *);
@@ -491,12 +491,22 @@ type_run(const char *type)
                               &ofproto->backer->rt_support);
 
             HMAP_FOR_EACH (bundle, hmap_node, &ofproto->bundles) {
+#if defined(P4OVS)
+                xlate_bundle_set(ofproto, bundle, bundle->name,
+                                 bundle->vlan_mode, bundle->qinq_ethtype,
+                                 bundle->vlan, bundle->trunks, bundle->cvlans,
+                                 bundle->use_priority_tags,
+                                 bundle->bond, bundle->lacp,
+                                 bundle->floodable, bundle->protected,
+                                 bundle->p4_bridge_id);
+#elif
                 xlate_bundle_set(ofproto, bundle, bundle->name,
                                  bundle->vlan_mode, bundle->qinq_ethtype,
                                  bundle->vlan, bundle->trunks, bundle->cvlans,
                                  bundle->use_priority_tags,
                                  bundle->bond, bundle->lacp,
                                  bundle->floodable, bundle->protected);
+#endif
             }
 
             HMAP_FOR_EACH (ofport, up.hmap_node, &ofproto->up.ports) {
@@ -2221,18 +2231,6 @@ port_destruct(struct ofport *port_, bool del)
     }
 
     tnl_port_del(port, port->odp_port);
-#if defined(P4OVS)
-    if (port->is_tunnel) {
-        struct tunnel_info tnl_info;
-        memset(&tnl_info, 0, sizeof(tnl_info));
-        if (!get_tunnel_data(port->up.netdev, &tnl_info)) {
-            ConfigTunnelTableEntry(tnl_info, false);
-        } else {
-            VLOG_ERR("Error retrieving tunnel information, skipping programming "
-                     "P4 entry");
-        }
-    }
-#endif  
     sset_find_and_delete(&ofproto->ports, devname);
     sset_find_and_delete(&ofproto->ghost_ports, devname);
     bundle_remove(port_);
@@ -3331,6 +3329,7 @@ bundle_set(struct ofproto *ofproto_, void *aux,
 
         bundle->floodable = true;
         bundle->protected = false;
+        bundle->p4_bridge_id = s->p4_bridge_id;
         mbridge_register_bundle(ofproto->mbridge, bundle);
     }
 
@@ -3949,47 +3948,6 @@ port_query_by_name(const struct ofproto *ofproto_, const char *devname,
     return error;
 }
 
-#if defined(P4OVS)
-static int32_t
-get_tunnel_data(struct netdev *netdev,
-                struct tunnel_info *tnl_info)
-{
-     const struct netdev_tunnel_config *underlay_tnl = NULL;
-     underlay_tnl = netdev_get_tunnel_config(netdev);
-     if (!underlay_tnl) {
-         VLOG_ERR("Error retrieving netdev tunnel config");
-         return -1;
-     }
-     int underlay_ifindex = netdev_get_ifindex(netdev);
-     if (underlay_ifindex < 0) {
-         VLOG_ERR("Invalid tunnel ifindex");
-         return -1;
-     }
-     tnl_info->ifindex = (uint32_t)underlay_ifindex;
-     if (underlay_tnl->ipv6_src.__in6_u.__u6_addr32[0]) {
-         /* IPv6 tunnel configuration */
-         tnl_info->local_ip.family = AF_INET6;
-         tnl_info->local_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_src;
-
-         tnl_info->remote_ip.family = AF_INET6;
-         tnl_info->remote_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_dst;
-
-     } else {
-         /* IPv4 tunnel configuration */
-         tnl_info->local_ip.family = AF_INET;
-         tnl_info->local_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
-
-         tnl_info->remote_ip.family = AF_INET;
-         tnl_info->remote_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
-     }
-
-     tnl_info->dst_port = underlay_tnl->dst_port;
-     tnl_info->vni = underlay_tnl->vni;
-
-    return 0;
-}
-#endif
-
 static int
 port_add(struct ofproto *ofproto_, struct netdev *netdev)
 {
@@ -4028,18 +3986,6 @@ port_add(struct ofproto *ofproto_, struct netdev *netdev)
         sset_add(&ofproto->ports, devname);
     }
 
-#if defined(P4OVS)
-    if (netdev_get_tunnel_config(netdev)) {
-        struct tunnel_info tnl_info;
-        memset(&tnl_info, 0, sizeof(tnl_info));
-        if (!get_tunnel_data(netdev, &tnl_info)) {
-            ConfigTunnelTableEntry(tnl_info, true);
-        } else {
-            VLOG_ERR("Error retrieving tunnel information, skipping programming "
-                     "P4 entry");
-        }
-    }
-#endif
     return 0;
 }
 

@@ -72,6 +72,19 @@
 #include "lib/vswitch-idl.h"
 #include "vlan-bitmap.h"
 
+#if defined(P4OVS)
+#include "openvswitch/ovs-p4rt.h"
+#include <netinet/ether.h>
+
+static int32_t
+get_tunnel_data(struct netdev *netdev,
+                struct tunnel_info *tnl_info);
+
+uint8_t last_p4_bridge_id_used = 0;
+uint32_t unique_tunnel_src_port = P4_VXLAN_SOURCE_PORT_OFFSET;
+
+#endif
+
 VLOG_DEFINE_THIS_MODULE(bridge);
 
 COVERAGE_DEFINE(bridge_reconfigure);
@@ -108,6 +121,13 @@ struct port {
     struct bridge *bridge;
     char *name;
 
+#if defined(P4OVS)
+    uint16_t p4_src_port;
+    bool is_src_port_configured;
+    uint16_t p4_vlan_id;
+    enum p4_vlan_mode p4_vlan_mode;
+#endif
+
     const struct ovsrec_port *cfg;
 
     /* An ordinary bridge port has 1 interface.
@@ -119,6 +139,9 @@ struct bridge {
     struct hmap_node node;      /* In 'all_bridges'. */
     char *name;                 /* User-specified arbitrary name. */
     char *type;                 /* Datapath type. */
+#if defined(P4OVS)
+    uint8_t p4_bridge_id;       /* Unique bridge ID used by P4 tables */
+#endif
     struct eth_addr ea;         /* Bridge Ethernet Address. */
     struct eth_addr default_ea; /* Default MAC. */
     const struct ovsrec_bridge *cfg;
@@ -259,6 +282,7 @@ static uint64_t last_ifaces_changed;
 #define BRIDGE_CONTROLLER_PACKET_QUEUE_DEFAULT_SIZE 100
 #define BRIDGE_CONTROLLER_PACKET_QUEUE_MIN_SIZE 1
 #define BRIDGE_CONTROLLER_PACKET_QUEUE_MAX_SIZE 512
+
 
 static void add_del_bridges(const struct ovsrec_open_vswitch *);
 static void bridge_run__(void);
@@ -1296,6 +1320,10 @@ port_configure(struct port *port)
     /* Protected port mode */
     s.protected = cfg->protected_;
 
+#if defined(P4OVS)
+    s.p4_bridge_id = port->bridge->p4_bridge_id;
+#endif
+
     /* Register. */
     ofproto_bundle_register(port->bridge->ofproto, port, &s);
 
@@ -2106,6 +2134,171 @@ error:
     return error;
 }
 
+#if defined(P4OVS)
+static int32_t
+get_tunnel_data(struct netdev *netdev,
+                struct tunnel_info *tnl_info)
+{
+     const struct netdev_tunnel_config *underlay_tnl = NULL;
+     underlay_tnl = netdev_get_tunnel_config(netdev);
+     if (!underlay_tnl) {
+         VLOG_ERR("Error retrieving netdev tunnel config");
+         return -1;
+     }
+     int underlay_ifindex = netdev_get_ifindex(netdev);
+     if (underlay_ifindex < 0) {
+         VLOG_ERR("Invalid tunnel ifindex");
+         return -1;
+     }
+     tnl_info->ifindex = (uint32_t)underlay_ifindex;
+     if (underlay_tnl->ipv6_src.__in6_u.__u6_addr32[0]) {
+         /* IPv6 tunnel configuration */
+         tnl_info->local_ip.family = AF_INET6;
+         tnl_info->local_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_src;
+
+         tnl_info->remote_ip.family = AF_INET6;
+         tnl_info->remote_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_dst;
+
+     } else {
+         /* IPv4 tunnel configuration */
+         tnl_info->local_ip.family = AF_INET;
+         tnl_info->local_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
+
+         tnl_info->remote_ip.family = AF_INET;
+         tnl_info->remote_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
+     }
+
+     tnl_info->dst_port = underlay_tnl->dst_port;
+     tnl_info->vni = underlay_tnl->vni;
+
+    return 0;
+}
+
+static bool
+get_p4_vlan_info(const struct ovsrec_port *cfg,
+                 struct port *port) {
+    if (cfg && cfg->vlan_mode) {
+        if (!strcmp(cfg->vlan_mode, "native-tagged")) {
+            port->p4_vlan_mode = P4_PORT_VLAN_NATIVE_TAGGED;
+            port->p4_vlan_id = *cfg->tag;
+        } else if (!strcmp(cfg->vlan_mode, "native-untagged")) {
+            port->p4_vlan_mode = P4_PORT_VLAN_NATIVE_UNTAGGED;
+            port->p4_vlan_id = *cfg->tag;
+        } else {
+            /* Do Nothing, no support yet */
+            port->p4_vlan_mode = P4_PORT_VLAN_UNSUPPORTED;
+            port->p4_vlan_id = 0;
+            VLOG_DBG("Unsupported VLAN mode for the P4 target");
+            return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+static uint32_t
+GetSrcPortVsiId(char *mac_addr) {
+    struct ether_addr *ea;
+
+    ea = ether_aton((const char *)mac_addr);
+    if (!ea) {
+        VLOG_ERR("Cannot convert MAC address: %s to binary data", mac_addr);
+        return 0;
+    }
+    return ea->ether_addr_octet[1] + VPORT_ID_OFFSET;
+}
+
+static void
+ConfigureP4Target(struct bridge *br, struct port *port,
+                  struct iface *iface, bool insert_entry) {
+    if (!iface->cfg || !iface->cfg->type) {
+        VLOG_DBG("Invalid interface data to configure P4 Target");
+        return;
+    }
+
+    if (!strcmp(iface->cfg->type, "internal")) {
+        VLOG_DBG("Ignore OVS specific internal interfaces");
+        return;
+    }
+
+    /* Update parent bridge's unique ID in port structure */
+    if (!strcmp(iface->cfg->type, "vxlan") ||
+        netdev_get_tunnel_config(iface->netdev)) {
+        /* Handling VxLAN source port addition */
+        struct tunnel_info tnl_info;
+
+        memset(&tnl_info, 0, sizeof(tnl_info));
+
+        if (insert_entry) {
+            get_p4_vlan_info(port->cfg, port);
+            port->p4_src_port = unique_tunnel_src_port++;
+        }
+
+        if (!get_tunnel_data(iface->netdev, &tnl_info)) {
+            tnl_info.vlan_info.port_vlan = port->p4_vlan_id;
+            tnl_info.vlan_info.port_vlan_mode = port->p4_vlan_mode;
+            tnl_info.bridge_id = br->p4_bridge_id;
+            tnl_info.src_port = port->p4_src_port;
+
+            ConfigTunnelTableEntry(tnl_info, insert_entry);
+            ConfigIpTunnelTermTableEntry(tnl_info, insert_entry);
+            ConfigRxTunnelSrcTableEntry(tnl_info, insert_entry);
+        } else {
+            VLOG_ERR("Error retrieving tunnel information, "
+                     "skipping programming P4 entry");
+        }
+
+        if (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED ||
+            port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_UNTAGGED) {
+            struct src_port_info tnl_src_port_info = {br->p4_bridge_id,
+                                                      port->p4_vlan_id,
+                                                      port->p4_src_port};
+            /* When VLAN tag is configured */
+            ConfigVlanTableEntry(port->p4_vlan_id, insert_entry);
+            ConfigTunnelSrcPortTableEntry(tnl_src_port_info, insert_entry);
+        } else {
+            /* Wild card VLAN 0 */
+            struct src_port_info tnl_src_port_info = {br->p4_bridge_id,
+                                                      0,
+                                                      port->p4_src_port};
+
+            ConfigTunnelSrcPortTableEntry(tnl_src_port_info, insert_entry);
+        }
+        port->is_src_port_configured = insert_entry;
+    } else if (!insert_entry || iface->cfg->mac_in_use) {
+        /* Handling VSI source port addition */
+        if (insert_entry) {
+            get_p4_vlan_info(port->cfg, port);
+            port->p4_src_port = GetSrcPortVsiId(iface->cfg->mac_in_use);
+        }
+
+        if (port->p4_src_port &&
+            (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED ||
+            port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_UNTAGGED)) {
+            struct src_port_info vsi_src_port_info = {br->p4_bridge_id,
+                                                      port->p4_vlan_id,
+                                                      port->p4_src_port};
+
+            ConfigVlanTableEntry(port->p4_vlan_id, insert_entry);
+            ConfigSrcPortTableEntry(vsi_src_port_info, insert_entry);
+        } else if (port->p4_vlan_mode == P4_PORT_VLAN_UNSUPPORTED) {
+            /* Do nothing, unsupported vlan mode */
+        } else if (port->p4_src_port) {
+            struct src_port_info vsi_src_port_info = {br->p4_bridge_id,
+                                                      0,
+                                                      port->p4_src_port};
+
+            ConfigSrcPortTableEntry(vsi_src_port_info, insert_entry);
+        } else {
+            VLOG_DBG("Invalid P4 use case for source port to "
+                     "bridge mapping");
+        }
+        port->is_src_port_configured = insert_entry;
+    }
+    return;
+}
+#endif
+
 /* Creates a new iface on 'br' based on 'if_cfg'.  The new iface has OpenFlow
  * port number 'ofp_port'.  If ofp_port is OFPP_NONE, an OpenFlow port is
  * automatically allocated for the iface.  Takes ownership of and
@@ -2155,6 +2348,12 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
     /* Populate initial status in database. */
     iface_refresh_stats(iface);
     iface_refresh_netdev_status(iface);
+
+#if defined(P4OVS)
+    if (!port->is_src_port_configured) {
+        ConfigureP4Target(br, port, iface, true);
+    }
+#endif
 
     /* Add bond fake iface if necessary. */
     if (port_is_bond_fake_iface(port)) {
@@ -3578,6 +3777,18 @@ bridge_create(const struct ovsrec_bridge *br_cfg)
 
     hmap_init(&br->mappings);
     hmap_insert(&all_bridges, &br->node, hash_string(br->name, 0));
+
+#if defined(P4OVS)
+    /* TODO: Implement a better logic for unique bridge ID of type uint8. */
+    if (last_p4_bridge_id_used <= MAX_P4_BRIDGE_ID) {
+        br->p4_bridge_id = last_p4_bridge_id_used++;
+        VLOG_DBG("Assigned unique P4 bridge ID of: %d, for bridge: %s",
+                    br->p4_bridge_id, br->name);
+    } else {
+        VLOG_WARN("Unable to assign unique P4 bridge ID for bridge: %s, reached"
+                  " max P4 bridge ID limit of %d", br->name, MAX_P4_BRIDGE_ID);
+    }
+#endif
 }
 
 static void
@@ -4658,6 +4869,12 @@ iface_destroy__(struct iface *iface)
         VLOG_INFO("bridge %s: deleted interface %s on port %d",
                   br->name, iface->name, iface->ofp_port);
 
+#if defined(P4OVS)
+        if (port->is_src_port_configured) {
+            ConfigureP4Target(br, port, iface, false);
+        }
+#endif
+
         if (br->ofproto && iface->ofp_port != OFPP_NONE) {
             ofproto_port_unregister(br->ofproto, iface->ofp_port);
         }
@@ -5235,3 +5452,5 @@ discover_types(const struct ovsrec_open_vswitch *cfg)
     free(iface_types);
     sset_destroy(&types);
 }
+
+
