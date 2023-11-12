@@ -187,6 +187,15 @@ void xlate_ofproto_set(struct ofproto_dpif *, const char *name, struct dpif *,
 void xlate_remove_ofproto(struct ofproto_dpif *);
 struct ofproto_dpif *xlate_ofproto_lookup(const struct uuid *uuid);
 
+#if defined(P4OVS)
+void xlate_bundle_set(struct ofproto_dpif *, struct ofbundle *,
+                      const char *name, enum port_vlan_mode,
+                      uint16_t qinq_ethtype, int vlan,
+                      unsigned long *trunks, unsigned long *cvlans,
+                      enum port_priority_tags_mode,
+                      const struct bond *, const struct lacp *,
+                      bool floodable, bool protected, uint8_t p4_bridge_id);
+#elif
 void xlate_bundle_set(struct ofproto_dpif *, struct ofbundle *,
                       const char *name, enum port_vlan_mode,
                       uint16_t qinq_ethtype, int vlan,
@@ -194,6 +203,7 @@ void xlate_bundle_set(struct ofproto_dpif *, struct ofbundle *,
                       enum port_priority_tags_mode,
                       const struct bond *, const struct lacp *,
                       bool floodable, bool protected);
+#endif
 void xlate_bundle_remove(struct ofbundle *);
 
 void xlate_ofport_set(struct ofproto_dpif *, struct ofbundle *,
