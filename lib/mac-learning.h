@@ -189,6 +189,9 @@ struct mac_learning {
      * ports_by_ptr is a hash table indexed by the client-provided pointer. */
     struct hmap ports_by_ptr;   /* struct mac_learning_port hmap_nodes. */
     struct heap ports_by_usage; /* struct mac_learning_port heap_nodes. */
+
+    /* P4 specific bridge ID */
+    uint8_t p4_bridge_id;
 };
 
 int mac_entry_age(const struct mac_learning *ml, const struct mac_entry *e)
