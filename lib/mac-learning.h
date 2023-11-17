@@ -190,8 +190,9 @@ struct mac_learning {
     struct hmap ports_by_ptr;   /* struct mac_learning_port hmap_nodes. */
     struct heap ports_by_usage; /* struct mac_learning_port heap_nodes. */
 
-    /* P4 specific bridge ID */
-    uint8_t p4_bridge_id;
+#if defined(P4OVS)
+    uint8_t p4_bridge_id;       /* P4 specific bridge ID */
+#endif
 };
 
 int mac_entry_age(const struct mac_learning *ml, const struct mac_entry *e)
