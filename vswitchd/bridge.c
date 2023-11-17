@@ -2183,7 +2183,7 @@ GetSrcPortVsiId(char *mac_addr) {
         VLOG_ERR("Cannot convert MAC address: %s to binary data", mac_addr);
         return 0;
     }
-    return ea->ether_addr_octet[1] + VPORT_ID_OFFSET;
+    return ea->ether_addr_octet[1] + VSI_ID_OFFSET;
 }
 
 static void
@@ -2226,8 +2226,11 @@ ConfigureP4Target(struct bridge *br, struct port *port,
                      "skipping programming P4 entry");
         }
 
-        if (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED ||
-            port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_UNTAGGED) {
+        if (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED) {
+            /* only for native VLAN ports we need to add VLAN when
+             * configuring SRC port table. As this port only accepts
+             * TAGGED packets
+             */
             struct src_port_info tnl_src_port_info = {br->p4_bridge_id,
                                                       port->p4_vlan_id,
                                                       port->p4_src_port};
@@ -2251,8 +2254,11 @@ ConfigureP4Target(struct bridge *br, struct port *port,
         }
 
         if (port->p4_src_port &&
-            (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED ||
-            port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_UNTAGGED)) {
+            (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED)) {
+            /* only for native VLAN ports we need to add VLAN when
+             * configuring SRC port table. As this port only accepts
+             * TAGGED packets
+             */
             struct src_port_info vsi_src_port_info = {br->p4_bridge_id,
                                                       port->p4_vlan_id,
                                                       port->p4_src_port};
