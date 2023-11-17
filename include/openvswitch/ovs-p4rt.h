@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Intel Corporation.
+ * Copyright (c) 2022-2023 Intel Corporation.
  * SPDX-License-Identifier: Apache-2.0
  *
  * Defines the public interface to an externally-supplied module
@@ -15,8 +15,14 @@
 extern "C" {
 #endif
 
-#define VPORT_ID_OFFSET 16
-#define MAX_P4_BRIDGE_ID 256
+/* When VSI ID is used as an action, we need add an offset of 16 and populate
+ * the action */
+#define VSI_ID_OFFSET 16
+/* As p4 program uses 8 bits for bridge ID, current limitation is we can go max
+ * of 256 bridges (0-255) */
+#define MAX_P4_BRIDGE_ID 255
+/* Source port for VxLAN should start from 2048, 0 to 2047 are reserved for
+ * VSI/phy ports */
 #define P4_VXLAN_SOURCE_PORT_OFFSET 2048
 
 /* This is a replica of port_vlan_mode in ofproto.h */
@@ -44,38 +50,38 @@ struct port_vlan_info {
 };
 
 struct tunnel_info {
-    uint32_t ifindex;
-    uint32_t port_id;
-    uint32_t src_port;
-    struct p4_ipaddr local_ip;
-    struct p4_ipaddr remote_ip;
-    uint16_t dst_port;
-    uint16_t vni;
-    struct port_vlan_info vlan_info;
-    uint8_t bridge_id;
+  uint32_t ifindex;
+  uint32_t port_id;
+  uint32_t src_port;
+  struct p4_ipaddr local_ip;
+  struct p4_ipaddr remote_ip;
+  uint16_t dst_port;
+  uint16_t vni;
+  struct port_vlan_info vlan_info;
+  uint8_t bridge_id;
 };
 
 struct src_port_info {
-    uint8_t bridge_id;
-    uint16_t vlan_id;
-    uint32_t src_port;
+  uint8_t bridge_id;
+  uint16_t vlan_id;
+  uint32_t src_port;
 };
 
 struct vlan_info {
-    uint32_t vlan_id;
+  uint32_t vlan_id;
 };
 
 struct mac_learning_info {
-    bool is_tunnel;
-    bool is_vlan;
-    uint8_t mac_addr[6];
-    uint8_t bridge_id;
-    uint32_t src_port;
-    struct port_vlan_info vlan_info;
-    union {
-        struct tunnel_info tnl_info;
-        struct vlan_info vln_info;
-    };
+  bool is_tunnel;
+  bool is_vlan;
+  uint8_t mac_addr[6];
+  uint8_t bridge_id;
+  uint32_t src_port;
+  struct port_vlan_info vlan_info;
+  union {
+    struct tunnel_info tnl_info;
+    struct vlan_info vln_info;
+  };
 };
 
 // Function declarations
@@ -87,16 +93,14 @@ extern void ConfigTunnelSrcPortTableEntry(struct src_port_info tnl_sp,
                                           bool insert_entry);
 extern void ConfigSrcPortTableEntry(struct src_port_info vsi_sp,
                                     bool insert_entry);
-extern void ConfigVlanTableEntry(uint16_t vlan_id,
-                                 bool insert_entry);
+extern void ConfigVlanTableEntry(uint16_t vlan_id, bool insert_entry);
 extern void ConfigIpTunnelTermTableEntry(struct tunnel_info tunnel_info,
                                          bool insert_entry);
 extern void ConfigRxTunnelSrcTableEntry(struct tunnel_info tunnel_info,
                                         bool insert_entry);
 
 #ifdef __cplusplus
-} // extern "C"
+}  // extern "C"
 #endif
 
-#endif // OPENVSWITCH_OVS_P4RT_H
-
+#endif  // OPENVSWITCH_OVS_P4RT_H
