@@ -76,7 +76,6 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include "openvswitch/ovs-p4rt.h"
-struct ofbundle;
 #endif //P4OVS
 
 COVERAGE_DEFINE(xlate_actions);
@@ -167,7 +166,7 @@ struct xbundle {
     bool floodable;                /* No port has OFPUTIL_PC_NO_FLOOD set? */
     bool protected;                /* Protected port mode */
 #if defined(P4OVS)
-    uint8_t p4_bridge_id;
+    uint8_t p4_bridge_id;          /* P4 specific bridge ID for this xbundle */
 #endif
 };
 
@@ -3223,23 +3222,30 @@ get_p4_vlan_mode(enum port_vlan_mode vlan_mode) {
         return P4_PORT_VLAN_NATIVE_TAGGED;
     else if (vlan_mode == PORT_VLAN_NATIVE_UNTAGGED)
         return P4_PORT_VLAN_NATIVE_UNTAGGED;
-    else if (vlan_mode == PORT_VLAN_DOT1Q_TUNNEL)
-        return P4_PORT_VLAN_DOT1Q_TUNNEL;
     else
-        return -1;
+        return P4_PORT_VLAN_UNSUPPORTED;
 }
 
 static int32_t
 get_fdb_data(struct xport *port, struct eth_addr mac_addr,
              struct mac_learning_info *fdb_info)
 {
+    enum p4_vlan_mode v_mode;
     if (!port || !port->netdev || !port->xbundle) {
         return -1;
     }
 
     memcpy(fdb_info->mac_addr, mac_addr.ea, sizeof(fdb_info->mac_addr));
     fdb_info->bridge_id = port->xbundle->p4_bridge_id;
-    fdb_info->vlan_info.port_vlan_mode = get_p4_vlan_mode(port->xbundle->vlan_mode);
+
+    v_mode = get_p4_vlan_mode(port->xbundle->vlan_mode);
+
+    if (v_mode == P4_PORT_VLAN_UNSUPPORTED) {
+        VLOG_DBG("Unsupported VLAN mode");
+        return -1;
+    }
+
+    fdb_info->vlan_info.port_vlan_mode = v_mode;
     fdb_info->vlan_info.port_vlan = port->xbundle->vlan;
 
     if (port->is_tunnel) {
@@ -3280,6 +3286,23 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
     } else {
         const char *port_name = port->xbundle->name;
         if (strncmp(port_name, "vlan", strlen("vlan"))) {
+            struct eth_addr smac;
+            int err = netdev_get_etheraddr(port->netdev, &smac);
+            if (err) {
+                VLOG_DBG("Cannot retrieve Source MAC address for port: %s",
+                          port_name);
+                return -1;
+            }
+            if (!memcmp(smac.ea, mac_addr.ea, sizeof(smac))) {
+                VLOG_DBG("Ignore self MAC learn use case for port: %s",
+                          port_name);
+                return -1;
+
+            }
+            /* this SRC port MAC is needed to configure FDB entry
+             * for its corresponding HOST port or Phy port.
+             */
+            fdb_info->src_port = smac.ea[1] + VSI_ID_OFFSET;
             VLOG_DBG("Continue, this is latest LNW");
         } else {
            fdb_info->is_vlan = true;
@@ -3390,11 +3413,11 @@ xlate_normal(struct xlate_ctx *ctx)
         ConfigFdbTableEntry(fdb_info, true);
         ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
     } else {
-        VLOG_ERR("Error retrieving FDB information, skipping programming "
+        VLOG_DBG("Error retrieving FDB information, skipping programming "
                  "P4 entry");
     }
 #endif
-    
+
     if (ctx->xin->xcache && in_xbundle != &ofpp_none_bundle) {
         struct xc_entry *entry;
 
@@ -8957,14 +8980,10 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
     memset(&fdb_info, 0, sizeof(fdb_info));
 
     if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
-        struct eth_addr smac;
-        int err = netdev_get_etheraddr(ovs_port->netdev, &smac);
-        if (!err) {
-            ConfigFdbTableEntry(fdb_info, true);
-        }
+        ConfigFdbTableEntry(fdb_info, true);
         ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
     } else {
-        VLOG_ERR("Error retrieving FDB information, skipping programming "
+        VLOG_DBG("Error retrieving FDB information, skipping programming "
                  "P4 entry");
     }
 #endif
