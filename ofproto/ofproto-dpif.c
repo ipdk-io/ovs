@@ -113,7 +113,7 @@ struct ofbundle {
     /* Status. */
     bool floodable;          /* True if no port has OFPUTIL_PC_NO_FLOOD set. */
 #if defined(P4OVS)
-    uint8_t p4_bridge_id;
+    uint8_t p4_bridge_id;    /* P4 specific bridge ID for this ofbundle */
 #endif
 };
 
@@ -3329,7 +3329,9 @@ bundle_set(struct ofproto *ofproto_, void *aux,
 
         bundle->floodable = true;
         bundle->protected = false;
+#if defined(P4OVS)
         bundle->p4_bridge_id = s->p4_bridge_id;
+#endif
         mbridge_register_bundle(ofproto->mbridge, bundle);
     }
 
