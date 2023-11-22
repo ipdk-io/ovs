@@ -2334,14 +2334,16 @@ ConfigureP4Target(struct bridge *br, struct port *port,
         return;
     }
 
-    if (!strcmp(iface->cfg->type, "internal")) {
+    /* when port is deleted, there are chances that iface->cfg is not valid
+     * Check if iface type only during insert case
+     */
+    if (insert_entry && !strcmp(iface->cfg->type, "internal")) {
         VLOG_DBG("Ignore OVS specific internal interfaces");
         return;
     }
 
-    /* Update parent bridge's unique ID in port structure */
-    if (!strcmp(iface->cfg->type, "vxlan") ||
-        netdev_get_tunnel_config(iface->netdev)) {
+    /* Check if port is of type tunnel */
+    if (netdev_get_tunnel_config(iface->netdev)) {
         /* Handling VxLAN source port addition */
         struct tunnel_info tnl_info;
 
