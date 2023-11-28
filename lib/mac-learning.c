@@ -616,12 +616,14 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
     hmap_remove(&ml->table, &e->hmap_node);
     ovs_list_remove(&e->lru_node);
 #if defined(P4OVS)
-    struct mac_learning_info fdb_info;
-    memset(&fdb_info, 0, sizeof(struct mac_learning_info));
-    memcpy(fdb_info.mac_addr, e->mac.ea, sizeof(fdb_info.mac_addr));
-    fdb_info.is_vlan = true;
-    fdb_info.bridge_id = ml->p4_bridge_id;
-    ConfigFdbTableEntry(fdb_info, false);
+    if (ENABLE_OVS_P4_OFFLOAD) {
+        struct mac_learning_info fdb_info;
+        memset(&fdb_info, 0, sizeof(struct mac_learning_info));
+        memcpy(fdb_info.mac_addr, e->mac.ea, sizeof(fdb_info.mac_addr));
+        fdb_info.is_vlan = true;
+        fdb_info.bridge_id = ml->p4_bridge_id;
+        ConfigFdbTableEntry(fdb_info, false);
+    }
 #endif
     free(e);
 }

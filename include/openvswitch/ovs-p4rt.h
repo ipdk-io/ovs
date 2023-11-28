@@ -15,6 +15,15 @@
 extern "C" {
 #endif
 
+/* Control OVS offload with an environment variable during runtime.
+ * If env variable OVS_P4_OFFLOAD=false, then disable OVS offload, else
+ * if OVS_P4_OFFLOAD is not set or OVS_P4_OFFLOAD is any value other
+ * than false, then by default enable OVS offload.
+ */
+#define ENABLE_OVS_P4_OFFLOAD                                                     \
+  (getenv("OVS_P4_OFFLOAD") && !strcmp(getenv("OVS_P4_OFFLOAD"), "false")) ? 0 \
+                                                                           : 1
+
 /* When VSI ID is used as an action, we need add an offset of 16 and populate
  * the action */
 #define VSI_ID_OFFSET 16
