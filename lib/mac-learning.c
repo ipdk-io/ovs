@@ -32,6 +32,7 @@
 
 #if defined(P4OVS)
 #include "openvswitch/ovs-p4rt.h"
+#include "openvswitch/p4ovs.h"
 #endif
 
 COVERAGE_DEFINE(mac_learning_learned);
@@ -616,9 +617,9 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
     hmap_remove(&ml->table, &e->hmap_node);
     ovs_list_remove(&e->lru_node);
 #if defined(P4OVS)
-    if (ENABLE_OVS_P4_OFFLOAD) {
+    if (ovs_p4_offload_enabled()) {
         struct mac_learning_info fdb_info;
-        memset(&fdb_info, 0, sizeof(struct mac_learning_info));
+        memset(&fdb_info, 0, sizeof(fdb_info));
         memcpy(fdb_info.mac_addr, e->mac.ea, sizeof(fdb_info.mac_addr));
         fdb_info.is_vlan = true;
         fdb_info.bridge_id = ml->p4_bridge_id;
