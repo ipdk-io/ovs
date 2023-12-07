@@ -54,7 +54,8 @@ openvswitchinclude_HEADERS = \
 
 if P4OVS
 openvswitchinclude_HEADERS += \
-	include/openvswitch/ovs-p4rt.h
+	include/openvswitch/ovs-p4rt.h \
+	include/openvswitch/p4ovs.h
 endif
 
 if HAVE_CXX
