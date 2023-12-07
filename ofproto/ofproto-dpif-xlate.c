@@ -76,6 +76,7 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include "openvswitch/ovs-p4rt.h"
+#include "openvswitch/p4ovs.h"
 #endif //P4OVS
 
 COVERAGE_DEFINE(xlate_actions);
@@ -3403,19 +3404,22 @@ xlate_normal(struct xlate_ctx *ctx)
     }
 
 #if defined(P4OVS)
+    p4ovs_lock(&p4ovs_fdb_entry_lock);
     /* Dynamic MAC is learnt, program P4 forwarding table */
     struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
                                           flow->in_port.ofp_port);
     struct mac_learning_info fdb_info;
     memset(&fdb_info, 0, sizeof(fdb_info));
-
-    if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
-        ConfigFdbTableEntry(fdb_info, true);
-        ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
-    } else {
-        VLOG_DBG("Error retrieving FDB information, skipping programming "
-                 "P4 entry");
+    if (ovs_p4_offload_enabled()) {
+        if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
+            ConfigFdbTableEntry(fdb_info, true);
+            ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
+        } else {
+            VLOG_DBG("Error retrieving FDB information, skipping programming "
+                     "P4 entry");
+        }
     }
+    p4ovs_unlock(&p4ovs_fdb_entry_lock);
 #endif
 
     if (ctx->xin->xcache && in_xbundle != &ofpp_none_bundle) {
@@ -8973,18 +8977,20 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
     }
 
 #if defined(P4OVS)
-    /* Static MAC is configured, program P4 forwarding table */
-    struct xport *ovs_port = get_ofp_port(xbundle->xbridge,
-                                          in_port);
-    struct mac_learning_info fdb_info;
-    memset(&fdb_info, 0, sizeof(fdb_info));
+    if (ovs_p4_offload_enabled()) {
+        /* Static MAC is configured, program P4 forwarding table */
+        struct xport *ovs_port = get_ofp_port(xbundle->xbridge,
+                                              in_port);
+        struct mac_learning_info fdb_info;
+        memset(&fdb_info, 0, sizeof(fdb_info));
 
-    if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
-        ConfigFdbTableEntry(fdb_info, true);
-        ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
-    } else {
-        VLOG_DBG("Error retrieving FDB information, skipping programming "
-                 "P4 entry");
+        if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
+            ConfigFdbTableEntry(fdb_info, true);
+            ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
+        } else {
+            VLOG_DBG("Error retrieving FDB information, skipping programming "
+                     "P4 entry");
+        }
     }
 #endif
 
