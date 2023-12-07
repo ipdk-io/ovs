@@ -73,8 +73,10 @@
 #include "vlan-bitmap.h"
 
 #if defined(P4OVS)
-#include "openvswitch/ovs-p4rt.h"
 #include <netinet/ether.h>
+
+#include "openvswitch/ovs-p4rt.h"
+#include "openvswitch/p4ovs.h"
 
 static int32_t
 get_tunnel_data(struct netdev *netdev,
@@ -82,7 +84,7 @@ get_tunnel_data(struct netdev *netdev,
 
 uint8_t last_p4_bridge_id_used = 0;
 uint32_t unique_tunnel_src_port = P4_VXLAN_SOURCE_PORT_OFFSET;
-
+struct ovs_mutex p4ovs_fdb_entry_lock = OVS_MUTEX_INITIALIZER;
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -557,6 +559,10 @@ bridge_init(const char *remote)
     rstp_init();
     odp_execute_init();
 
+#if defined(P4OVS)
+    p4ovs_lock_init(&p4ovs_fdb_entry_lock);
+#endif
+
     ifaces_changed = seq_create();
     last_ifaces_changed = seq_read(ifaces_changed);
     ifnotifier = if_notifier_create(if_change_cb, NULL);
@@ -579,6 +585,10 @@ bridge_exit(bool delete_datapath)
     HMAP_FOR_EACH_SAFE (br, node, &all_bridges) {
         bridge_destroy(br, delete_datapath);
     }
+
+#if defined(P4OVS)
+    p4ovs_lock_destroy(&p4ovs_fdb_entry_lock);
+#endif
 
     ovsdb_idl_destroy(idl);
 }
