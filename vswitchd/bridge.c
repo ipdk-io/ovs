@@ -2227,7 +2227,10 @@ get_tunnel_data(struct netdev *netdev,
      tnl_info->dst_port = underlay_tnl->dst_port;
      tnl_info->vni = underlay_tnl->vni;
 
-    return 0;
+     const char* tnl_type = netdev_get_type(netdev);
+     tnl_info->tunnel_type = TunnelTypeStrtoEnum(tnl_type);
+
+     return 0;
 }
 
 static bool
