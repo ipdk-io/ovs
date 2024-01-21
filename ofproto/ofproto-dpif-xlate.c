@@ -3268,6 +3268,8 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
         fdb_info->tnl_info.ifindex = (uint32_t)underlay_ifindex;
         fdb_info->tnl_info.dst_port = underlay_tnl->dst_port;
         fdb_info->tnl_info.vni = underlay_tnl->vni;
+        const char *tnl_type = tnl_port_get_type(port->ofport);
+        fdb_info->tnl_info.tunnel_type = TunnelTypeStrtoEnum(tnl_type);
 
         if (underlay_tnl->ipv6_src.__in6_u.__u6_addr32[0]) {
             /* IPv6 tunnel configuration */
