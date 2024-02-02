@@ -94,8 +94,6 @@ extern void ConfigTunnelSrcPortTableEntry(struct src_port_info tnl_sp,
 extern void ConfigSrcPortTableEntry(struct src_port_info vsi_sp,
                                     bool insert_entry);
 extern void ConfigVlanTableEntry(uint16_t vlan_id, bool insert_entry);
-extern void ConfigIpTunnelTermTableEntry(struct tunnel_info tunnel_info,
-                                         bool insert_entry);
 extern void ConfigRxTunnelSrcTableEntry(struct tunnel_info tunnel_info,
                                         bool insert_entry);
 
