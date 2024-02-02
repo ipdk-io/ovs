@@ -2199,14 +2199,14 @@ GetSrcPortVsiId(char *mac_addr) {
 static void
 ConfigureP4Target(struct bridge *br, struct port *port,
                   struct iface *iface, bool insert_entry) {
-    if (!iface->cfg || !iface->cfg->type) {
+    /* when port is deleted, there are chances that iface->cfg is not valid
+     * Check if iface type only during insert case
+     */
+    if (insert_entry && (!iface->cfg || !iface->cfg->type)) {
         VLOG_DBG("Invalid interface data to configure P4 Target");
         return;
     }
 
-    /* when port is deleted, there are chances that iface->cfg is not valid
-     * Check if iface type only during insert case
-     */
     if (insert_entry && !strcmp(iface->cfg->type, "internal")) {
         VLOG_DBG("Ignore OVS specific internal interfaces");
         return;
@@ -2231,7 +2231,6 @@ ConfigureP4Target(struct bridge *br, struct port *port,
             tnl_info.src_port = port->p4_src_port;
 
             ConfigTunnelTableEntry(tnl_info, insert_entry);
-            ConfigIpTunnelTermTableEntry(tnl_info, insert_entry);
             ConfigRxTunnelSrcTableEntry(tnl_info, insert_entry);
         } else {
             VLOG_ERR("Error retrieving tunnel information, "
@@ -2347,7 +2346,9 @@ iface_create(struct bridge *br, const struct ovsrec_interface *iface_cfg,
 
 #if defined(P4OVS)
     if (!port->is_src_port_configured) {
+        p4ovs_lock(&p4ovs_fdb_entry_lock);
         ConfigureP4Target(br, port, iface, true);
+        p4ovs_unlock(&p4ovs_fdb_entry_lock);
     }
 #endif
 
@@ -4858,7 +4859,9 @@ iface_destroy__(struct iface *iface)
 
 #if defined(P4OVS)
         if (port->is_src_port_configured) {
+            p4ovs_lock(&p4ovs_fdb_entry_lock);
             ConfigureP4Target(br, port, iface, false);
+            p4ovs_unlock(&p4ovs_fdb_entry_lock);
         }
 #endif
 
