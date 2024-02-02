@@ -3383,13 +3383,13 @@ xlate_normal(struct xlate_ctx *ctx)
     }
 
 #if defined(P4OVS)
-    p4ovs_lock(&p4ovs_fdb_entry_lock);
     /* Dynamic MAC is learnt, program P4 forwarding table */
     struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
                                           flow->in_port.ofp_port);
     struct mac_learning_info fdb_info;
     memset(&fdb_info, 0, sizeof(fdb_info));
     if (ovs_p4_offload_enabled()) {
+        p4ovs_lock(&p4ovs_fdb_entry_lock);
         if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
             ConfigFdbTableEntry(fdb_info, true);
             ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
@@ -3397,8 +3397,8 @@ xlate_normal(struct xlate_ctx *ctx)
             VLOG_DBG("Error retrieving FDB information, skipping programming "
                      "P4 entry");
         }
+        p4ovs_unlock(&p4ovs_fdb_entry_lock);
     }
-    p4ovs_unlock(&p4ovs_fdb_entry_lock);
 #endif
 
     if (ctx->xin->xcache && in_xbundle != &ofpp_none_bundle) {
