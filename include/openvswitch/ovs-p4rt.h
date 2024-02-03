@@ -35,6 +35,12 @@ enum p4_vlan_mode {
   P4_PORT_VLAN_UNSUPPORTED
 };
 
+enum ovs_tunnel_type {
+  OVS_TUNNEL_UNKNOWN = 0,
+  OVS_TUNNEL_VXLAN,
+  OVS_TUNNEL_GENEVE
+};
+
 struct p4_ipaddr {
   uint8_t family;
   uint8_t prefix_len;
@@ -59,6 +65,7 @@ struct tunnel_info {
   uint16_t vni;
   struct port_vlan_info vlan_info;
   uint8_t bridge_id;
+  uint8_t tunnel_type;
 };
 
 struct src_port_info {
@@ -96,6 +103,8 @@ extern void ConfigSrcPortTableEntry(struct src_port_info vsi_sp,
 extern void ConfigVlanTableEntry(uint16_t vlan_id, bool insert_entry);
 extern void ConfigRxTunnelSrcTableEntry(struct tunnel_info tunnel_info,
                                         bool insert_entry);
+
+extern enum ovs_tunnel_type TunnelTypeStrtoEnum(const char* tnl_type);
 
 #ifdef __cplusplus
 }  // extern "C"
