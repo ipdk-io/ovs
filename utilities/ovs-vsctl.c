@@ -180,6 +180,7 @@ main(int argc, char *argv[])
     ovsdb_idl_set_shuffle_remotes(idl, shuffle_remotes);
     ovsdb_idl_set_remote(idl, db, retry);
     ovsdb_idl_set_leader_only(idl, leader_only);
+    ovsdb_idl_set_db_change_aware(idl, false);
     run_prerequisites(commands, n_commands, idl);
 
     /* Execute the commands.
@@ -888,14 +889,23 @@ check_conflicts(struct vsctl_context *vsctl_ctx, const char *name,
 
     port = shash_find_data(&vsctl_ctx->ports, name);
     if (port) {
-        ctl_fatal("%s because a port named %s already exists on "
-                    "bridge %s", msg, name, port->bridge->name);
+        if (port->bridge) {
+            ctl_fatal("%s because a port named %s already exists on "
+                      "bridge %s", msg, name, port->bridge->name);
+        } else {
+            ctl_fatal("%s because a port named %s already exists", msg, name);
+        }
     }
 
     iface = shash_find_data(&vsctl_ctx->ifaces, name);
     if (iface) {
-        ctl_fatal("%s because an interface named %s already exists "
-                    "on bridge %s", msg, name, iface->port->bridge->name);
+        if (iface->port->bridge) {
+            ctl_fatal("%s because an interface named %s already exists "
+                      "on bridge %s", msg, name, iface->port->bridge->name);
+        } else {
+            ctl_fatal("%s because an interface named %s already exists", msg,
+                      name);
+        }
     }
 
     free(msg);
@@ -935,7 +945,7 @@ find_port(struct vsctl_context *vsctl_ctx, const char *name, bool must_exist)
     ovs_assert(vsctl_ctx->cache_valid);
 
     port = shash_find_data(&vsctl_ctx->ports, name);
-    if (port && !strcmp(name, port->bridge->name)) {
+    if (port && port->bridge && !strcmp(name, port->bridge->name)) {
         port = NULL;
     }
     if (must_exist && !port) {
@@ -953,7 +963,8 @@ find_iface(struct vsctl_context *vsctl_ctx, const char *name, bool must_exist)
     ovs_assert(vsctl_ctx->cache_valid);
 
     iface = shash_find_data(&vsctl_ctx->ifaces, name);
-    if (iface && !strcmp(name, iface->port->bridge->name)) {
+    if (iface && iface->port->bridge &&
+        !strcmp(name, iface->port->bridge->name)) {
         iface = NULL;
     }
     if (must_exist && !iface) {
@@ -2711,9 +2722,9 @@ post_db_reload_do_checks(const struct vsctl_context *vsctl_ctx)
 
 static void
 vsctl_context_init_command(struct vsctl_context *vsctl_ctx,
-                           struct ctl_command *command)
+                           struct ctl_command *command, bool last_command)
 {
-    ctl_context_init_command(&vsctl_ctx->base, command);
+    ctl_context_init_command(&vsctl_ctx->base, command, last_command);
     vsctl_ctx->verified_ports = false;
 }
 
@@ -2859,7 +2870,8 @@ do_vsctl(const char *args, struct ctl_command *commands, size_t n_commands,
     }
     vsctl_context_init(&vsctl_ctx, NULL, idl, txn, ovs, symtab);
     for (c = commands; c < &commands[n_commands]; c++) {
-        vsctl_context_init_command(&vsctl_ctx, c);
+        vsctl_context_init_command(&vsctl_ctx, c,
+                                   c == &commands[n_commands - 1]);
         if (c->syntax->run) {
             (c->syntax->run)(&vsctl_ctx.base);
         }

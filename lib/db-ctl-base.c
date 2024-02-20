@@ -75,7 +75,7 @@ static struct shash all_commands = SHASH_INITIALIZER(&all_commands);
 static char *get_table(const char *, const struct ovsdb_idl_table_class **);
 static char *set_column(const struct ovsdb_idl_table_class *,
                         const struct ovsdb_idl_row *, const char *,
-                        struct ovsdb_symbol_table *);
+                        struct ovsdb_symbol_table *, bool use_partial_update);
 
 
 static struct option *
@@ -1325,11 +1325,17 @@ cmd_find(struct ctl_context *ctx)
 }
 
 /* Sets the column of 'row' in 'table'. Returns NULL on success or a
- * malloc()'ed error message on failure. */
+ * malloc()'ed error message on failure.
+ *
+ * If 'use_partial_update' is true, then this function will try to use
+ * partial set/map updates, if possible.  As a side effect, result will
+ * not be reflected in the IDL until the transaction is committed.
+ * The last access to a particular column is a good candidate to use
+ * this option. */
 static char * OVS_WARN_UNUSED_RESULT
 set_column(const struct ovsdb_idl_table_class *table,
            const struct ovsdb_idl_row *row, const char *arg,
-           struct ovsdb_symbol_table *symtab)
+           struct ovsdb_symbol_table *symtab, bool use_partial_update)
 {
     const struct ovsdb_idl_column *column;
     char *key_string = NULL;
@@ -1352,7 +1358,7 @@ set_column(const struct ovsdb_idl_table_class *table,
 
     if (key_string) {
         union ovsdb_atom key, value;
-        struct ovsdb_datum datum;
+        struct ovsdb_datum *datum;
 
         if (column->type.value.type == OVSDB_TYPE_VOID) {
             error = xasprintf("cannot specify key to set for non-map column "
@@ -1371,16 +1377,22 @@ set_column(const struct ovsdb_idl_table_class *table,
             goto out;
         }
 
-        ovsdb_datum_init_empty(&datum);
-        ovsdb_datum_add_unsafe(&datum, &key, &value, &column->type, NULL);
+        datum = xmalloc(sizeof *datum);
+        ovsdb_datum_init_empty(datum);
+        ovsdb_datum_add_unsafe(datum, &key, &value, &column->type, NULL);
 
         ovsdb_atom_destroy(&key, column->type.key.type);
         ovsdb_atom_destroy(&value, column->type.value.type);
 
-        ovsdb_datum_union(&datum, ovsdb_idl_read(row, column),
-                          &column->type);
-        ovsdb_idl_txn_verify(row, column);
-        ovsdb_idl_txn_write(row, column, &datum);
+        if (use_partial_update) {
+            ovsdb_idl_txn_write_partial_map(row, column, datum);
+        } else {
+            ovsdb_datum_union(datum, ovsdb_idl_read(row, column),
+                              &column->type);
+            ovsdb_idl_txn_verify(row, column);
+            ovsdb_idl_txn_write(row, column, datum);
+            free(datum);
+        }
     } else {
         struct ovsdb_datum datum;
 
@@ -1441,7 +1453,8 @@ cmd_set(struct ctl_context *ctx)
     }
 
     for (i = 3; i < ctx->argc; i++) {
-        ctx->error = set_column(table, row, ctx->argv[i], ctx->symtab);
+        ctx->error = set_column(table, row, ctx->argv[i], ctx->symtab,
+                                ctx->last_command);
         if (ctx->error) {
             return;
         }
@@ -1731,31 +1744,45 @@ cmd_create(struct ctl_context *ctx)
     const struct ovsdb_idl_table_class *table;
     const struct ovsdb_idl_row *row;
     const struct uuid *uuid = NULL;
+    bool persist_uuid = false;
+    struct uuid uuid_;
     int i;
 
     ctx->error = get_table(table_name, &table);
     if (ctx->error) {
         return;
     }
-    if (id) {
-        struct ovsdb_symbol *symbol = NULL;
 
-        ctx->error = create_symbol(ctx->symtab, id, &symbol, NULL);
-        if (ctx->error) {
-            return;
+    if (id) {
+        if (uuid_from_string(&uuid_, id)) {
+            uuid = &uuid_;
+            persist_uuid = true;
+        } else {
+            struct ovsdb_symbol *symbol = NULL;
+
+            ctx->error = create_symbol(ctx->symtab, id, &symbol, NULL);
+            if (ctx->error) {
+                return;
+            }
+            if (table->is_root) {
+                /* This table is in the root set, meaning that rows created in
+                 * it won't disappear even if they are unreferenced, so disable
+                 * warnings about that by pretending that there is a
+                 * reference. */
+                symbol->strong_ref = true;
+            }
+            uuid = &symbol->uuid;
         }
-        if (table->is_root) {
-            /* This table is in the root set, meaning that rows created in it
-             * won't disappear even if they are unreferenced, so disable
-             * warnings about that by pretending that there is a reference. */
-            symbol->strong_ref = true;
-        }
-        uuid = &symbol->uuid;
     }
 
-    row = ovsdb_idl_txn_insert(ctx->txn, table, uuid);
+    if (persist_uuid) {
+        row = ovsdb_idl_txn_insert_persist_uuid(ctx->txn, table, uuid);
+    } else {
+        row = ovsdb_idl_txn_insert(ctx->txn, table, uuid);
+    }
+
     for (i = 2; i < ctx->argc; i++) {
-        ctx->error = set_column(table, row, ctx->argv[i], ctx->symtab);
+        ctx->error = set_column(table, row, ctx->argv[i], ctx->symtab, false);
         if (ctx->error) {
             return;
         }
@@ -2606,7 +2633,8 @@ ctl_list_db_tables_usage(void)
 /* Initializes 'ctx' from 'command'. */
 void
 ctl_context_init_command(struct ctl_context *ctx,
-                         struct ctl_command *command)
+                         struct ctl_command *command,
+                         bool last)
 {
     ctx->argc = command->argc;
     ctx->argv = command->argv;
@@ -2615,6 +2643,7 @@ ctl_context_init_command(struct ctl_context *ctx,
     ds_swap(&ctx->output, &command->output);
     ctx->table = command->table;
     ctx->try_again = false;
+    ctx->last_command = last;
     ctx->error = NULL;
 }
 
@@ -2626,7 +2655,7 @@ ctl_context_init(struct ctl_context *ctx, struct ctl_command *command,
                  void (*invalidate_cache_cb)(struct ctl_context *))
 {
     if (command) {
-        ctl_context_init_command(ctx, command);
+        ctl_context_init_command(ctx, command, false);
     }
     ctx->idl = idl;
     ctx->txn = txn;
@@ -2670,7 +2699,7 @@ ctl_set_column(const char *table_name, const struct ovsdb_idl_row *row,
     if (error) {
         return error;
     }
-    error = set_column(table, row, arg, symtab);
+    error = set_column(table, row, arg, symtab, false);
     if (error) {
         return error;
     }

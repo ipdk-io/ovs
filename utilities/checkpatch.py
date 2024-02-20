@@ -195,7 +195,7 @@ skip_signoff_check = False
 #
 # Python isn't checked as flake8 performs these checks during build.
 line_length_ignore_list = re.compile(
-    r'\.(am|at|etc|in|m4|mk|patch|py)$|^debian/.*$')
+    r'\.(am|at|etc|in|m4|mk|patch|py|yml)$|^debian/.*$')
 
 # Don't enforce a requirement that leading whitespace be all spaces on
 # files that include these characters in their name, since these kinds
@@ -411,6 +411,9 @@ def check_spelling(line, comment):
     words = filter_comments(line, True) if comment else line
     words = words.replace(':', ' ').split(' ')
 
+    flagged_words = []
+    num_suggestions = 3
+
     for word in words:
         skip = False
         strword = re.subn(r'\W+', '', word)[0].replace(',', '')
@@ -435,9 +438,15 @@ def check_spelling(line, comment):
                 skip = True
 
             if not skip:
-                print_warning("Check for spelling mistakes (e.g. \"%s\")"
-                              % strword)
-                return True
+                flagged_words.append(strword)
+
+    if len(flagged_words) > 0:
+        for mistake in flagged_words:
+            print_warning("Possible misspelled word: \"%s\"" % mistake)
+            print("Did you mean: ",
+                  spell_check_dict.suggest(mistake)[:num_suggestions])
+
+        return True
 
     return False
 
@@ -662,18 +671,23 @@ checks += [
 
 easy_to_misuse_api = [
         ('ovsrcu_barrier',
-            'lib/ovs-rcu.c',
+            ['lib/ovs-rcu.c'],
             'Are you sure you need to use ovsrcu_barrier(), '
             'in most cases ovsrcu_synchronize() will be fine?'),
+        ('netdev_features_to_bps',
+            ['lib/netdev.c', 'lib/netdev-bsd.c', 'lib/netdev-linux.c'],
+            'Are you sure you need to use netdev_features_to_bps()? '
+            'If you want to retrieve the current and/or maximum link speed, '
+            'consider using netdev_get_speed() instead.'),
         ]
 
 checks += [
     {'regex': r'(\.c)(\.in)?$',
-     'match_name': lambda x: x != location,
+     'match_name': lambda x, loc=locations: x not in loc,
      'prereq': lambda x: not is_comment_line(x),
      'check': regex_function_factory(function_name),
      'print': regex_warn_factory(description)}
-    for (function_name, location, description) in easy_to_misuse_api]
+    for (function_name, locations, description) in easy_to_misuse_api]
 
 
 def regex_operator_factory(operator):
@@ -1015,6 +1029,19 @@ def ovs_checkpatch_file(filename):
     result = ovs_checkpatch_parse(part.get_payload(decode=False), filename,
                                   mail.get('Author', mail['From']),
                                   mail['Commit'])
+    if spellcheck:
+        if not mail['Subject'] or not mail['Subject'].strip():
+            if mail['Subject']:
+                mail.replace_header('Subject', sys.argv[-1])
+            else:
+                mail.add_header('Subject', sys.argv[-1])
+
+            print("Subject missing! Your provisional subject is",
+                  mail['Subject'])
+
+        if check_spelling(mail['Subject'], False):
+            print("Subject: %s" % mail['Subject'])
+
     ovs_checkpatch_print_result()
     return result
 

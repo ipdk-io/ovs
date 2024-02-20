@@ -429,6 +429,14 @@ def idl_set(idl, commands, step):
 
             s = txn.insert(idl.tables["simple"])
             s.i = int(args[0])
+        elif name == "insert_uuid":
+            if len(args) != 2:
+                sys.stderr.write('"set" command requires 2 argument\n')
+                sys.exit(1)
+
+            s = txn.insert(idl.tables["simple"], new_uuid=args[0],
+                           persist_uuid=True)
+            s.i = int(args[1])
         elif name == "delete":
             if len(args) != 1:
                 sys.stderr.write('"delete" command requires 1 argument\n')
@@ -491,7 +499,7 @@ def idl_set(idl, commands, step):
             print("%03d: destroy" % step)
             sys.stdout.flush()
             txn.abort()
-            return
+            return True
         elif name == "linktest":
             l1_0 = txn.insert(idl.tables["link1"])
             l1_0.i = 1
@@ -615,8 +623,11 @@ def idl_set(idl, commands, step):
     sys.stdout.write("\n")
     sys.stdout.flush()
 
+    return status != ovs.db.idl.Transaction.ERROR
 
-def update_condition(idl, commands):
+
+def update_condition(idl, commands, step):
+    next_cond_seqno = 0
     commands = commands[len("condition "):].split(";")
     for command in commands:
         command = command.split(" ")
@@ -627,7 +638,20 @@ def update_condition(idl, commands):
         table = command[0]
         cond = ovs.json.from_string(command[1])
 
-        idl.cond_change(table, cond)
+        next_seqno = idl.cond_change(table, cond)
+        if idl.cond_seqno == next_seqno:
+            sys.stdout.write("%03d: %s: conditions unchanged\n" %
+                             (step, table))
+        else:
+            sys.stdout.write("%03d: %s: change conditions\n" %
+                             (step, table))
+        sys.stdout.flush()
+
+        assert next_seqno == idl.cond_change(table, cond), \
+            "condition expected seqno changed"
+        next_cond_seqno = max(next_cond_seqno, next_seqno)
+
+    return next_cond_seqno
 
 
 def do_idl(schema_file, remote, *commands):
@@ -684,6 +708,7 @@ def do_idl(schema_file, remote, *commands):
     else:
         rpc = None
 
+    next_cond_seqno = 0
     symtab = {}
     seqno = 0
     step = 0
@@ -707,9 +732,7 @@ def do_idl(schema_file, remote, *commands):
 
     commands = list(commands)
     if len(commands) >= 1 and "condition" in commands[0]:
-        update_condition(idl, commands.pop(0))
-        sys.stdout.write("%03d: change conditions\n" % step)
-        sys.stdout.flush()
+        next_cond_seqno = update_condition(idl, commands.pop(0), step)
         step += 1
 
     for command in commands:
@@ -722,6 +745,16 @@ def do_idl(schema_file, remote, *commands):
         if command.startswith("+"):
             # The previous transaction didn't change anything.
             command = command[1:]
+        elif command.startswith("^"):
+            # Wait for condition change to be acked by the server.
+            command = command[1:]
+            while idl.cond_seqno != next_cond_seqno and not idl.run():
+                rpc.run()
+
+                poller = ovs.poller.Poller()
+                idl.wait(poller)
+                rpc.wait(poller)
+                poller.block()
         else:
             # Wait for update.
             while idl.change_seqno == seqno and not idl.run():
@@ -743,12 +776,16 @@ def do_idl(schema_file, remote, *commands):
             step += 1
             idl.force_reconnect()
         elif "condition" in command:
-            update_condition(idl, command)
-            sys.stdout.write("%03d: change conditions\n" % step)
-            sys.stdout.flush()
+            next_cond_seqno = update_condition(idl, command, step)
             step += 1
         elif not command.startswith("["):
-            idl_set(idl, command, step)
+            if not idl_set(idl, command, step):
+                # If idl_set() returns false, then no transaction
+                # was sent to the server and most likely seqno
+                # would remain the same.  And the above 'Wait for update'
+                # for loop poller.block() would never return.
+                # So set seqno to 0.
+                seqno = 0
             step += 1
         else:
             json = ovs.json.from_string(command)

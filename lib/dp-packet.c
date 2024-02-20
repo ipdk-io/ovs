@@ -21,6 +21,7 @@
 #include "dp-packet.h"
 #include "netdev-afxdp.h"
 #include "netdev-dpdk.h"
+#include "netdev-provider.h"
 #include "openvswitch/dynamic-string.h"
 #include "util.h"
 
@@ -37,6 +38,9 @@ dp_packet_init__(struct dp_packet *b, size_t allocated, enum dp_packet_source so
     dp_packet_init_specific(b);
     /* By default assume the packet type to be Ethernet. */
     b->packet_type = htonl(PT_ETH);
+    /* Reset csum start and offset. */
+    b->csum_start = 0;
+    b->csum_offset = 0;
 }
 
 static void
@@ -134,11 +138,7 @@ dp_packet_uninit(struct dp_packet *b)
         if (b->source == DPBUF_MALLOC) {
             free(dp_packet_base(b));
         } else if (b->source == DPBUF_DPDK) {
-#ifdef DPDK_NETDEV
-            /* If this dp_packet was allocated by DPDK it must have been
-             * created as a dp_packet */
-            free_dpdk_buf((struct dp_packet*) b);
-#endif
+            free_dpdk_buf(b);
         } else if (b->source == DPBUF_AFXDP) {
             free_afxdp_buf(b);
         }
@@ -150,7 +150,11 @@ dp_packet_uninit(struct dp_packet *b)
 struct dp_packet *
 dp_packet_new(size_t size)
 {
+#ifdef DPDK_NETDEV
+    struct dp_packet *b = xmalloc_cacheline(sizeof *b);
+#else
     struct dp_packet *b = xmalloc(sizeof *b);
+#endif
     dp_packet_init(b, size);
     return b;
 }
@@ -529,4 +533,46 @@ dp_packet_compare_offsets(struct dp_packet *b1, struct dp_packet *b2,
         return false;
     }
     return true;
+}
+
+/* Checks if the packet 'p' is compatible with netdev_ol_flags 'flags'
+ * and if not, updates the packet with the software fall back. */
+void
+dp_packet_ol_send_prepare(struct dp_packet *p, uint64_t flags)
+{
+    if (dp_packet_hwol_tx_ip_csum(p)) {
+        if (dp_packet_ip_checksum_good(p)) {
+            dp_packet_hwol_reset_tx_ip_csum(p);
+        } else if (!(flags & NETDEV_TX_OFFLOAD_IPV4_CKSUM)) {
+            dp_packet_ip_set_header_csum(p);
+            dp_packet_ol_set_ip_csum_good(p);
+            dp_packet_hwol_reset_tx_ip_csum(p);
+        }
+    }
+
+    if (!dp_packet_hwol_tx_l4_checksum(p)) {
+        return;
+    }
+
+    if (dp_packet_l4_checksum_good(p)) {
+        dp_packet_hwol_reset_tx_l4_csum(p);
+        return;
+    }
+
+    if (dp_packet_hwol_l4_is_tcp(p)
+        && !(flags & NETDEV_TX_OFFLOAD_TCP_CKSUM)) {
+        packet_tcp_complete_csum(p);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_tx_l4_csum(p);
+    } else if (dp_packet_hwol_l4_is_udp(p)
+               && !(flags & NETDEV_TX_OFFLOAD_UDP_CKSUM)) {
+        packet_udp_complete_csum(p);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_tx_l4_csum(p);
+    } else if (!(flags & NETDEV_TX_OFFLOAD_SCTP_CKSUM)
+               && dp_packet_hwol_l4_is_sctp(p)) {
+        packet_sctp_complete_csum(p);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_tx_l4_csum(p);
+    }
 }

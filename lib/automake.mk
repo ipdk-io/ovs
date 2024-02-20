@@ -9,7 +9,6 @@ lib_LTLIBRARIES += lib/libopenvswitch.la
 
 lib_libopenvswitch_la_LIBADD = $(SSL_LIBS)
 lib_libopenvswitch_la_LIBADD += $(CAPNG_LDADD)
-lib_libopenvswitch_la_LIBADD += $(LIBBPF_LDADD)
 
 
 if WIN32
@@ -227,6 +226,7 @@ lib_libopenvswitch_la_SOURCES = \
 	lib/ofp-actions.c \
 	lib/ofp-bundle.c \
 	lib/ofp-connection.c \
+	lib/ofp-ct.c \
 	lib/ofp-ed-props.c \
 	lib/ofp-errors.c \
 	lib/ofp-flow.c \
@@ -451,7 +451,7 @@ lib_libsflow_la_SOURCES = \
 	lib/sflow_poller.c \
 	lib/sflow_receiver.c
 lib_libsflow_la_CPPFLAGS = $(AM_CPPFLAGS)
-lib_libsflow_la_CFLAGS = $(AM_CFLAGS)
+lib_libsflow_la_CFLAGS = $(AM_CFLAGS) -D_BSD_SOURCE -D_DEFAULT_SOURCE
 if HAVE_WNO_UNUSED
 lib_libsflow_la_CFLAGS += -Wno-unused
 endif

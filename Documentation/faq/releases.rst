@@ -88,11 +88,10 @@ Q: What Linux kernel versions does each Open vSwitch release work with?
     RHEL and CentOS 7 3.10 based kernels since they have diverged from the
     Linux kernel.org 3.10 kernels.
 
-    Starting with Open vSwitch 2.15, building the Linux kernel module from
-    the Open vSwitch source tree is deprecated.  It will not be updated to
-    support Linux versions later than 5.8.  We will remove the kernel module
-    source code from the Open vSwitch source tree for the Open vSwitch 3.0
-    release.
+    Building the Linux kernel module from the Open vSwitch source tree was
+    deprecated starting with Open vSwitch 2.15.  And the kernel module
+    source code was completely removed from the Open vSwitch source tree in
+    3.0 release.
 
 Q: Are all features available with all datapaths?
 
@@ -152,6 +151,7 @@ Q: Are all features available with all datapaths?
     Tunnel - ERSPAN                 4.18           2.10         2.10     NO
     Tunnel - ERSPAN-IPv6            4.18           2.10         2.10     NO
     Tunnel - GTP-U                  NO             NO           2.14     NO
+    Tunnel - SRv6                   NO             NO           3.2      NO
     Tunnel - Bareudp                5.7            NO           NO       NO
     QoS - Policing                  YES            1.1          2.6      NO
     QoS - Shaping                   YES            1.1          NO       NO
@@ -217,6 +217,8 @@ Q: What DPDK version does each Open vSwitch release work with?
     2.16.x       20.11.6
     2.17.x       21.11.2
     3.0.x        21.11.2
+    3.1.x        22.11.1
+    3.2.x        22.11.1
     ============ ========
 
 Q: Are all the DPDK releases that OVS versions work with maintained?
@@ -233,7 +235,7 @@ Q: Are all the DPDK releases that OVS versions work with maintained?
     The latest information about DPDK stable and LTS releases can be found
     at `DPDK stable`_.
 
-.. _DPDK stable: http://doc.dpdk.org/guides-21.11/contributing/stable.html
+.. _DPDK stable: http://doc.dpdk.org/guides-22.11/contributing/stable.html
 
 Q: I get an error like this when I configure Open vSwitch:
 
