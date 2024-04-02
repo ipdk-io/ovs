@@ -3278,13 +3278,17 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
             if (!memcmp(smac.ea, mac_addr.ea, sizeof(smac))) {
                 VLOG_DBG("Ignore self MAC learn use case for port: %s",
                           port_name);
-                return -1;
-
+            /* Even for self mac, FDB tables needs to be programmed since Port
+             * representors are used as underlay ports. Otherwise, underlay port
+             * traffic will go through slow path which is not advisable
+             */
+                //return -1;
             }
             /* this SRC port MAC is needed to configure FDB entry
              * for its corresponding HOST port or Phy port.
              */
             fdb_info->src_port = smac.ea[1] + VSI_ID_OFFSET;
+            fdb_info->rx_src_port = mac_addr.ea[1] + VSI_ID_OFFSET;
             VLOG_DBG("Continue, this is latest LNW");
         } else {
            fdb_info->is_vlan = true;
@@ -3310,7 +3314,38 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
 
     return 0;
 }
-#endif
+
+static inline int32_t
+valid_ip_addr(ovs_be32 nw_addr) {
+    return
+        (nw_addr && nw_addr != INADDR_ANY &&
+         nw_addr != INADDR_LOOPBACK && nw_addr != 0xffffffff);
+}
+
+static int32_t
+update_ip_mac_map_info(const struct flow *flow,
+             struct ip_mac_map_info *ip_mac_map_info)
+{
+    if (!flow) {
+        return -1;
+    }
+
+    memcpy(ip_mac_map_info->src_mac_addr, flow->dl_src.ea, sizeof(ip_mac_map_info->src_mac_addr));
+    memcpy(ip_mac_map_info->dst_mac_addr, flow->dl_dst.ea, sizeof(ip_mac_map_info->dst_mac_addr));
+
+    //Program the entiry only for an ARP response where we have valid IP's and MAC for both src and dst
+    if (valid_ip_addr(flow->nw_src) && !eth_addr_is_broadcast(flow->dl_src) &&
+       valid_ip_addr(flow->nw_dst) && !eth_addr_is_broadcast(flow->dl_dst)) {
+       ip_mac_map_info->src_ip_addr.family = AF_INET;
+       ip_mac_map_info->src_ip_addr.ip.v4addr.s_addr = flow->nw_src;
+
+       ip_mac_map_info->dst_ip_addr.family = AF_INET;
+       ip_mac_map_info->dst_ip_addr.ip.v4addr.s_addr = flow->nw_dst;
+    }    
+
+    return -1;
+}
+#endif // P4OVS
 
 static void
 xlate_normal(struct xlate_ctx *ctx)
@@ -3380,6 +3415,7 @@ xlate_normal(struct xlate_ctx *ctx)
         && flow->packet_type == htonl(PT_ETH)
         && in_port && in_port->pt_mode != NETDEV_PT_LEGACY_L3
     ) {
+        //The function below calls mac_learning_insert
         update_learning_table(ctx, in_xbundle, flow->dl_src, vlan,
                               is_grat_arp);
     }
@@ -3401,6 +3437,29 @@ xlate_normal(struct xlate_ctx *ctx)
         }
         p4ovs_unlock(&p4ovs_fdb_entry_lock);
     }
+
+    // Update the recently added MAC entry with flow info
+    struct mac_entry *e;
+
+    ovs_rwlock_wrlock(&ctx->xbridge->ml->rwlock);
+    e = mac_learning_lookup(ctx->xbridge->ml, flow->dl_src, vlan);
+    if (e) {
+        e->nw_src = flow->nw_src;
+        e->nw_dst = flow->nw_dst;
+     //TODO: Update IPv6 info in MAC entry when IPv6 support is added
+     }
+     ovs_rwlock_unlock(&ctx->xbridge->ml->rwlock);
+
+    if (ovs_p4_offload_enabled()) {
+        struct ip_mac_map_info ip_info;
+        memset(&ip_info, 0, sizeof(ip_info));
+        if (update_ip_mac_map_info(flow, &ip_info)) {
+           ConfigIpMacMapTableEntry(ip_info, true);
+        }
+    } else {
+        VLOG_DBG("P4 offload disabled, skipping programming ");
+    }
+
 #endif
 
     if (ctx->xin->xcache && in_xbundle != &ofpp_none_bundle) {

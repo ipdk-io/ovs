@@ -630,8 +630,18 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
         fdb_info.is_vlan = true;
         fdb_info.bridge_id = ml->p4_bridge_id;
         ConfigFdbTableEntry(fdb_info, false);
+
+        // Remove the corresponding ip_mac tables both for src ip and dst ip
+        struct ip_mac_map_info ip_info;
+        memset(&ip_info, 0, sizeof(ip_info));
+        ip_info.src_ip_addr.family = AF_INET;
+        ip_info.src_ip_addr.ip.v4addr.s_addr = e->nw_src;
+        ip_info.dst_ip_addr.family = AF_INET;
+        ip_info.dst_ip_addr.ip.v4addr.s_addr = e->nw_dst;
+        // TODO: Update IPv6 fields when IPv6 support is added
+        ConfigIpMacMapTableEntry(ip_info, false);
     }
-#endif
+#endif // P4OVS
     free(e);
 }
 
