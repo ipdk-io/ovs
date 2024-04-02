@@ -124,6 +124,12 @@ struct mac_entry {
      * The client-specified data is mlport->port. */
     struct mac_learning_port *mlport;
     struct ovs_list port_lru_node; /* In mac_learning_port's "port_lru"s. */
+#if defined(P4OVS)
+    /* P4 specific fields to maintain corresponding IP's */
+    ovs_be32 nw_src;            /* IPv4 source address or ARP SPA. */
+    ovs_be32 nw_dst;            /* IPv4 destination address or ARP TPA. */
+    // TODO: Add IPv6 fields when IPv6 support is added
+#endif
 };
 
 static inline void *mac_entry_get_port(const struct mac_learning *ml,
