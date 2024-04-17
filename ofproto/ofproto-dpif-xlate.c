@@ -3352,6 +3352,9 @@ xlate_normal(struct xlate_ctx *ctx)
 {
     struct flow_wildcards *wc = ctx->wc;
     struct flow *flow = &ctx->xin->flow;
+#if defined(P4OVS)
+    bool is_mac_learn_required = false;
+#endif //P4OVS    
     struct xbundle *in_xbundle;
     struct xport *in_port;
     struct mac_entry *mac;
@@ -3415,51 +3418,56 @@ xlate_normal(struct xlate_ctx *ctx)
         && flow->packet_type == htonl(PT_ETH)
         && in_port && in_port->pt_mode != NETDEV_PT_LEGACY_L3
     ) {
+#if defined(P4OVS)
+        is_mac_learn_required = is_mac_learning_update_needed(ctx->xbridge->ml,
+                                flow->dl_src, vlan,is_grat_arp,
+                                in_xbundle->bond != NULL,
+                                in_xbundle->ofbundle);
+#endif        
         //The function below calls mac_learning_insert
         update_learning_table(ctx, in_xbundle, flow->dl_src, vlan,
                               is_grat_arp);
     }
 
 #if defined(P4OVS)
-    /* Dynamic MAC is learnt, program P4 forwarding table */
-    struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
-                                          flow->in_port.ofp_port);
-    struct mac_learning_info fdb_info;
-    memset(&fdb_info, 0, sizeof(fdb_info));
-    if (ovs_p4_offload_enabled()) {
-        p4ovs_lock(&p4ovs_fdb_entry_lock);
-        if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
-            ConfigFdbTableEntry(fdb_info, true);
-            ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
-        } else {
-            VLOG_DBG("Error retrieving FDB information, skipping programming "
-                     "P4 entry");
-        }
-        p4ovs_unlock(&p4ovs_fdb_entry_lock);
+    if (is_mac_learn_required) {
+       /* Dynamic MAC is learnt, program P4 forwarding table */
+       struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
+                                             flow->in_port.ofp_port);
+       struct mac_learning_info fdb_info = {0};
+       if (ovs_p4_offload_enabled()) {
+           p4ovs_lock(&p4ovs_fdb_entry_lock);
+           if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
+               ConfigFdbTableEntry(fdb_info, true, grpc_addr);
+               ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
+           } else {
+               VLOG_DBG("Error retrieving FDB information, skipping programming "
+                        "P4 entry");
+           }
+           p4ovs_unlock(&p4ovs_fdb_entry_lock);
+       }
+   
+       // Update the recently added MAC entry with flow info
+       struct mac_entry *e;
+ 
+       ovs_rwlock_wrlock(&ctx->xbridge->ml->rwlock);
+       e = mac_learning_lookup(ctx->xbridge->ml, flow->dl_src, vlan);
+       if (e) {
+           e->nw_src = flow->nw_src;
+           e->nw_dst = flow->nw_dst;
+           //TODO: Update IPv6 info in MAC entry when IPv6 support is added
+       }
+       ovs_rwlock_unlock(&ctx->xbridge->ml->rwlock);
+   
+       if (ovs_p4_offload_enabled()) {
+          struct ip_mac_map_info ip_info = {0};
+          if (update_ip_mac_map_info(flow, &ip_info)) {
+             ConfigIpMacMapTableEntry(ip_info, true, grpc_addr);
+          }
+       } else {
+          VLOG_DBG("P4 offload disabled, skipping programming ");
+       }
     }
-
-    // Update the recently added MAC entry with flow info
-    struct mac_entry *e;
-
-    ovs_rwlock_wrlock(&ctx->xbridge->ml->rwlock);
-    e = mac_learning_lookup(ctx->xbridge->ml, flow->dl_src, vlan);
-    if (e) {
-        e->nw_src = flow->nw_src;
-        e->nw_dst = flow->nw_dst;
-     //TODO: Update IPv6 info in MAC entry when IPv6 support is added
-     }
-     ovs_rwlock_unlock(&ctx->xbridge->ml->rwlock);
-
-    if (ovs_p4_offload_enabled()) {
-        struct ip_mac_map_info ip_info;
-        memset(&ip_info, 0, sizeof(ip_info));
-        if (update_ip_mac_map_info(flow, &ip_info)) {
-           ConfigIpMacMapTableEntry(ip_info, true);
-        }
-    } else {
-        VLOG_DBG("P4 offload disabled, skipping programming ");
-    }
-
 #endif
 
     if (ctx->xin->xcache && in_xbundle != &ofpp_none_bundle) {
@@ -8887,7 +8895,7 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
         memset(&fdb_info, 0, sizeof(fdb_info));
 
         if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
-            ConfigFdbTableEntry(fdb_info, true);
+            ConfigFdbTableEntry(fdb_info, true, grpc_addr);
             ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
         } else {
             VLOG_DBG("Error retrieving FDB information, skipping programming "
