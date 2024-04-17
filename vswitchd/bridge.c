@@ -85,7 +85,6 @@ get_tunnel_data(struct netdev *netdev,
 uint8_t last_p4_bridge_id_used = 0;
 uint32_t unique_tunnel_src_port = P4_VXLAN_SOURCE_PORT_OFFSET;
 struct ovs_mutex p4ovs_fdb_entry_lock = OVS_MUTEX_INITIALIZER;
-//extern char grpc_addr[];
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);

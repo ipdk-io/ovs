@@ -75,7 +75,6 @@
 #include <sys/ioctl.h>
 #include "openvswitch/ovs-p4rt.h"
 #include "openvswitch/p4ovs.h"
-bool is_mac_learn_required = false;
 #endif //P4OVS
 
 COVERAGE_DEFINE(xlate_actions);
@@ -3215,6 +3214,9 @@ xlate_normal(struct xlate_ctx *ctx)
 {
     struct flow_wildcards *wc = ctx->wc;
     struct flow *flow = &ctx->xin->flow;
+#if defined(P4OVS)
+    bool is_mac_learn_required = false;
+#endif //P4OVS    
     struct xbundle *in_xbundle;
     struct xport *in_port;
     struct mac_entry *mac;
@@ -3294,8 +3296,7 @@ xlate_normal(struct xlate_ctx *ctx)
        /* Dynamic MAC is learnt, program P4 forwarding table */
        struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
                                              flow->in_port.ofp_port);
-       struct mac_learning_info fdb_info;
-       memset(&fdb_info, 0, sizeof(fdb_info));
+       struct mac_learning_info fdb_info = {0};
        if (ovs_p4_offload_enabled()) {
            p4ovs_lock(&p4ovs_fdb_entry_lock);
            if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
@@ -3308,27 +3309,26 @@ xlate_normal(struct xlate_ctx *ctx)
            p4ovs_unlock(&p4ovs_fdb_entry_lock);
        }
    
-          // Update the recently added MAC entry with flow info
-          struct mac_entry *e;
+       // Update the recently added MAC entry with flow info
+       struct mac_entry *e;
+ 
+       ovs_rwlock_wrlock(&ctx->xbridge->ml->rwlock);
+       e = mac_learning_lookup(ctx->xbridge->ml, flow->dl_src, vlan);
+       if (e) {
+           e->nw_src = flow->nw_src;
+           e->nw_dst = flow->nw_dst;
+           //TODO: Update IPv6 info in MAC entry when IPv6 support is added
+       }
+       ovs_rwlock_unlock(&ctx->xbridge->ml->rwlock);
    
-          ovs_rwlock_wrlock(&ctx->xbridge->ml->rwlock);
-          e = mac_learning_lookup(ctx->xbridge->ml, flow->dl_src, vlan);
-          if (e) {
-              e->nw_src = flow->nw_src;
-              e->nw_dst = flow->nw_dst;
-             //TODO: Update IPv6 info in MAC entry when IPv6 support is added
+       if (ovs_p4_offload_enabled()) {
+          struct ip_mac_map_info ip_info = {0};
+          if (update_ip_mac_map_info(flow, &ip_info)) {
+             ConfigIpMacMapTableEntry(ip_info, true, grpc_addr);
           }
-          ovs_rwlock_unlock(&ctx->xbridge->ml->rwlock);
-   
-          if (ovs_p4_offload_enabled()) {
-             struct ip_mac_map_info ip_info;
-             memset(&ip_info, 0, sizeof(ip_info));
-             if (update_ip_mac_map_info(flow, &ip_info)) {
-                ConfigIpMacMapTableEntry(ip_info, true, grpc_addr);
-             }
-          } else {
-             VLOG_DBG("P4 offload disabled, skipping programming ");
-          }
+       } else {
+          VLOG_DBG("P4 offload disabled, skipping programming ");
+       }
     }
 #endif
 

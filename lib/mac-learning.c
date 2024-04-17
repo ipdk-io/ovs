@@ -452,19 +452,11 @@ mac_learning_del_static_entry(struct mac_learning *ml,
  *
  * Keep the code here synchronized with that in update_learning_table__()
  * below. */
-#if defined(P4OVS)
 bool
 is_mac_learning_update_needed(const struct mac_learning *ml,
                               struct eth_addr src, int vlan,
                               bool is_gratuitous_arp, bool is_bond,
                               void *in_port)
-#else
-static bool
-is_mac_learning_update_needed(const struct mac_learning *ml,
-                              struct eth_addr src, int vlan,
-                              bool is_gratuitous_arp, bool is_bond,
-                              void *in_port)
-#endif
     OVS_REQ_RDLOCK(ml->rwlock)
 {
     struct mac_entry *mac;
