@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015 Nicira, Inc.
+ * Copyright (c) 2022-2024 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -463,7 +464,7 @@ is_mac_learning_update_needed(const struct mac_learning *ml,
                               struct eth_addr src, int vlan,
                               bool is_gratuitous_arp, bool is_bond,
                               void *in_port)
-#endif	
+#endif
     OVS_REQ_RDLOCK(ml->rwlock)
 {
     struct mac_entry *mac;
