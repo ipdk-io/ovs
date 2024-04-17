@@ -191,7 +191,9 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
         {"disable-system-route", no_argument, NULL, OPT_DISABLE_SYSTEM_ROUTE},
         {"dpdk", optional_argument, NULL, OPT_DPDK},
         {"dummy-numa", required_argument, NULL, OPT_DUMMY_NUMA},
+#if defined(P4OVS)
         {"grpc-addr", optional_argument, NULL, 'g'},
+#endif
         {NULL, 0, NULL, 0},
     };
     char *short_options = ovs_cmdl_long_options_to_short_options(long_options);
@@ -212,12 +214,6 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
             ovs_print_version(0, 0);
             print_dpdk_version();
             exit(EXIT_SUCCESS);
-
-        case 'g':
-            memset(grpc_addr, 0, sizeof(grpc_addr));
-            strncpy(grpc_addr, optarg, sizeof(optarg));
-            strcat(grpc_addr, ":9559");
-            break;
 
         case OPT_MLOCKALL:
             want_mlockall = true;
@@ -261,6 +257,13 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
         case OPT_DUMMY_NUMA:
             ovs_numa_set_dummy(optarg);
             break;
+
+#if defined(P4OVS)
+        case OPT_GRPC_ADDR:
+        case 'g':
+            ovs_set_grpc_addr(optarg);
+            break;
+#endif
 
         default:
             abort();
