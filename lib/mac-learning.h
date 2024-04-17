@@ -229,6 +229,14 @@ bool mac_learning_may_learn(const struct mac_learning *ml,
                             const struct eth_addr src_mac,
                             uint16_t vlan)
     OVS_REQ_RDLOCK(ml->rwlock);
+#if defined(P4OVS)
+bool
+is_mac_learning_update_needed(const struct mac_learning *ml,
+                              struct eth_addr src, int vlan,
+                              bool is_gratuitous_arp, bool is_bond,
+                              void *in_port)
+    OVS_REQ_RDLOCK(ml->rwlock);
+#endif    
 struct mac_entry *mac_learning_insert(struct mac_learning *ml,
                                       const struct eth_addr src,
                                       uint16_t vlan)

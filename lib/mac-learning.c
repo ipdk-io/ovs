@@ -451,11 +451,19 @@ mac_learning_del_static_entry(struct mac_learning *ml,
  *
  * Keep the code here synchronized with that in update_learning_table__()
  * below. */
+#if defined(P4OVS)
+bool
+is_mac_learning_update_needed(const struct mac_learning *ml,
+                              struct eth_addr src, int vlan,
+                              bool is_gratuitous_arp, bool is_bond,
+                              void *in_port)
+#else
 static bool
 is_mac_learning_update_needed(const struct mac_learning *ml,
                               struct eth_addr src, int vlan,
                               bool is_gratuitous_arp, bool is_bond,
                               void *in_port)
+#endif	
     OVS_REQ_RDLOCK(ml->rwlock)
 {
     struct mac_entry *mac;
@@ -623,7 +631,7 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
         memcpy(fdb_info.mac_addr, e->mac.ea, sizeof(fdb_info.mac_addr));
         fdb_info.is_vlan = true;
         fdb_info.bridge_id = ml->p4_bridge_id;
-        ConfigFdbTableEntry(fdb_info, false);
+        ConfigFdbTableEntry(fdb_info, false, grpc_addr);
 
         // Remove the corresponding ip_mac tables both for src ip and dst ip
         struct ip_mac_map_info ip_info;
@@ -633,7 +641,7 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
         ip_info.dst_ip_addr.family = AF_INET;
         ip_info.dst_ip_addr.ip.v4addr.s_addr = e->nw_dst;
         // TODO: Update IPv6 fields when IPv6 support is added
-        ConfigIpMacMapTableEntry(ip_info, false);
+        ConfigIpMacMapTableEntry(ip_info, false, grpc_addr);
     }
 #endif // P4OVS
     free(e);
