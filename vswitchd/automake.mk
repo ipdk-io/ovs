@@ -11,6 +11,10 @@ vswitchd_sources = \
 	vswitchd/system-stats.h
 
 if P4OVS
+vswitchd_sources += vswitchd/p4ovs.c
+endif
+
+if P4OVS
 # Build a static library instead of an executable.
 lib_LTLIBRARIES += vswitchd/libvswitchd.la
 

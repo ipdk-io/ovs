@@ -10,13 +10,17 @@
 #define OPENVSWITCH_P4OVS_H
 
 #include <stdint.h>
+#include <string.h>
 #include "openvswitch/thread.h"
+#include "openvswitch/util.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 extern struct ovs_mutex p4ovs_fdb_entry_lock;
+
+extern char grpc_addr[32]; // Size is 32
 
 /* Control OvS offload with an environment variable during runtime.
  * If env variable OVS_P4_OFFLOAD=false, then disable OVS offload, else
