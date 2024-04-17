@@ -53,6 +53,9 @@
 #include "openvswitch/vlog.h"
 #include "lib/vswitch-idl.h"
 #include "lib/dns-resolve.h"
+#if defined(P4OVS)
+#include "openvswitch/p4ovs.h"
+#endif
 
 VLOG_DEFINE_THIS_MODULE(vswitchd);
 
@@ -169,6 +172,9 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
         OPT_DPDK,
         SSL_OPTION_ENUMS,
         OPT_DUMMY_NUMA,
+#if defined(P4OVS)
+        OPT_GRPC_ADDR,
+#endif
     };
     static const struct option long_options[] = {
         {"help",        no_argument, NULL, 'h'},
@@ -185,6 +191,9 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
         {"disable-system-route", no_argument, NULL, OPT_DISABLE_SYSTEM_ROUTE},
         {"dpdk", optional_argument, NULL, OPT_DPDK},
         {"dummy-numa", required_argument, NULL, OPT_DUMMY_NUMA},
+#if defined(P4OVS)
+        {"grpc-addr", optional_argument, NULL, 'g'},
+#endif
         {NULL, 0, NULL, 0},
     };
     char *short_options = ovs_cmdl_long_options_to_short_options(long_options);
@@ -249,6 +258,13 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
             ovs_numa_set_dummy(optarg);
             break;
 
+#if defined(P4OVS)
+        case OPT_GRPC_ADDR:
+        case 'g':
+            ovs_set_grpc_addr(optarg);
+            break;
+#endif
+
         default:
             abort();
         }
@@ -289,6 +305,9 @@ usage(void)
     printf("\nOther options:\n"
            "  --unixctl=SOCKET          override default control socket name\n"
            "  -h, --help                display this help message\n"
+#if defined(P4OVS)
+           "  -g, --grpc-addr           gRPC server address for P4Runtime server\n"
+#endif   
            "  -V, --version             display version information\n");
     exit(EXIT_SUCCESS);
 }
