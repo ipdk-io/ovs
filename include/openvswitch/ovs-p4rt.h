@@ -9,6 +9,8 @@
 #ifndef OPENVSWITCH_OVS_P4RT_H
 #define OPENVSWITCH_OVS_P4RT_H
 
+#include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -18,9 +20,11 @@ extern "C" {
 /* When VSI ID is used as an action, we need add an offset of 16 and populate
  * the action */
 #define VSI_ID_OFFSET 16
+
 /* As p4 program uses 8 bits for bridge ID, current limitation is we can go max
  * of 256 bridges (0-255) */
 #define MAX_P4_BRIDGE_ID 255
+
 /* Source port for VxLAN should start from 2048, 0 to 2047 are reserved for
  * VSI/phy ports */
 #define P4_VXLAN_SOURCE_PORT_OFFSET 2048
