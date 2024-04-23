@@ -9,6 +9,8 @@
 #ifndef OPENVSWITCH_OVS_P4RT_H
 #define OPENVSWITCH_OVS_P4RT_H
 
+#include <netinet/in.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -18,9 +20,11 @@ extern "C" {
 /* When VSI ID is used as an action, we need add an offset of 16 and populate
  * the action */
 #define VSI_ID_OFFSET 16
+
 /* As p4 program uses 8 bits for bridge ID, current limitation is we can go max
  * of 256 bridges (0-255) */
 #define MAX_P4_BRIDGE_ID 255
+
 /* Source port for VxLAN should start from 2048, 0 to 2047 are reserved for
  * VSI/phy ports */
 #define P4_VXLAN_SOURCE_PORT_OFFSET 2048
@@ -102,20 +106,28 @@ struct ip_mac_map_info {
 // Function declarations
 extern void ConfigFdbTableEntry(struct mac_learning_info learn_info,
                                 bool insert_entry, const char* grpc_addr);
-extern void ConfigTunnelTableEntry(struct tunnel_info tunnel_info,
-                                   bool insert_entry, const char* grpc_addr);
-extern void ConfigTunnelSrcPortTableEntry(struct src_port_info tnl_sp,
-                                          bool insert_entry, const char* grpc_addr);
-extern void ConfigSrcPortTableEntry(struct src_port_info vsi_sp,
-                                    bool insert_entry, const char* grpc_addr);
-extern void ConfigVlanTableEntry(uint16_t vlan_id, bool insert_entry, const char* grpc_addr);
-extern void ConfigRxTunnelSrcTableEntry(struct tunnel_info tunnel_info,
-                                        bool insert_entry, const char* grpc_addr);
-
-extern enum ovs_tunnel_type TunnelTypeStrtoEnum(const char* tnl_type);
 
 extern void ConfigIpMacMapTableEntry(struct ip_mac_map_info learn_info,
                                      bool insert_entry, const char* grpc_addr);
+
+extern void ConfigRxTunnelSrcTableEntry(struct tunnel_info tunnel_info,
+                                        bool insert_entry,
+                                        const char* grpc_addr);
+
+extern void ConfigSrcPortTableEntry(struct src_port_info vsi_sp,
+                                    bool insert_entry, const char* grpc_addr);
+
+extern void ConfigTunnelSrcPortTableEntry(struct src_port_info tnl_sp,
+                                          bool insert_entry,
+                                          const char* grpc_addr);
+
+extern void ConfigTunnelTableEntry(struct tunnel_info tunnel_info,
+                                   bool insert_entry, const char* grpc_addr);
+
+extern void ConfigVlanTableEntry(uint16_t vlan_id, bool insert_entry,
+                                 const char* grpc_addr);
+
+extern enum ovs_tunnel_type TunnelTypeStrtoEnum(const char* tnl_type);
 
 #ifdef __cplusplus
 }  // extern "C"
