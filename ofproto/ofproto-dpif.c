@@ -74,7 +74,7 @@
 #include "vlan-bitmap.h"
 
 #if defined(P4OVS)
-#include "openvswitch/ovs-p4rt.h"
+#include "ovsp4rt/ovs-p4rt.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(ofproto_dpif);
