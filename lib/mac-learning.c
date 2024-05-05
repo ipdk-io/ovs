@@ -32,7 +32,7 @@
 #include "vlan-bitmap.h"
 
 #if defined(P4OVS)
-#include "openvswitch/ovs-p4rt.h"
+#include "ovsp4rt/ovs-p4rt.h"
 #include "openvswitch/p4ovs.h"
 #endif
 

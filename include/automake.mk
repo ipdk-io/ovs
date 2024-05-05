@@ -12,6 +12,7 @@ CLEANFILES += include/odp-netlink.h include/odp-netlink-macros.h
 
 include include/openflow/automake.mk
 include include/openvswitch/automake.mk
+include include/ovsp4rt/automake.mk
 include include/sparse/automake.mk
 include include/windows/automake.mk
 include include/linux/automake.mk
