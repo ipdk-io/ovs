@@ -73,7 +73,7 @@
 #include <linux/sockios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
-#include "openvswitch/ovs-p4rt.h"
+#include "ovsp4rt/ovs-p4rt.h"
 #include "openvswitch/p4ovs.h"
 #endif //P4OVS
 
