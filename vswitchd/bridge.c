@@ -75,7 +75,7 @@
 #if defined(P4OVS)
 #include <netinet/ether.h>
 
-#include "openvswitch/ovs-p4rt.h"
+#include "ovsp4rt/ovs-p4rt.h"
 #include "openvswitch/p4ovs.h"
 
 static int32_t
