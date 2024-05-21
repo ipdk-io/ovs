@@ -3269,7 +3269,7 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
         fdb_info->tnl_info.dst_port = underlay_tnl->dst_port;
         fdb_info->tnl_info.vni = underlay_tnl->vni;
         const char *tnl_type = tnl_port_get_type(port->ofport);
-        fdb_info->tnl_info.tunnel_type = TunnelTypeStrtoEnum(tnl_type);
+        fdb_info->tnl_info.tunnel_type = ovsp4rt_str_to_tunnel_type(tnl_type);
 
         if (underlay_tnl->ipv6_src.__in6_u.__u6_addr32[0]) {
             /* IPv6 tunnel configuration */
@@ -3459,7 +3459,7 @@ xlate_normal(struct xlate_ctx *ctx)
        if (ovs_p4_offload_enabled()) {
            p4ovs_lock(&p4ovs_fdb_entry_lock);
            if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
-               ConfigFdbTableEntry(fdb_info, true, grpc_addr);
+               ovsp4rt_config_fdb_entry(fdb_info, true, grpc_addr);
                ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
            } else {
                VLOG_DBG("Error retrieving FDB information, skipping programming "
@@ -3483,7 +3483,7 @@ xlate_normal(struct xlate_ctx *ctx)
        if (ovs_p4_offload_enabled()) {
           struct ip_mac_map_info ip_info = {0};
           if (update_ip_mac_map_info(flow, &ip_info)) {
-             ConfigIpMacMapTableEntry(ip_info, true, grpc_addr);
+             ovsp4rt_config_ip_mac_map_entry(ip_info, true, grpc_addr);
           }
        } else {
           VLOG_DBG("P4 offload disabled, skipping programming ");
@@ -9054,7 +9054,7 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
         memset(&fdb_info, 0, sizeof(fdb_info));
 
         if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
-            ConfigFdbTableEntry(fdb_info, true, grpc_addr);
+            ovsp4rt_config_fdb_entry(fdb_info, true, grpc_addr);
             ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
         } else {
             VLOG_DBG("Error retrieving FDB information, skipping programming "
