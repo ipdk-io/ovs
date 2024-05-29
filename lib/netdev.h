@@ -162,6 +162,7 @@ struct netdev_tunnel_config {
 
 #if defined(P4OVS)
     uint32_t vni;
+#endif
 };
 
 void netdev_run(void);
