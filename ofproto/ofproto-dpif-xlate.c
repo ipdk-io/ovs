@@ -78,6 +78,16 @@
 #include "openvswitch/p4ovs.h"
 #endif //P4OVS
 
+#if defined(P4OVS)
+#include "lib/netdev.h"
+#include <linux/if_vlan.h>
+#include <linux/sockios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include "ovsp4rt/ovs-p4rt.h"
+#include "openvswitch/p4ovs.h"
+#endif //P4OVS
+
 COVERAGE_DEFINE(xlate_actions);
 COVERAGE_DEFINE(xlate_actions_oversize);
 COVERAGE_DEFINE(xlate_actions_too_many_output);
