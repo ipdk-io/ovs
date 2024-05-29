@@ -51,6 +51,7 @@
 #include "hmapx.h"
 #include "odp-util.h"
 #include "id-pool.h"
+#include "ovs-atomic.h"
 #include "ovs-thread.h"
 #include "ofproto-provider.h"
 #include "util.h"
@@ -103,7 +104,8 @@ struct rule_dpif *rule_dpif_lookup_from_table(struct ofproto_dpif *,
                                               ofp_port_t in_port,
                                               bool may_packet_in,
                                               bool honor_table_miss,
-                                              struct xlate_cache *);
+                                              struct xlate_cache *,
+                                              struct hmapx *conj_flows);
 
 void rule_dpif_credit_stats(struct rule_dpif *,
                             const struct dpif_flow_stats *, bool);
@@ -201,7 +203,8 @@ struct group_dpif *group_dpif_lookup(struct ofproto_dpif *,
     DPIF_SUPPORT_FIELD(bool, ct_timeout, "Conntrack timeout policy")        \
                                                                             \
     /* True if the datapath supports explicit drop action. */               \
-    DPIF_SUPPORT_FIELD(bool, explicit_drop_action, "Explicit Drop action")  \
+    DPIF_SUPPORT_FIELD(atomic_bool, explicit_drop_action,                   \
+                       "Explicit Drop action")                              \
                                                                             \
     /* True if the datapath supports balance_tcp optimization */            \
     DPIF_SUPPORT_FIELD(bool, lb_output_action, "Optimized Balance TCP mode")\
@@ -284,6 +287,11 @@ struct dpif_backer {
                                                 feature than 'bt_support'. */
 
     struct atomic_count tnl_count;
+
+    struct ovs_list ct_zone_limits_to_add;  /* CT zone limits queued for
+                                             * addition into datapath. */
+    struct ovs_list ct_zone_limits_to_del;  /* CT zone limits queued for
+                                             * deletion from datapath. */
 };
 
 /* All existing ofproto_backer instances, indexed by ofproto->up.type. */

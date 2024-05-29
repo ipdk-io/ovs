@@ -25,3 +25,106 @@ OVS_WAIT_UNTIL([test `ovs-appctl ovs/route/show | grep -c 'p1-route'` -eq 0 ])
 
 OVS_TRAFFIC_VSWITCHD_STOP
 AT_CLEANUP
+
+AT_SETUP([ovs-route - add system route with src - ipv4])
+AT_KEYWORDS([route])
+OVS_TRAFFIC_VSWITCHD_START()
+AT_CHECK([ip link set br0 up])
+
+AT_CHECK([ip addr add 192.168.9.2/24 dev br0], [0], [stdout])
+AT_CHECK([ip addr add 192.168.9.3/24 dev br0], [0], [stdout])
+
+AT_CHECK([ip route add 192.168.10.12/32 dev br0 via 192.168.9.1 src 192.168.9.2], [0], [stdout])
+AT_CHECK([ip route add 192.168.10.13/32 dev br0 via 192.168.9.1 src 192.168.9.3], [0], [stdout])
+
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl ovs/route/show | grep -E '192.168.10.1[[23]]/32' | sort], [dnl
+Cached: 192.168.10.12/32 dev br0 GW 192.168.9.1 SRC 192.168.9.2
+Cached: 192.168.10.13/32 dev br0 GW 192.168.9.1 SRC 192.168.9.3])
+
+OVS_TRAFFIC_VSWITCHD_STOP
+AT_CLEANUP
+
+AT_SETUP([ovs-route - add system route with src - ipv6])
+AT_KEYWORDS([route])
+OVS_TRAFFIC_VSWITCHD_START()
+AT_CHECK([ip link set br0 up])
+
+AT_CHECK([ip -6 addr add fc00:db8:cafe::2/64 dev br0], [0], [stdout])
+AT_CHECK([ip -6 addr add fc00:db8:cafe::3/64 dev br0], [0], [stdout])
+
+dnl If we try to add a route immediately after assigning ipv6 addresses,
+dnl iproute2 would give us "Invalid source address" error,
+dnl so wait a while to succeed.
+OVS_WAIT_UNTIL([ip -6 route add fc00:db8:beef::12/128 via fc00:db8:cafe::1 dev br0 src fc00:db8:cafe::3])
+OVS_WAIT_UNTIL([ip -6 route add fc00:db8:beef::13/128 via fc00:db8:cafe::1 dev br0 src fc00:db8:cafe::2])
+
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl ovs/route/show | grep -E 'fc00:db8:beef::1[[23]]/128' | sort], [dnl
+Cached: fc00:db8:beef::12/128 dev br0 GW fc00:db8:cafe::1 SRC fc00:db8:cafe::3
+Cached: fc00:db8:beef::13/128 dev br0 GW fc00:db8:cafe::1 SRC fc00:db8:cafe::2])
+
+OVS_TRAFFIC_VSWITCHD_STOP
+AT_CLEANUP
+
+dnl Checks that OVS doesn't use routes from non-standard tables.
+AT_SETUP([ovs-route - route tables])
+AT_KEYWORDS([route])
+OVS_TRAFFIC_VSWITCHD_START()
+
+dnl Create tap port.
+on_exit 'ip link del p1-route'
+AT_CHECK([ip tuntap add name p1-route mode tap])
+AT_CHECK([ip link set p1-route up])
+
+dnl Add ip address.
+AT_CHECK([ip addr add 10.0.0.17/24 dev p1-route], [0], [stdout])
+
+dnl Check that OVS catches route updates.
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl ovs/route/show | grep 'p1-route' | sort], [dnl
+Cached: 10.0.0.0/24 dev p1-route SRC 10.0.0.17
+Cached: 10.0.0.17/32 dev p1-route SRC 10.0.0.17 local])
+
+dnl Add a route to the main routing table and check that OVS caches
+dnl this new route.
+AT_CHECK([ip route add 10.0.0.18/32 dev p1-route])
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl ovs/route/show | grep 'p1-route' | sort], [dnl
+Cached: 10.0.0.0/24 dev p1-route SRC 10.0.0.17
+Cached: 10.0.0.17/32 dev p1-route SRC 10.0.0.17 local
+Cached: 10.0.0.18/32 dev p1-route SRC 10.0.0.17])
+
+dnl Add a route to a custom routing table and check that OVS doesn't cache it.
+AT_CHECK([ip route add 10.0.0.19/32 dev p1-route table 42])
+AT_CHECK([ip route show table 42 | grep 'p1-route' | grep -q '10.0.0.19'])
+dnl Give the main thread a chance to act.
+AT_CHECK([ovs-appctl revalidator/wait])
+dnl Check that OVS didn't learn this route.
+AT_CHECK([ovs-appctl ovs/route/show | grep 'p1-route' | sort], [0], [dnl
+Cached: 10.0.0.0/24 dev p1-route SRC 10.0.0.17
+Cached: 10.0.0.17/32 dev p1-route SRC 10.0.0.17 local
+Cached: 10.0.0.18/32 dev p1-route SRC 10.0.0.17
+])
+
+dnl Delete a route from the main table and check that OVS removes the route
+dnl from the cache.
+AT_CHECK([ip route del 10.0.0.18/32 dev p1-route])
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl ovs/route/show | grep 'p1-route' | sort], [dnl
+Cached: 10.0.0.0/24 dev p1-route SRC 10.0.0.17
+Cached: 10.0.0.17/32 dev p1-route SRC 10.0.0.17 local])
+
+dnl Delete a route from a custom routing table and check that the cache
+dnl dosn't change.
+AT_CHECK([ip route del 10.0.0.19/32 dev p1-route table 42])
+dnl Give the main thread a chance to act.
+AT_CHECK([ovs-appctl revalidator/wait])
+dnl Check that the cache is still the same.
+AT_CHECK([ovs-appctl ovs/route/show | grep 'p1-route' | sort], [0], [dnl
+Cached: 10.0.0.0/24 dev p1-route SRC 10.0.0.17
+Cached: 10.0.0.17/32 dev p1-route SRC 10.0.0.17 local
+])
+
+dnl Delete ip address.
+AT_CHECK([ip addr del 10.0.0.17/24 dev p1-route], [0], [stdout])
+dnl Check that routes were removed from OVS.
+OVS_WAIT_UNTIL([test $(ovs-appctl ovs/route/show | grep -c 'p1-route') -eq 0 ])
+
+OVS_TRAFFIC_VSWITCHD_STOP
+AT_CLEANUP

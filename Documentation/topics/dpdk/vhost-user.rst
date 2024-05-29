@@ -269,7 +269,7 @@ similar to the following::
 
     QEMU waiting for connection on: disconnected:unix:/path/to/socket,server
 
-QEMU will wait until the port is created sucessfully in OVS to boot the VM.
+QEMU will wait until the port is created successfully in OVS to boot the VM.
 One benefit of using this mode is the ability for vHost ports to 'reconnect' in
 event of the switch crashing or being brought down. Once it is brought back up,
 the vHost ports will reconnect automatically and normal service will resume.
@@ -539,4 +539,4 @@ shown with::
 
 Further information can be found in the
 `DPDK documentation
-<https://doc.dpdk.org/guides-21.11/prog_guide/vhost_lib.html>`__
+<https://doc.dpdk.org/guides-23.11/prog_guide/vhost_lib.html>`__

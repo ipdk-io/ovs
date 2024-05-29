@@ -37,7 +37,7 @@ repository, which you can clone into a directory named "ovs" with::
 
     $ git clone https://github.com/openvswitch/ovs.git
 
-Cloning the repository leaves the "master" branch initially checked
+Cloning the repository leaves the "main" branch initially checked
 out.  This is the right branch for general development.  If, on the
 other hand, if you want to build a particular released version, you
 can check it out by running a command such as the following from the
@@ -90,7 +90,7 @@ need the following software:
   If libcap-ng is installed, then Open vSwitch will automatically build with
   support for it.
 
-- Python 3.4 or later.
+- Python 3.6 or later.
 
 - Unbound library, from http://www.unbound.net, is optional but recommended if
   you want to enable ovs-vswitchd and other utilities to use DNS names when
@@ -176,10 +176,7 @@ following to obtain better warnings:
 
 - clang, version 3.4 or later
 
-- flake8 along with the hacking flake8 plugin (for Python code). The automatic
-  flake8 check that runs against Python code has some warnings enabled that
-  come from the "hacking" flake8 plugin. If it's not installed, the warnings
-  just won't occur until it's run on a system with "hacking" installed.
+- flake8 (for Python code)
 
 - the python packages listed in "python/test_requirements.txt" (compatible
   with pip). If they are installed, the pytest-based Python unit tests will
@@ -208,7 +205,7 @@ simply install and run Open vSwitch you require the following software:
   from iproute2 (part of all major distributions and available at
   https://wiki.linuxfoundation.org/networking/iproute2).
 
-- Python 3.4 or later.
+- Python 3.6 or later.
 
 On Linux you should ensure that ``/dev/urandom`` exists. To support TAP
 devices, you must also ensure that ``/dev/net/tun`` exists.
@@ -343,6 +340,22 @@ using the jemalloc memory allocator, instead of the glibc memory allocator. If
 you wish to link with jemalloc add it to LIBS::
 
     $ ./configure LIBS=-ljemalloc
+
+.. note::
+  Linking Open vSwitch with the jemalloc shared library may not work as
+  expected in certain operating system development environments. You can
+  override the automatic compiler decision to avoid possible linker issues by
+  passing ``-fno-lto`` or ``-fno-builtin`` flag since the jemalloc override
+  standard built-in memory allocation functions such as malloc, calloc, etc.
+  Both options can solve possible jemalloc linker issues with pros and cons for
+  each case, feel free to choose the path that appears best to you. Disabling
+  LTO flag example::
+
+      $ ./configure LIBS=-ljemalloc CFLAGS="-g -O2 -fno-lto"
+
+  Disabling built-in flag example::
+
+      $ ./configure LIBS=-ljemalloc CFLAGS="-g -O2 -fno-builtin"
 
 .. _general-building:
 
@@ -479,7 +492,7 @@ Start ovsdb-server using below command::
     $ docker run -itd --net=host --name=ovsdb-server \
       <docker_repo>:<tag> ovsdb-server
 
-Start ovs-vswitchd with priviledged mode as it needs to load kernel module in
+Start ovs-vswitchd with privileged mode as it needs to load kernel module in
 host using below command::
 
     $ docker run -itd --net=host --name=ovs-vswitchd \

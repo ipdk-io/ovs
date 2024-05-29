@@ -254,6 +254,7 @@ enum ovs_vport_type {
 	OVS_VPORT_TYPE_IP6GRE = 109,
 	OVS_VPORT_TYPE_GTPU = 110,
 	OVS_VPORT_TYPE_BAREUDP = 111,  /* Bareudp tunnel. */
+	OVS_VPORT_TYPE_SRV6 = 112,  /* SRv6 tunnel. */
 	__OVS_VPORT_TYPE_MAX
 };
 
@@ -301,10 +302,24 @@ enum ovs_vport_attr {
 	OVS_VPORT_ATTR_PAD,
 	OVS_VPORT_ATTR_IFINDEX,
 	OVS_VPORT_ATTR_NETNSID,
+	OVS_VPORT_ATTR_UPCALL_STATS,
 	__OVS_VPORT_ATTR_MAX
 };
 
 #define OVS_VPORT_ATTR_MAX (__OVS_VPORT_ATTR_MAX - 1)
+
+/**
+ * enum ovs_vport_upcall_attr - attributes for %OVS_VPORT_UPCALL* commands
+ * @OVS_VPORT_UPCALL_ATTR_SUCCESS: 64-bit upcall success packets.
+ * @OVS_VPORT_UPCALL_ATTR_FAIL: 64-bit upcall fail packets.
+ */
+enum ovs_vport_upcall_attr {
+	OVS_VPORT_UPCALL_ATTR_SUCCESS,
+	OVS_VPORT_UPCALL_ATTR_FAIL,
+	__OVS_VPORT_UPCALL_ATTR_MAX,
+};
+
+#define OVS_VPORT_UPCALL_ATTR_MAX (__OVS_VPORT_UPCALL_ATTR_MAX - 1)
 
 enum {
 	OVS_VXLAN_EXT_UNSPEC,
@@ -1070,11 +1085,12 @@ enum ovs_action_attr {
 	OVS_ACTION_ATTR_CLONE,        /* Nested OVS_CLONE_ATTR_*.  */
 	OVS_ACTION_ATTR_CHECK_PKT_LEN, /* Nested OVS_CHECK_PKT_LEN_ATTR_*. */
 	OVS_ACTION_ATTR_ADD_MPLS,     /* struct ovs_action_add_mpls. */
+	OVS_ACTION_ATTR_DEC_TTL,      /* Nested OVS_DEC_TTL_ATTR_*. */
+	OVS_ACTION_ATTR_DROP,         /* u32 xlate_error. */
 
 #ifndef __KERNEL__
 	OVS_ACTION_ATTR_TUNNEL_PUSH,   /* struct ovs_action_push_tnl*/
 	OVS_ACTION_ATTR_TUNNEL_POP,    /* u32 port number. */
-	OVS_ACTION_ATTR_DROP,          /* u32 xlate_error. */
 	OVS_ACTION_ATTR_LB_OUTPUT,     /* u32 bond-id. */
 #endif
 	__OVS_ACTION_ATTR_MAX,	      /* Nothing past this will be accepted
@@ -1167,6 +1183,14 @@ struct ovs_zone_limit {
 	__u32 limit;
 	__u32 count;
 };
+
+enum ovs_dec_ttl_attr {
+	OVS_DEC_TTL_ATTR_UNSPEC,
+	OVS_DEC_TTL_ATTR_ACTION,	/* Nested struct nlattr */
+	__OVS_DEC_TTL_ATTR_MAX
+};
+
+#define OVS_DEC_TTL_ATTR_MAX (__OVS_DEC_TTL_ATTR_MAX - 1)
 
 #define OVS_CLONE_ATTR_EXEC      0   /* Specify an u32 value. When nonzero,
 				      * actions in clone will not change flow

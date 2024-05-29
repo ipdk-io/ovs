@@ -39,9 +39,12 @@
 #include "transaction.h"
 #include "transaction-forward.h"
 #include "trigger.h"
+#include "unixctl.h"
 
 #include "openvswitch/vlog.h"
 VLOG_DEFINE_THIS_MODULE(ovsdb);
+
+size_t n_weak_refs = 0;
 
 struct ovsdb_schema *
 ovsdb_schema_create(const char *name, const char *version, const char *cksum)
@@ -173,6 +176,39 @@ ovsdb_is_valid_version(const char *s)
 {
     struct ovsdb_version version;
     return ovsdb_parse_version(s, &version);
+}
+
+/* If set to 'true', database schema conversion operations in the storage
+ * may not contain the converted data, only the schema.  Currently affects
+ * only the clustered storage. */
+static bool use_no_data_conversion = true;
+
+static void
+ovsdb_no_data_conversion_enable(struct unixctl_conn *conn, int argc OVS_UNUSED,
+                                const char *argv[] OVS_UNUSED,
+                                void *arg OVS_UNUSED)
+{
+    use_no_data_conversion = true;
+    unixctl_command_reply(conn, NULL);
+}
+
+void
+ovsdb_no_data_conversion_disable(void)
+{
+    if (!use_no_data_conversion) {
+        return;
+    }
+    use_no_data_conversion = false;
+    unixctl_command_register("ovsdb/file/no-data-conversion-enable", "",
+                             0, 0, ovsdb_no_data_conversion_enable, NULL);
+}
+
+/* Returns true if the database storage allows conversion records without
+ * data specified. */
+bool
+ovsdb_conversion_with_no_data_supported(const struct ovsdb *db)
+{
+    return use_no_data_conversion && ovsdb_storage_is_clustered(db->storage);
 }
 
 /* Returns the number of tables in 'schema''s root set. */
@@ -428,6 +464,8 @@ ovsdb_create(struct ovsdb_schema *schema, struct ovsdb_storage *storage)
 
     db->n_atoms = 0;
 
+    db->read_only = false;
+
     db->is_relay = false;
     ovs_list_init(&db->txn_forward_new);
     hmap_init(&db->txn_forward_sent);
@@ -546,6 +584,8 @@ ovsdb_get_memory_usage(const struct ovsdb *db, struct simap *usage)
     if (db->storage) {
         ovsdb_storage_get_memory_usage(db->storage, usage);
     }
+
+    simap_put(usage, "n-weak-refs", n_weak_refs);
 }
 
 struct ovsdb_table *
@@ -585,7 +625,9 @@ compaction_thread(void *aux)
     struct json *data;
 
     VLOG_DBG("%s: Compaction thread started.", state->db->name);
-    data = ovsdb_to_txn_json(state->db, "compacting database online");
+    data = ovsdb_to_txn_json(state->db, "compacting database online",
+                             /* Do not allow shallow copies to avoid races. */
+                             false);
     state->data = json_serialized_object_create(data);
     json_destroy(data);
 
@@ -633,7 +675,8 @@ ovsdb_snapshot(struct ovsdb *db, bool trim_memory OVS_UNUSED)
     if (!applied_index) {
         /* Parallel compaction is not supported for standalone databases. */
         state = xzalloc(sizeof *state);
-        state->data = ovsdb_to_txn_json(db, "compacting database online");
+        state->data = ovsdb_to_txn_json(db,
+                                        "compacting database online", true);
         state->schema = ovsdb_schema_to_json(db->schema);
     } else if (ovsdb_snapshot_ready(db)) {
         xpthread_join(db->snap_state->thread, NULL);
@@ -707,6 +750,9 @@ ovsdb_replace(struct ovsdb *dst, struct ovsdb *src)
     shash_swap(&dst->tables, &src->tables);
 
     dst->rbac_role = ovsdb_get_table(dst, "RBAC_Role");
+
+    /* Get statistics from the new database. */
+    dst->n_atoms = src->n_atoms;
 
     ovsdb_destroy(src);
 }

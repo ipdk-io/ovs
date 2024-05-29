@@ -130,6 +130,8 @@ vport_type_to_kind(enum ovs_vport_type type,
         }
     case OVS_VPORT_TYPE_GTPU:
         return NULL;
+    case OVS_VPORT_TYPE_SRV6:
+        return "srv6";
     case OVS_VPORT_TYPE_BAREUDP:
         return "bareudp";
     case OVS_VPORT_TYPE_NETDEV:
@@ -320,6 +322,7 @@ dpif_netlink_rtnl_verify(const struct netdev_tunnel_config *tnl_cfg,
     case OVS_VPORT_TYPE_LISP:
     case OVS_VPORT_TYPE_STT:
     case OVS_VPORT_TYPE_GTPU:
+    case OVS_VPORT_TYPE_SRV6:
     case OVS_VPORT_TYPE_UNSPEC:
     case __OVS_VPORT_TYPE_MAX:
     default:
@@ -412,6 +415,7 @@ dpif_netlink_rtnl_create(const struct netdev_tunnel_config *tnl_cfg,
     case OVS_VPORT_TYPE_LISP:
     case OVS_VPORT_TYPE_STT:
     case OVS_VPORT_TYPE_GTPU:
+    case OVS_VPORT_TYPE_SRV6:
     case OVS_VPORT_TYPE_UNSPEC:
     case __OVS_VPORT_TYPE_MAX:
     default:
@@ -520,6 +524,7 @@ dpif_netlink_rtnl_port_destroy(const char *name, const char *type)
     case OVS_VPORT_TYPE_ERSPAN:
     case OVS_VPORT_TYPE_IP6ERSPAN:
     case OVS_VPORT_TYPE_IP6GRE:
+    case OVS_VPORT_TYPE_SRV6:
     case OVS_VPORT_TYPE_BAREUDP:
         return dpif_netlink_rtnl_destroy(name);
     case OVS_VPORT_TYPE_NETDEV:

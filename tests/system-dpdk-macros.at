@@ -7,9 +7,6 @@ m4_define([OVS_DPDK_PRE_CHECK],
   [dnl Check Hugepages
    AT_CHECK([cat /proc/meminfo], [], [stdout])
    AT_SKIP_IF([grep -E 'HugePages_Free: *0' stdout], [], [stdout])
-   AT_CHECK([mount], [], [stdout])
-   AT_CHECK([grep 'hugetlbfs' stdout], [], [stdout], [])
-
 ])
 
 
@@ -22,14 +19,8 @@ m4_define([OVS_DPDK_PRE_PHY_SKIP],
   [dnl Perform the precheck
    OVS_DPDK_PRE_CHECK()
 
-   dnl Check if VFIO or UIO driver is loaded
-   AT_SKIP_IF([ ! (lsmod | grep -E "igb_uio|vfio") ], [], [stdout])
-
-   dnl Find PCI address candidate, skip if there is no DPDK-compatible NIC
-   AT_CHECK([$DPDK_DIR/usertools/dpdk-devbind.py -s | head -n +4 | tail -1], [], [stdout])
-   AT_CHECK([cat stdout | cut -d" " -s -f1 > PCI_ADDR])
-   AT_SKIP_IF([ ! test -s PCI_ADDR ])
-
+   dnl Check if a device is available for DPDK
+   AT_SKIP_IF([ ! $abs_top_srcdir/tests/system-dpdk-find-device.py > DPDK_PCI_ADDR ])
 ])
 
 
@@ -39,11 +30,12 @@ m4_define([OVS_DPDK_PRE_PHY_SKIP],
 #
 m4_define([OVS_DPDK_START],
   [dnl start ovs dpdk
-   OVS_DPDK_START_OVSDB()
+   OVS_DPDK_START_OVSDB($3)
    dnl Enable DPDK functionality
    AT_CHECK([ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-init=true])
-   OVS_DPDK_START_VSWITCHD()
+   OVS_DPDK_START_VSWITCHD([$1], [$2])
 ])
+
 
 # OVS_DPDK_START_OVSDB()
 #
@@ -63,8 +55,9 @@ m4_define([OVS_DPDK_START_OVSDB],
    AT_CAPTURE_FILE([ovsdb-server.log])
 
    dnl Initialize database.
-   AT_CHECK([ovs-vsctl --no-wait init])
+   AT_CHECK([ovs-vsctl --no-wait init $1])
 ])
+
 
 # OVS_DPDK_START_VSWITCHD()
 #
@@ -72,10 +65,137 @@ m4_define([OVS_DPDK_START_OVSDB],
 #
 m4_define([OVS_DPDK_START_VSWITCHD],
   [dnl Change DPDK drivers log levels so that tests only catch errors
-   AT_CHECK([ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-extra=--log-level=pmd.*:error])
+   AT_CHECK([ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-extra="--log-level=pmd.*:error $1"])
 
    dnl Start ovs-vswitchd.
-   AT_CHECK([ovs-vswitchd --detach --no-chdir --pidfile --log-file -vvconn -vofproto_dpif -vunixctl], [0], [stdout], [stderr])
+   AT_CHECK([ovs-vswitchd $2 --detach --no-chdir --pidfile --log-file -vvconn -vofproto_dpif -vunixctl], [0], [stdout], [stderr])
    AT_CAPTURE_FILE([ovs-vswitchd.log])
    on_exit "kill_ovs_vswitchd `cat ovs-vswitchd.pid`"
 ])
+
+
+m4_define([OVS_DPDK_STOP_VSWITCHD],
+  [OVS_VSWITCHD_STOP([dnl
+$1";/does not exist. The Open vSwitch kernel module is probably not loaded./d
+/does not support MTU configuration,/d
+/EAL: No \(available\|free\) .*hugepages reported/d
+/Failed to enable flow control/d
+/ice_vsi_config_outer_vlan_stripping(): Single VLAN mode (SVM) does not support qinq/d
+/Rx checksum offload is not supported on/d
+/TELEMETRY: No legacy callbacks, legacy socket not created/d"])
+])
+
+
+# OVS_DPDK_CHECK_TESTPMD()
+#
+# Check dpdk-testpmd availability.
+#
+m4_define([OVS_DPDK_CHECK_TESTPMD],
+  [AT_SKIP_IF([! which dpdk-testpmd >/dev/null 2>/dev/null])
+])
+
+
+# OVS_DPDK_START_TESTPMD()
+#
+# Start dpdk-testpmd in background.
+#
+m4_define([OVS_DPDK_START_TESTPMD],
+  [AT_CHECK([lscpu], [], [stdout])
+   AT_CHECK([cat stdout | grep "NUMA node(s)" | awk '{c=1; while (c++<$(3)) {printf "512,"}; print "512"}' > NUMA_NODE])
+   eal_options="$DPDK_EAL_OPTIONS --in-memory --socket-mem="$(cat NUMA_NODE)" --single-file-segments --no-pci"
+   options="$1"
+   test "$options" != "${options%% -- *}" || options="$options -- "
+   eal_options="$eal_options ${options%% -- *}"
+   testpmd_options="-a --stats-period 2 ${options#* -- }"
+   echo "dpdk-testpmd $eal_options -- $testpmd_options" >testpmd.cmd
+   dpdk-testpmd $eal_options -- $testpmd_options >testpmd.log 2>&1 & \
+   echo $! > testpmd.pid
+   on_exit "kill -9 `cat testpmd.pid`"
+])
+
+
+# OVS_DPDK_STOP_TESTPMD()
+#
+# Stop background dpdk-testpmd.
+#
+m4_define([OVS_DPDK_STOP_TESTPMD],
+  [AT_CHECK([kill `cat testpmd.pid`])
+   OVS_WAIT([kill -0 `cat testpmd.pid`], [kill -9 `cat testpmd.pid`])
+])
+
+
+# OVS_TRAFFIC_VSWITCHD_START([vsctl-args], [vsctl-output], [dbinit-aux-args])
+#
+# Creates a database and starts ovsdb-server, starts ovs-vswitchd
+# connected to that database, calls ovs-vsctl to create a bridge named
+# br0 with predictable settings, passing 'vsctl-args' as additional
+# commands to ovs-vsctl.  If 'vsctl-args' causes ovs-vsctl to provide
+# output (e.g. because it includes "create" commands) then 'vsctl-output'
+# specifies the expected output after filtering through uuidfilt.
+# 'dbinit-aux-args' are passed as additional commands to 'ovs-vsctl init'
+# before starting ovs-vswitchd.
+m4_define([OVS_TRAFFIC_VSWITCHD_START],
+  [
+   OVS_DPDK_PRE_CHECK()
+   OVS_WAIT_WHILE([ip link show ovs-netdev])
+   dnl For functional tests, no need for DPDK PCI probing.
+   OVS_DPDK_START([--no-pci], [--disable-system], [$3])
+   dnl Add bridges, ports, etc.
+   OVS_WAIT_WHILE([ip link show br0])
+   AT_CHECK([ovs-vsctl -- _ADD_BR([br0]) -- $1 m4_if([$2], [], [], [| uuidfilt])], [0], [$2])
+])
+
+
+# OVS_TRAFFIC_VSWITCHD_STOP([ALLOWLIST], [extra_cmds])
+#
+# Gracefully stops ovs-vswitchd and ovsdb-server, checking their log files
+# for messages with severity WARN or higher and signaling an error if any
+# is present.  The optional ALLOWLIST may contain shell-quoted "sed"
+# commands to delete any warnings that are actually expected, e.g.:
+#
+#   OVS_TRAFFIC_VSWITCHD_STOP(["/expected error/d"])
+#
+# 'extra_cmds' are shell commands to be executed after OVS_VSWITCHD_STOP() is
+# invoked. They can be used to perform additional cleanups such as name space
+# removal.
+m4_define([OVS_TRAFFIC_VSWITCHD_STOP],
+  [OVS_DPDK_STOP_VSWITCHD([$1])
+   AT_CHECK([:; $2])
+])
+
+
+# Plug a veth into OVS via DPDK net/af_xdp.
+m4_define([ADD_VETH],
+    [ AT_CHECK([ip link add $1 type veth peer name ovs-$1 || return 77])
+      CONFIGURE_VETH_OFFLOADS([$1])
+      AT_CHECK([ip link set $1 netns $2])
+      AT_CHECK([ip link set dev ovs-$1 up])
+      AT_CHECK([ovs-vsctl add-port $3 ovs-$1 -- \
+                set interface ovs-$1 external-ids:iface-id="$1" -- \
+                set interface ovs-$1 type=dpdk -- \
+                set interface ovs-$1 options:dpdk-devargs=net_af_xdp$1,iface=ovs-$1])
+      NS_CHECK_EXEC([$2], [ip addr add $4 dev $1 $7])
+      NS_CHECK_EXEC([$2], [ip link set dev $1 up])
+      if test -n "$5"; then
+        NS_CHECK_EXEC([$2], [ip link set dev $1 address $5])
+      fi
+      if test -n "$6"; then
+        NS_CHECK_EXEC([$2], [ip route add default via $6])
+      fi
+      on_exit 'ip link del ovs-$1'
+    ]
+)
+
+
+m4_define([OVS_CHECK_8021AD],
+    [AT_SKIP_IF([:])])
+
+
+m4_define([OVS_CHECK_TC_QDISC],
+    [AT_SKIP_IF([:])])
+
+
+m4_define([CONFIGURE_VETH_OFFLOADS],
+    [AT_CHECK([ethtool -K $1 tx off], [0], [ignore], [ignore])
+     AT_CHECK([ethtool -K $1 txvlan off], [0], [ignore], [ignore])]
+)

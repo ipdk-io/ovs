@@ -76,8 +76,8 @@ persist across reboots. In addition, there are two options available for this
 kernel space driver - VFIO (Virtual Function I/O) and UIO (Userspace I/O) -
 along with a number of drivers for each option. We will demonstrate examples of
 both tools and will use the ``vfio-pci`` driver, which is the more secure,
-robust driver of those available. More information can be found in the `DPDK
-documentation <dpdk-drivers>`__.
+robust driver of those available. More information can be found in the
+`DPDK drivers documentation`_.
 
 To list devices using :command:`driverctl`, run::
 
@@ -115,9 +115,9 @@ tool::
    Open vSwitch 2.6.0 added support for DPDK 16.07, which in turn renamed the
    former ``dpdk_nic_bind`` tool to ``dpdk-devbind``.
 
-For more information, refer to the `DPDK documentation <dpdk-drivers>`__.
+For more information, refer to the `DPDK drivers documentation`_.
 
-.. _dpdk-drivers: https://doc.dpdk.org/guides-21.11/linux_gsg/linux_drivers.html
+.. _DPDK drivers documentation: https://doc.dpdk.org/guides-23.11/linux_gsg/linux_drivers.html
 
 .. _dpdk-phy-multiqueue:
 
@@ -130,6 +130,93 @@ queues they utilize is a requirement in order to deliver the high-performance
 possible with DPDK acceleration. It is possible to configure multiple Rx queues
 for ``dpdk`` ports, thus ensuring this is not a bottleneck for performance. For
 information on configuring PMD threads, refer to :doc:`pmd`.
+
+Traffic Rx Steering
+-------------------
+
+.. warning:: This feature is experimental.
+
+Some control protocols are used to maintain link status between forwarding
+engines. In SDN environments, these packets share the same physical network
+with the user data traffic.
+
+When the system is not sized properly, the PMD threads may not be able to
+process all incoming traffic from the configured Rx queues. When a signaling
+packet of such protocols is dropped, it can cause link flapping, worsening the
+situation.
+
+Some physical NICs can be programmed to put these protocols in a dedicated
+hardware Rx queue using the rte_flow__ API.
+
+__ https://doc.dpdk.org/guides-23.11/prog_guide/rte_flow.html
+
+.. warning::
+
+   This feature is not compatible with all NICs. Refer to the DPDK
+   `compatibility matrix`__ and vendor documentation for more details.
+
+   __ https://doc.dpdk.org/guides-23.11/nics/overview.html
+
+Rx steering must be enabled for specific protocols per port. The
+``rx-steering`` option takes one of the following values:
+
+``rss``
+   Do regular RSS on all configured Rx queues. This is the default behaviour.
+
+``rss+lacp``
+   Do regular RSS on all configured Rx queues. An extra Rx queue is configured
+   for LACP__ packets (ether type ``0x8809``).
+
+   __ https://www.ieee802.org/3/ad/public/mar99/seaman_1_0399.pdf
+
+Example::
+
+   $ ovs-vsctl add-port br0 dpdk-p0 -- set Interface dpdk-p0 type=dpdk \
+        options:dpdk-devargs=0000:01:00.0 options:n_rxq=2 \
+        options:rx-steering=rss+lacp
+
+.. note::
+
+   If multiple Rx queues are already configured, regular hash-based RSS
+   (Receive Side Scaling) queue balancing is done on all but the extra Rx
+   queue.
+
+.. tip::
+
+   You can check if Rx steering is supported on a port with the following
+   command::
+
+      $ ovs-vsctl get interface dpdk-p0 status
+      {..., rss_queues="0-1", rx_steering_queue="2"}
+
+   This will also show in ``ovs-vswitchd.log``::
+
+      INFO|dpdk-p0: rx-steering: redirecting lacp traffic to queue 2
+      INFO|dpdk-p0: rx-steering: applying rss on queues 0-1
+
+   If the hardware does not support redirecting the specified protocols to
+   a dedicated queue, it will be explicit::
+
+      $ ovs-vsctl get interface dpdk-p0 status
+      {..., rx-steering=unsupported}
+
+   More details can often be found in ``ovs-vswitchd.log``::
+
+      WARN|dpdk-p0: rx-steering: failed to add lacp flow: Unsupported pattern
+
+To disable Rx steering on a port, use the following command::
+
+   $ ovs-vsctl remove Interface dpdk-p0 options rx-steering
+
+You can see that it has been disabled in ``ovs-vswitchd.log``::
+
+   INFO|dpdk-p0: rx-steering: default rss
+
+.. warning::
+
+   This feature is mutually exclusive with ``other-config:hw-offload`` as it
+   may conflict with the offloaded flows. If both are enabled, ``rx-steering``
+   will fall back to default ``rss`` mode.
 
 .. _dpdk-phy-flow-control:
 
@@ -235,7 +322,7 @@ To hotplug a port with igb_uio in this case, DPDK must be configured to use
 physical addressing for IOVA mode. For more information regarding IOVA modes
 in DPDK please refer to the `DPDK IOVA Mode Detection`__.
 
-__ https://doc.dpdk.org/guides-21.11/prog_guide/env_abstraction_layer.html#iova-mode-detection
+__ https://doc.dpdk.org/guides-23.11/prog_guide/env_abstraction_layer.html#iova-mode-detection
 
 To configure OVS DPDK to use physical addressing for IOVA::
 
@@ -267,7 +354,7 @@ Representors are multi devices created on top of one PF.
 
 For more information, refer to the `DPDK documentation`__.
 
-__ https://doc.dpdk.org/guides-21.11/prog_guide/switch_representation.html
+__ https://doc.dpdk.org/guides-23.11/prog_guide/switch_representation.html#port-representors
 
 Prior to port representors there was a one-to-one relationship between the PF
 and the eth device. With port representors the relationship becomes one PF to
@@ -287,18 +374,18 @@ address in devargs. For an existing bridge called ``br0`` and PCI address
 When configuring a VF-based port, DPDK uses an extended devargs syntax which
 has the following format::
 
-    BDBF,representor=[<representor id>]
+    BDBF,representor=<representor identifier>
 
 This syntax shows that a representor is an enumerated eth device (with
-a representor ID) which uses the PF PCI address.
-The following commands add representors 3 and 5 using PCI device address
+a representor identifier) which uses the PF PCI address.
+The following commands add representors of VF 3 and 5 using PCI device address
 ``0000:08:00.0``::
 
     $ ovs-vsctl add-port br0 dpdk-rep3 -- set Interface dpdk-rep3 type=dpdk \
-       options:dpdk-devargs=0000:08:00.0,representor=[3]
+       options:dpdk-devargs=0000:08:00.0,representor=vf3
 
     $ ovs-vsctl add-port br0 dpdk-rep5 -- set Interface dpdk-rep5 type=dpdk \
-       options:dpdk-devargs=0000:08:00.0,representor=[5]
+       options:dpdk-devargs=0000:08:00.0,representor=vf5
 
 .. important::
 
@@ -394,14 +481,14 @@ in the ``options`` column of the ``Interface`` table.
 
 .. important::
 
-   Some DPDK port use `bifurcated drivers <bifurcated-drivers>`__,
-   which means that a kernel netdevice remains when Open vSwitch is stopped.
+   Some DPDK port use `bifurcated drivers`_, which means that a kernel
+   netdevice remains when Open vSwitch is stopped.
 
    In such case, any configuration applied to a VF would remain set on the
    kernel netdevice, and be inherited from it when Open vSwitch is restarted,
    even if the options described in this section are unset from Open vSwitch.
 
-.. _bifurcated-drivers: https://doc.dpdk.org/guides-21.11/linux_gsg/linux_drivers.html#bifurcated-driver
+.. _bifurcated drivers: https://doc.dpdk.org/guides-23.11/linux_gsg/linux_drivers.html#bifurcated-driver
 
 - Configure the VF MAC address::
 
@@ -412,7 +499,7 @@ its options::
 
     $ ovs-appctl dpctl/show
     [...]
-      port 3: dpdk-rep0 (dpdk: configured_rx_queues=1, ..., dpdk-vf-mac=00:11:22:33:44:55, ...)
+      port 3: dpdk-rep0 (dpdk: ..., dpdk-vf-mac=00:11:22:33:44:55, ...)
 
     $ ovs-vsctl show
     [...]

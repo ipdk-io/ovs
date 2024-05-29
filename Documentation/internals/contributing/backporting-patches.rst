@@ -43,36 +43,39 @@ within Open vSwitch, but is broadly applied in the following fashion:
 - Maintainers backport changes from a development branch to release branches.
 
 With regards to Open vSwitch user space code and code that does not comprise
-the Linux datapath and compat code, the development branch is `master` in the
+the Linux datapath and compat code, the development branch is `main` in the
 Open vSwitch repository. Patches are applied first to this branch, then to the
 most recent `branch-X.Y`, then earlier `branch-X.Z`, and so on. The most common
-kind of patch in this category is a bugfix which affects master and other
+kind of patch in this category is a bugfix which affects main and other
 branches.
 
 For Linux datapath code, the primary development branch is in the `net-next`_
 tree as described in the section below, and patch discussion occurs on the
 `netdev`__ mailing list. Patches are first applied to the upstream branch by the
-networking maintainer, then the contributor backports the patch to the Open
-vSwitch `master` development branch. Patches in this category may include
-features which have been applied upstream, or bugfixes to the Open vSwitch
-datapath code. For bugfixes, the patches subsequently follow the regular Open
-vSwitch process as described above to reach older branches.
+networking maintainers, then the contributor backports the patch to an Open
+vSwitch branch. Patches in this category may include features which have
+been applied upstream, or bugfixes to the Open vSwitch datapath code.
 
-__ http://vger.kernel.org/vger-lists.html#netdev
+The practice for Linux datapath code described above is currently only
+applicable to bugfixes for Open vSwitch 2.17. This is because all earlier
+versions are EOL and all subsequent versions do not include the Linux
+datapath as it is now maintained as part of the upstream Linux kernel.
+
+__ https://lore.kernel.org/netdev/
 
 Changes to userspace components
 -------------------------------
 
 Patches which are fixing bugs should be considered for backporting from
-`master` to release branches. Open vSwitch contributors submit their patches
-targeted to the `master` branch, using the ``Fixes`` tag described in
-:doc:`submitting-patches`. The maintainer first applies the patch to `master`,
+`main` to release branches. Open vSwitch contributors submit their patches
+targeted to the `main` branch, using the ``Fixes`` tag described in
+:doc:`submitting-patches`. The maintainer first applies the patch to `main`,
 then backports the patch to each older affected tree, as far back as it goes or
 at least to all currently supported branches. This is usually each branch back
 to the oldest maintained LTS release branch or the last 4 release branches if
 the oldest LTS is newer.
 
-If the fix only affects a particular branch and not `master`, contributors
+If the fix only affects a particular branch and not `main`, contributors
 should submit the change with the target branch listed in the subject line of
 the patch. Contributors should list all versions that the bug affects. The
 ``git format-patch`` argument ``--subject-prefix`` may be used when posting the
@@ -93,8 +96,8 @@ Changes to Linux kernel components
 The Linux kernel components in Open vSwitch go through initial review in the
 upstream Linux netdev community before they go into the Open vSwitch tree. As
 such, backports from upstream to the Open vSwitch tree may include bugfixes or
-new features. The `netdev-FAQ`_ describes the general process for merging
-patches to the upstream Linux tree.
+new features. The `Netdev Maintainer Handbook`_ describes the general
+process for merging patches to the upstream Linux tree.
 
 To keep track of the changes which are made upstream against the changes which
 have been backported to the Open vSwitch tree, backports should be done in the
@@ -113,8 +116,8 @@ interests of keeping the Open vSwitch tree in sync with upstream `net-next`,
 contributors may send Open vSwitch kernel module changes independently of
 userspace changes.
 
-.. _netdev-faq: https://www.kernel.org/doc/Documentation/networking/netdev-FAQ.txt
-.. _net-next: http://git.kernel.org/cgit/linux/kernel/git/davem/net-next.git
+.. _Netdev Maintainer Handbook: https://docs.kernel.org/process/maintainer-netdev.html
+.. _net-next: https://git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git
 
 How to backport kernel patches
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

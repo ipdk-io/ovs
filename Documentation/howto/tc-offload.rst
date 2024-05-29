@@ -49,7 +49,7 @@ tc-police action, see ``man tc-police``.
 Configuration
 ~~~~~~~~~~~~~
 
-There is no parameter change in ovs-ofctl command, to configue a meter and use
+There is no parameter change in ovs-ofctl command, to configure a meter and use
 it for a flow in the offload way. Usually the commands are like::
 
     $ ovs-ofctl -O OpenFlow13 add-meter br0 "meter=1 pktps bands=type=drop rate=1"
@@ -58,10 +58,10 @@ it for a flow in the offload way. Usually the commands are like::
 For more details, see ``man ovs-ofctl``.
 
 .. note::
-  Each meter is mapped to one TC police action. To avovid the conflicton, the
-  police action index of 0x10000000-0x1fffffff are resevered for the mapping.
-  You can check the police actions by the command ``tc action ls action police``
-  in Linux system.
+  Each meter is mapped to one TC police action. To avoid conflicts, the
+  police action indexes 0x10000000-0x1fffffff are reserved for this mapping.
+  You can check the police actions using the command ``tc action ls action
+  police`` on Linux systems.
 
 
 Known TC flow offload limitations
@@ -112,3 +112,14 @@ First flow packet not processed by meter
 Packets that are received by ovs-vswitchd through an upcall before the actual
 meter flow is installed, are not passing TC police action and therefore are
 not considered for policing.
+
+Conntrack Application Layer Gateways (ALG)
+++++++++++++++++++++++++++++++++++++++++++
+
+TC does not support conntrack helpers, i.e., ALGs. TC will not offload flows if
+the ALG keyword is present within the ct() action. However, this will not allow
+ALGs to work within the datapath, as the return traffic without the ALG keyword
+might run through a TC rule, which internally will not call the conntrack
+helper required.
+
+So if ALG support is required, tc offload must be disabled.

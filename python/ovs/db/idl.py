@@ -85,9 +85,9 @@ class Monitor(enum.IntEnum):
 
 class ConditionState(object):
     def __init__(self):
-        self._ack_cond = None
+        self._ack_cond = [True]
         self._req_cond = None
-        self._new_cond = [True]
+        self._new_cond = None
 
     def __iter__(self):
         return iter([self._new_cond, self._req_cond, self._ack_cond])
@@ -299,6 +299,7 @@ class Idl(object):
         self._server_schema_request_id = None
         self._server_monitor_request_id = None
         self._db_change_aware_request_id = None
+        self._monitor_cancel_request_id = None
         self._server_db_name = '_Server'
         self._server_db_table = 'Database'
         self.server_tables = None
@@ -481,6 +482,10 @@ class Idl(object):
                         break
                 else:
                     self.__parse_update(msg.params[1], OVSDB_UPDATE)
+            elif self.handle_monitor_canceled(msg):
+                break
+            elif self.handle_monitor_cancel_reply(msg):
+                break
             elif (msg.type == ovs.jsonrpc.Message.T_REPLY
                   and self._monitor_request_id is not None
                   and self._monitor_request_id == msg.id):
@@ -494,6 +499,7 @@ class Idl(object):
                         if not msg.result[0]:
                             self.__clear()
                         self.__parse_update(msg.result[2], OVSDB_UPDATE3)
+                        self.last_id = msg.result[1]
                     elif self.state == self.IDL_S_DATA_MONITOR_COND_REQUESTED:
                         self.__clear()
                         self.__parse_update(msg.result, OVSDB_UPDATE2)
@@ -614,6 +620,33 @@ class Idl(object):
                              ovs.jsonrpc.Message.type_to_string(msg.type)))
 
         return initial_change_seqno != self.change_seqno
+
+    def handle_monitor_canceled(self, msg):
+        if msg.type != msg.T_NOTIFY:
+            return False
+        if msg.method != "monitor_canceled":
+            return False
+
+        if msg.params[0] == str(self.uuid):
+            params = [str(self.server_monitor_uuid)]
+        elif msg.params[0] == str(self.server_monitor_uuid):
+            params = [str(self.uuid)]
+        else:
+            return False
+
+        mc_msg = ovs.jsonrpc.Message.create_request("monitor_cancel", params)
+        self._monitor_cancel_request_id = mc_msg.id
+        self.send_request(mc_msg)
+        self.restart_fsm()
+        return True
+
+    def handle_monitor_cancel_reply(self, msg):
+        if msg.type != msg.T_REPLY:
+            return False
+        if msg.id != self._monitor_cancel_request_id:
+            return False
+        self._monitor_cancel_request_id = None
+        return True
 
     def compose_cond_change(self):
         if not self.cond_changed:
@@ -1223,7 +1256,7 @@ class Row(object):
         d["a"] = "b"
         row.mycolumn = d
 """
-    def __init__(self, idl, table, uuid, data):
+    def __init__(self, idl, table, uuid, data, persist_uuid=False):
         # All of the explicit references to self.__dict__ below are required
         # to set real attributes with invoking self.__getattr__().
         self.__dict__["uuid"] = uuid
@@ -1277,6 +1310,10 @@ class Row(object):
         # verified as prerequisites when the transaction commits.  The values
         # in the dictionary are all None.
         self.__dict__["_prereqs"] = {}
+
+        # Indicates if the specified 'uuid' should be used as the row uuid
+        # or let the server generate it.
+        self.__dict__["_persist_uuid"] = persist_uuid
 
     def __lt__(self, other):
         if not isinstance(other, Row):
@@ -1816,7 +1853,11 @@ class Transaction(object):
                 op = {"table": row._table.name}
                 if row._data is None:
                     op["op"] = "insert"
-                    op["uuid-name"] = _uuid_name_from_uuid(row.uuid)
+                    if row._persist_uuid:
+                        op["uuid"] = row.uuid
+                    else:
+                        op["uuid-name"] = _uuid_name_from_uuid(row.uuid)
+
                     any_updates = True
 
                     op_index = len(operations) - 1
@@ -2056,20 +2097,22 @@ class Transaction(object):
             row._mutations['_removes'].pop(column.name, None)
         row._changes[column.name] = datum.copy()
 
-    def insert(self, table, new_uuid=None):
+    def insert(self, table, new_uuid=None, persist_uuid=False):
         """Inserts and returns a new row in 'table', which must be one of the
         ovs.db.schema.TableSchema objects in the Idl's 'tables' dict.
 
         The new row is assigned a provisional UUID.  If 'uuid' is None then one
         is randomly generated; otherwise 'uuid' should specify a randomly
-        generated uuid.UUID not otherwise in use.  ovsdb-server will assign a
-        different UUID when 'txn' is committed, but the IDL will replace any
-        uses of the provisional UUID in the data to be to be committed by the
-        UUID assigned by ovsdb-server."""
+        generated uuid.UUID not otherwise in use.  If 'persist_uuid' is true
+        and 'new_uuid' is specified, IDL requests the ovsdb-server to assign
+        the same UUID, otherwise ovsdb-server will assign a different UUID when
+        'txn' is committed and the IDL will replace any uses of the provisional
+        UUID in the data to be committed by the UUID assigned by
+        ovsdb-server."""
         assert self._status == Transaction.UNCOMMITTED
         if new_uuid is None:
             new_uuid = uuid.uuid4()
-        row = Row(self.idl, table, new_uuid, None)
+        row = Row(self.idl, table, new_uuid, None, persist_uuid=persist_uuid)
         table.rows[row.uuid] = row
         self._txn_rows[row.uuid] = row
         return row

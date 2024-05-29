@@ -35,6 +35,7 @@
 #include "coverage.h"
 #include "dpif.h"
 #include "dp-packet.h"
+#include "dp-packet-gso.h"
 #include "openvswitch/dynamic-string.h"
 #include "fatal-signal.h"
 #include "hash.h"
@@ -43,6 +44,7 @@
 #include "netdev-provider.h"
 #include "netdev-vport.h"
 #include "odp-netlink.h"
+#include "openvswitch/json.h"
 #include "openflow/openflow.h"
 #include "packets.h"
 #include "openvswitch/ofp-print.h"
@@ -55,6 +57,7 @@
 #include "svec.h"
 #include "openvswitch/vlog.h"
 #include "flow.h"
+#include "userspace-tso.h"
 #include "util.h"
 #ifdef __linux__
 #include "tc.h"
@@ -66,8 +69,11 @@ COVERAGE_DEFINE(netdev_received);
 COVERAGE_DEFINE(netdev_sent);
 COVERAGE_DEFINE(netdev_add_router);
 COVERAGE_DEFINE(netdev_get_stats);
-COVERAGE_DEFINE(netdev_send_prepare_drops);
+COVERAGE_DEFINE(netdev_vxlan_tso_drops);
+COVERAGE_DEFINE(netdev_geneve_tso_drops);
 COVERAGE_DEFINE(netdev_push_header_drops);
+COVERAGE_DEFINE(netdev_soft_seg_good);
+COVERAGE_DEFINE(netdev_soft_seg_drops);
 
 struct netdev_saved_flags {
     struct netdev *netdev;
@@ -431,6 +437,7 @@ netdev_open(const char *name, const char *type, struct netdev **netdevp)
                     seq_read(netdev->reconfigure_seq);
                 ovsrcu_set(&netdev->flow_api, NULL);
                 netdev->hw_info.oor = false;
+                atomic_init(&netdev->hw_info.miss_api_supported, false);
                 netdev->node = shash_add(&netdev_shash, name, netdev);
 
                 /* By default enable one tx and rx queue per netdev. */
@@ -790,74 +797,84 @@ netdev_get_pt_mode(const struct netdev *netdev)
             : NETDEV_PT_LEGACY_L2);
 }
 
-/* Check if a 'packet' is compatible with 'netdev_flags'.
- * If a packet is incompatible, return 'false' with the 'errormsg'
- * pointing to a reason. */
-static bool
-netdev_send_prepare_packet(const uint64_t netdev_flags,
-                           struct dp_packet *packet, char **errormsg)
+/* Attempts to segment GSO flagged packets and send them as multiple bundles.
+ * This function is only used if at least one packet in the current batch is
+ * flagged for TSO and the netdev does not support this.
+ *
+ * The return value is 0 if all batches sent successfully, and an error code
+ * from netdev_class->send() if at least one batch failed to send. */
+static int
+netdev_send_tso(struct netdev *netdev, int qid,
+                struct dp_packet_batch *batch, bool concurrent_txq)
 {
-    uint64_t l4_mask;
-
-    if (dp_packet_hwol_is_tso(packet)
-        && !(netdev_flags & NETDEV_TX_OFFLOAD_TCP_TSO)) {
-            /* Fall back to GSO in software. */
-            VLOG_ERR_BUF(errormsg, "No TSO support");
-            return false;
-    }
-
-    l4_mask = dp_packet_hwol_l4_mask(packet);
-    if (l4_mask) {
-        if (dp_packet_hwol_l4_is_tcp(packet)) {
-            if (!(netdev_flags & NETDEV_TX_OFFLOAD_TCP_CKSUM)) {
-                /* Fall back to TCP csum in software. */
-                VLOG_ERR_BUF(errormsg, "No TCP checksum support");
-                return false;
-            }
-        } else if (dp_packet_hwol_l4_is_udp(packet)) {
-            if (!(netdev_flags & NETDEV_TX_OFFLOAD_UDP_CKSUM)) {
-                /* Fall back to UDP csum in software. */
-                VLOG_ERR_BUF(errormsg, "No UDP checksum support");
-                return false;
-            }
-        } else if (dp_packet_hwol_l4_is_sctp(packet)) {
-            if (!(netdev_flags & NETDEV_TX_OFFLOAD_SCTP_CKSUM)) {
-                /* Fall back to SCTP csum in software. */
-                VLOG_ERR_BUF(errormsg, "No SCTP checksum support");
-                return false;
-            }
-        } else {
-            VLOG_ERR_BUF(errormsg, "No L4 checksum support: mask: %"PRIu64,
-                         l4_mask);
-            return false;
-        }
-    }
-
-    return true;
-}
-
-/* Check if each packet in 'batch' is compatible with 'netdev' features,
- * otherwise either fall back to software implementation or drop it. */
-static void
-netdev_send_prepare_batch(const struct netdev *netdev,
-                          struct dp_packet_batch *batch)
-{
+    struct dp_packet_batch *batches;
     struct dp_packet *packet;
-    size_t i, size = dp_packet_batch_size(batch);
+    int retval = 0;
+    int n_packets;
+    int n_batches;
+    int error;
 
-    DP_PACKET_BATCH_REFILL_FOR_EACH (i, size, packet, batch) {
-        char *errormsg = NULL;
-
-        if (netdev_send_prepare_packet(netdev->ol_flags, packet, &errormsg)) {
-            dp_packet_batch_refill(batch, packet, i);
+    /* Calculate the total number of packets in the batch after
+     * the segmentation. */
+    n_packets = 0;
+    DP_PACKET_BATCH_FOR_EACH (i, packet, batch) {
+        if (dp_packet_hwol_is_tso(packet)) {
+            n_packets += dp_packet_gso_nr_segs(packet);
         } else {
-            dp_packet_delete(packet);
-            COVERAGE_INC(netdev_send_prepare_drops);
-            VLOG_WARN_RL(&rl, "%s: Packet dropped: %s",
-                         netdev_get_name(netdev), errormsg);
-            free(errormsg);
+            n_packets++;
         }
     }
+
+    if (!n_packets) {
+        return 0;
+    }
+
+    /* Allocate enough batches to store all the packets in order. */
+    n_batches = DIV_ROUND_UP(n_packets, NETDEV_MAX_BURST);
+    batches = xmalloc(n_batches * sizeof *batches);
+
+    struct dp_packet_batch *curr_batch = batches;
+    struct dp_packet_batch *last_batch = &batches[n_batches - 1];
+    for (curr_batch = batches; curr_batch <= last_batch; curr_batch++) {
+        dp_packet_batch_init(curr_batch);
+    }
+
+    /* Do the packet segmentation if TSO is flagged. */
+    size_t size = dp_packet_batch_size(batch);
+    size_t k;
+    curr_batch = batches;
+    DP_PACKET_BATCH_REFILL_FOR_EACH (k, size, packet, batch) {
+        if (dp_packet_hwol_is_tso(packet)) {
+            if (dp_packet_gso(packet, &curr_batch)) {
+                COVERAGE_INC(netdev_soft_seg_good);
+            } else {
+                COVERAGE_INC(netdev_soft_seg_drops);
+            }
+            dp_packet_delete(packet);
+        } else {
+            if (dp_packet_batch_is_full(curr_batch)) {
+                curr_batch++;
+            }
+
+            dp_packet_batch_add(curr_batch, packet);
+        }
+    }
+
+    for (curr_batch = batches; curr_batch <= last_batch; curr_batch++) {
+        DP_PACKET_BATCH_FOR_EACH (i, packet, curr_batch) {
+            dp_packet_ol_send_prepare(packet, netdev->ol_flags);
+        }
+
+        error = netdev->netdev_class->send(netdev, qid, curr_batch,
+                                           concurrent_txq);
+        if (!error) {
+            COVERAGE_INC(netdev_sent);
+        } else {
+            retval = error;
+        }
+    }
+    free(batches);
+    return retval;
 }
 
 /* Sends 'batch' on 'netdev'.  Returns 0 if successful (for every packet),
@@ -889,11 +906,38 @@ int
 netdev_send(struct netdev *netdev, int qid, struct dp_packet_batch *batch,
             bool concurrent_txq)
 {
+    const uint64_t netdev_flags = netdev->ol_flags;
+    struct dp_packet *packet;
     int error;
 
-    netdev_send_prepare_batch(netdev, batch);
-    if (OVS_UNLIKELY(dp_packet_batch_is_empty(batch))) {
-        return 0;
+    if (userspace_tso_enabled() &&
+        !(netdev_flags & NETDEV_TX_OFFLOAD_TCP_TSO)) {
+        DP_PACKET_BATCH_FOR_EACH (i, packet, batch) {
+            if (dp_packet_hwol_is_tso(packet)) {
+                if (dp_packet_hwol_is_tunnel_vxlan(packet)
+                    && !(netdev_flags & NETDEV_TX_VXLAN_TNL_TSO)) {
+                        VLOG_WARN_RL(&rl, "%s: No VXLAN TSO support",
+                                     netdev_get_name(netdev));
+                        COVERAGE_INC(netdev_vxlan_tso_drops);
+                        dp_packet_delete_batch(batch, true);
+                        return false;
+                }
+
+                if (dp_packet_hwol_is_tunnel_geneve(packet)
+                    && !(netdev_flags & NETDEV_TX_GENEVE_TNL_TSO)) {
+                        VLOG_WARN_RL(&rl, "%s: No GENEVE TSO support",
+                                     netdev_get_name(netdev));
+                        COVERAGE_INC(netdev_geneve_tso_drops);
+                        dp_packet_delete_batch(batch, true);
+                        return false;
+                }
+                return netdev_send_tso(netdev, qid, batch, concurrent_txq);
+            }
+        }
+    }
+
+    DP_PACKET_BATCH_FOR_EACH (i, packet, batch) {
+        dp_packet_ol_send_prepare(packet, netdev_flags);
     }
 
     error = netdev->netdev_class->send(netdev, qid, batch, concurrent_txq);
@@ -965,15 +1009,33 @@ netdev_push_header(const struct netdev *netdev,
     size_t i, size = dp_packet_batch_size(batch);
 
     DP_PACKET_BATCH_REFILL_FOR_EACH (i, size, packet, batch) {
-        if (OVS_UNLIKELY(dp_packet_hwol_is_tso(packet)
-                         || dp_packet_hwol_l4_mask(packet))) {
+        if (OVS_UNLIKELY(data->tnl_type != OVS_VPORT_TYPE_GENEVE &&
+                         data->tnl_type != OVS_VPORT_TYPE_VXLAN &&
+                         dp_packet_hwol_is_tso(packet))) {
             COVERAGE_INC(netdev_push_header_drops);
             dp_packet_delete(packet);
-            VLOG_WARN_RL(&rl, "%s: Tunneling packets with HW offload flags is "
-                         "not supported: packet dropped",
-                         netdev_get_name(netdev));
+            VLOG_WARN_RL(&rl, "%s: Tunneling packets with TSO is not "
+                              "supported for %s tunnels: packet dropped",
+                         netdev_get_name(netdev), netdev_get_type(netdev));
         } else {
+            if (data->tnl_type != OVS_VPORT_TYPE_GENEVE &&
+                data->tnl_type != OVS_VPORT_TYPE_VXLAN) {
+                dp_packet_ol_send_prepare(packet, 0);
+            } else if (dp_packet_hwol_is_tunnel_geneve(packet) ||
+                       dp_packet_hwol_is_tunnel_vxlan(packet)) {
+                if (dp_packet_hwol_is_tso(packet)) {
+                    COVERAGE_INC(netdev_push_header_drops);
+                    dp_packet_delete(packet);
+                    VLOG_WARN_RL(&rl, "%s: Tunneling packets with TSO is not "
+                                      "supported with multiple levels of "
+                                      "VXLAN or GENEVE encapsulation.",
+                                 netdev_get_name(netdev));
+                    continue;
+                }
+                dp_packet_ol_send_prepare(packet, 0);
+            }
             netdev->netdev_class->push_header(netdev, packet, data);
+
             pkt_metadata_init(&packet->md, data->out_port);
             dp_packet_batch_refill(batch, packet, i);
         }
@@ -1162,6 +1224,36 @@ netdev_get_features(const struct netdev *netdev,
                     : EOPNOTSUPP;
     if (error) {
         *current = *advertised = *supported = *peer = 0;
+    }
+    return error;
+}
+
+int
+netdev_get_speed(const struct netdev *netdev, uint32_t *current, uint32_t *max)
+{
+    uint32_t current_dummy, max_dummy;
+    int error;
+
+    if (!current) {
+        current = &current_dummy;
+    }
+    if (!max) {
+        max = &max_dummy;
+    }
+
+    error = netdev->netdev_class->get_speed
+            ? netdev->netdev_class->get_speed(netdev, current, max)
+            : EOPNOTSUPP;
+
+    if (error == EOPNOTSUPP) {
+        enum netdev_features current_f, supported_f;
+
+        error = netdev_get_features(netdev, &current_f, NULL,
+                                    &supported_f, NULL);
+        *current = netdev_features_to_bps(current_f, 0) / 1000000;
+        *max = netdev_features_to_bps(supported_f, 0) / 1000000;
+    } else if (error) {
+        *current = *max = 0;
     }
     return error;
 }
@@ -1372,9 +1464,35 @@ netdev_get_next_hop(const struct netdev *netdev,
 int
 netdev_get_status(const struct netdev *netdev, struct smap *smap)
 {
-    return (netdev->netdev_class->get_status
-            ? netdev->netdev_class->get_status(netdev, smap)
-            : EOPNOTSUPP);
+    int err = EOPNOTSUPP;
+
+    /* Set offload status only if relevant. */
+    if (netdev_get_dpif_type(netdev) &&
+        strcmp(netdev_get_dpif_type(netdev), "system")) {
+
+#define OL_ADD_STAT(name, bit) \
+        smap_add(smap, "tx_" name "_offload", \
+                 netdev->ol_flags & bit ? "true" : "false");
+
+        OL_ADD_STAT("ip_csum", NETDEV_TX_OFFLOAD_IPV4_CKSUM);
+        OL_ADD_STAT("tcp_csum", NETDEV_TX_OFFLOAD_TCP_CKSUM);
+        OL_ADD_STAT("udp_csum", NETDEV_TX_OFFLOAD_UDP_CKSUM);
+        OL_ADD_STAT("sctp_csum", NETDEV_TX_OFFLOAD_SCTP_CKSUM);
+        OL_ADD_STAT("tcp_seg", NETDEV_TX_OFFLOAD_TCP_TSO);
+        OL_ADD_STAT("vxlan_tso", NETDEV_TX_VXLAN_TNL_TSO);
+        OL_ADD_STAT("geneve_tso", NETDEV_TX_GENEVE_TNL_TSO);
+        OL_ADD_STAT("out_ip_csum", NETDEV_TX_OFFLOAD_OUTER_IP_CKSUM);
+        OL_ADD_STAT("out_udp_csum", NETDEV_TX_OFFLOAD_OUTER_UDP_CKSUM);
+#undef OL_ADD_STAT
+
+        err = 0;
+    }
+
+    if (!netdev->netdev_class->get_status) {
+        return err;
+    }
+
+    return netdev->netdev_class->get_status(netdev, smap);
 }
 
 /* Returns all assigned IP address to  'netdev' and returns 0.

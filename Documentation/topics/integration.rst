@@ -191,11 +191,11 @@ contents. At all times, the data can be transacted only from the active server.
 When the active server dies for some reason, entire OVN operations will be
 stalled.
 
-`Pacemaker <http://clusterlabs.org/pacemaker.html>`__ is a cluster resource
+`Pacemaker <https://clusterlabs.org/pacemaker/>`__ is a cluster resource
 manager which can manage a defined set of resource across a set of clustered
 nodes. Pacemaker manages the resource with the help of the resource agents.
 One among the resource agent is `OCF
-<http://www.linux-ha.org/wiki/OCF_Resource_Agents>`__
+<https://clusterlabs.org/pacemaker/doc/2.1/Pacemaker_Administration/html/agents.html>`__
 
 OCF is nothing but a shell script which accepts a set of actions and returns an
 appropriate status code.
@@ -250,7 +250,7 @@ with the active server::
 2. Using load balancer vip ip as a master_ip.  In order to use this feature,
 one needs to use listen_on_master_ip_only to no.  Current code for load
 balancer have been tested to work with tcp protocol and needs to be
-tested/enchanced for ssl. Using load balancer, standby nodes will not listen on
+tested/enhanced for ssl. Using load balancer, standby nodes will not listen on
 nb and sb db ports so that load balancer will always communicate to the active
 node and all the traffic will be sent to active node only.  Standby will
 continue to sync using LB VIP IP in this case.
