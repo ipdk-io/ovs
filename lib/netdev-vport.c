@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2010, 2011, 2012, 2013, 2014, 2017 Nicira, Inc.
  * Copyright (c) 2016 Red Hat, Inc.
- * Copyright (c) 2021 Intel Corporation.
+ * Copyright (c) 2021-2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -715,10 +715,14 @@ set_tunnel_config(struct netdev *dev_, const struct smap *args, char **errp)
             if (!strcmp(node->value, "false")) {
                 tnl_cfg.dont_fragment = false;
             }
-        } else if (!strcmp(node->key, "key") && strcmp(node->value, "flow")) {
+#if defined(P4OVS)
+        } else if (!strcmp(node->key, "key") &&
+                   strcmp(node->value, "flow")) {
             /* Add VNI to tunnel config if the value is not flow */
             tnl_cfg.vni = atoi(node->value);
-        } else if (!strcmp(node->key, "in_key") ||
+#endif
+        } else if (!strcmp(node->key, "key") ||
+                   !strcmp(node->key, "in_key") ||
                    !strcmp(node->key, "out_key") ||
                    !strcmp(node->key, "packet_type")) {
             /* Handled separately below. */

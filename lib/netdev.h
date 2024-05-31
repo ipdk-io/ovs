@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013 Nicira, Inc.
- * Copyright (c) 2021 Intel Corporation.
+ * Copyright (c) 2021-2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -175,7 +175,8 @@ struct netdev_tunnel_config {
     #define SRV6_MAX_SEGS 6
     struct in6_addr srv6_segs[SRV6_MAX_SEGS];
     enum netdev_srv6_flowlabel srv6_flowlabel;
-#ifdef P4OVS
+
+#if defined(P4OVS)
     uint32_t vni;
 #endif
 };

@@ -1,4 +1,5 @@
 /* Copyright (c) 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017 Nicira, Inc.
+ * Copyright (c) 2023 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -195,7 +196,7 @@ void xlate_bundle_set(struct ofproto_dpif *, struct ofbundle *,
                       enum port_priority_tags_mode,
                       const struct bond *, const struct lacp *,
                       bool floodable, bool protected, uint8_t p4_bridge_id);
-#elif
+#else
 void xlate_bundle_set(struct ofproto_dpif *, struct ofbundle *,
                       const char *name, enum port_vlan_mode,
                       uint16_t qinq_ethtype, int vlan,
