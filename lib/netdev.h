@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2008, 2009, 2010, 2011, 2012, 2013 Nicira, Inc.
- * Copyright (c) 2021 Intel Corporation.
+ * Copyright (c) 2021-2022 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -142,7 +142,9 @@ struct netdev_tunnel_config {
     bool erspan_dir_flow;
     bool erspan_hwid_flow;
 
+#if defined(P4OVS)
     uint32_t vni;
+#endif
 };
 
 void netdev_run(void);

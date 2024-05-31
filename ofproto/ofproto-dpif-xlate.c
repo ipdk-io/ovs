@@ -1,4 +1,5 @@
 /* Copyright (c) 2009-2017, 2019-2020 Nicira, Inc.
+ * Copyright (c) 2022-2024 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -68,14 +69,15 @@
 #include "uuid.h"
 
 #if defined(P4OVS)
-#include "lib/netdev.h"
 #include <linux/if_vlan.h>
 #include <linux/sockios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+
+#include "lib/netdev.h"
 #include "ovsp4rt/ovs-p4rt.h"
 #include "openvswitch/p4ovs.h"
-#endif //P4OVS
+#endif
 
 COVERAGE_DEFINE(xlate_actions);
 COVERAGE_DEFINE(xlate_actions_oversize);
@@ -629,7 +631,7 @@ static void xlate_xbundle_set(struct xbundle *xbundle,
                               enum port_priority_tags_mode,
                               const struct bond *bond, const struct lacp *lacp,
                               bool floodable, bool protected, uint8_t p4_bridge_id);
-#elif
+#else
 static void xlate_xbundle_set(struct xbundle *xbundle,
                               enum port_vlan_mode vlan_mode,
                               uint16_t qinq_ethtype, int vlan,
@@ -1045,7 +1047,7 @@ xlate_xbundle_set(struct xbundle *xbundle,
                   enum port_priority_tags_mode use_priority_tags,
                   const struct bond *bond, const struct lacp *lacp,
                   bool floodable, bool protected, uint8_t p4_bridge_id)
-#elif
+#else
 static void
 xlate_xbundle_set(struct xbundle *xbundle,
                   enum port_vlan_mode vlan_mode, uint16_t qinq_ethtype,
@@ -1167,7 +1169,7 @@ xlate_xbundle_copy(struct xbridge *xbridge, struct xbundle *xbundle)
                       xbundle->use_priority_tags, xbundle->bond, xbundle->lacp,
                       xbundle->floodable, xbundle->protected,
                       xbundle->p4_bridge_id);
-#elif
+#else
     xlate_xbundle_set(new_xbundle, xbundle->vlan_mode, xbundle->qinq_ethtype,
                       xbundle->vlan, xbundle->trunks, xbundle->cvlans,
                       xbundle->use_priority_tags, xbundle->bond, xbundle->lacp,
@@ -1388,7 +1390,7 @@ xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
                  enum port_priority_tags_mode use_priority_tags,
                  const struct bond *bond, const struct lacp *lacp,
                  bool floodable, bool protected, uint8_t p4_bridge_id)
-#elif
+#else
 void
 xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
                  const char *name, enum port_vlan_mode vlan_mode,
@@ -1419,7 +1421,7 @@ xlate_bundle_set(struct ofproto_dpif *ofproto, struct ofbundle *ofbundle,
     xlate_xbundle_set(xbundle, vlan_mode, qinq_ethtype, vlan, trunks, cvlans,
                       use_priority_tags, bond, lacp, floodable, protected,
                       p4_bridge_id);
-#elif
+#else
     xlate_xbundle_set(xbundle, vlan_mode, qinq_ethtype, vlan, trunks, cvlans,
                       use_priority_tags, bond, lacp, floodable, protected);
 #endif
@@ -3054,6 +3056,7 @@ is_ip_local_multicast(const struct flow *flow, struct flow_wildcards *wc)
 }
 
 #if defined(P4OVS)
+
 static enum p4_vlan_mode
 get_p4_vlan_mode(enum port_vlan_mode vlan_mode) {
     if (vlan_mode == PORT_VLAN_ACCESS)
@@ -3168,7 +3171,7 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
                close(fd);
                VLOG_ERR("Error retrieving vlan id through ioctl");
                return -1;
-           }       
+           }
            fdb_info->vln_info.vlan_id = if_request.u.VID;
            close(fd);
         }
@@ -3203,10 +3206,11 @@ update_ip_mac_map_info(const struct flow *flow,
 
        ip_mac_map_info->dst_ip_addr.family = AF_INET;
        ip_mac_map_info->dst_ip_addr.ip.v4addr.s_addr = flow->nw_dst;
-    }    
+    }
 
     return -1;
 }
+
 #endif // P4OVS
 
 static void
@@ -3216,7 +3220,7 @@ xlate_normal(struct xlate_ctx *ctx)
     struct flow *flow = &ctx->xin->flow;
 #if defined(P4OVS)
     bool is_mac_learn_required = false;
-#endif //P4OVS    
+#endif
     struct xbundle *in_xbundle;
     struct xport *in_port;
     struct mac_entry *mac;
@@ -3285,7 +3289,7 @@ xlate_normal(struct xlate_ctx *ctx)
                                 flow->dl_src, vlan,is_grat_arp,
                                 in_xbundle->bond != NULL,
                                 in_xbundle->ofbundle);
-#endif        
+#endif
         //The function below calls mac_learning_insert
         update_learning_table(ctx, in_xbundle, flow->dl_src, vlan,
                               is_grat_arp);
@@ -3308,10 +3312,10 @@ xlate_normal(struct xlate_ctx *ctx)
            }
            p4ovs_unlock(&p4ovs_fdb_entry_lock);
        }
-   
+
        // Update the recently added MAC entry with flow info
        struct mac_entry *e;
- 
+
        ovs_rwlock_wrlock(&ctx->xbridge->ml->rwlock);
        e = mac_learning_lookup(ctx->xbridge->ml, flow->dl_src, vlan);
        if (e) {
@@ -3320,7 +3324,7 @@ xlate_normal(struct xlate_ctx *ctx)
            //TODO: Update IPv6 info in MAC entry when IPv6 support is added
        }
        ovs_rwlock_unlock(&ctx->xbridge->ml->rwlock);
-   
+
        if (ovs_p4_offload_enabled()) {
           struct ip_mac_map_info ip_info = {0};
           if (update_ip_mac_map_info(flow, &ip_info)) {
