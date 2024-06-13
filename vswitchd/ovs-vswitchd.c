@@ -323,12 +323,14 @@ usage(void)
            "Configuration of DPDK via command-line is removed from this\n"
            "version of Open vSwitch. DPDK is configured through ovsdb.\n"
           );
+#if defined(P4OVS)
+    printf("\nP4OVS options:\n"
+           "  -g, --grpc-addr=ADDR      gRPC server address for P4Runtime server\n"
+    );
+#endif
     printf("\nOther options:\n"
            "  --unixctl=SOCKET          override default control socket name\n"
            "  -h, --help                display this help message\n"
-#if defined(P4OVS)
-           "  -g, --grpc-addr           gRPC server address for P4Runtime server\n"
-#endif   
            "  -V, --version             display version information\n");
     exit(EXIT_SUCCESS);
 }
