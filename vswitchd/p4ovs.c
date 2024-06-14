@@ -17,7 +17,8 @@ void ovs_set_grpc_addr(const char* optarg) {
         ovs_fatal(0, "--grpc_addr is too long (> %lu characters)",
                   sizeof(grpc_addr) - sizeof(grpc_port));
     }
-    strncpy(grpc_addr, optarg, sizeof(grpc_addr));
+    strncpy(grpc_addr, optarg, sizeof(grpc_addr) - 1);
+    grpc_addr[sizeof(grpc_addr) - 1] = '\0';
     strcat(grpc_addr, grpc_port);
 }
 
