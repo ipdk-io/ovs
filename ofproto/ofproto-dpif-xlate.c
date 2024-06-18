@@ -3059,16 +3059,18 @@ is_ip_local_multicast(const struct flow *flow, struct flow_wildcards *wc)
 
 static enum p4_vlan_mode
 get_p4_vlan_mode(enum port_vlan_mode vlan_mode) {
-    if (vlan_mode == PORT_VLAN_ACCESS)
+    switch (vlan_mode) {
+    case PORT_VLAN_ACCESS:
         return P4_PORT_VLAN_ACCESS;
-    else if (vlan_mode == PORT_VLAN_TRUNK)
+    case PORT_VLAN_TRUNK:
         return P4_PORT_VLAN_TRUNK;
-    else if (vlan_mode == PORT_VLAN_NATIVE_TAGGED)
+    case PORT_VLAN_NATIVE_TAGGED:
         return P4_PORT_VLAN_NATIVE_TAGGED;
-    else if (vlan_mode == PORT_VLAN_NATIVE_UNTAGGED)
+    case PORT_VLAN_NATIVE_UNTAGGED:
         return P4_PORT_VLAN_NATIVE_UNTAGGED;
-    else
+    default:
         return P4_PORT_VLAN_UNSUPPORTED;
+  }
 }
 
 static int32_t
