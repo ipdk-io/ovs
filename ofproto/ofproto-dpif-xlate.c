@@ -3306,7 +3306,7 @@ xlate_normal(struct xlate_ctx *ctx)
        if (ovs_p4_offload_enabled()) {
            p4ovs_lock(&p4ovs_fdb_entry_lock);
            if (!get_fdb_data(ovs_port, flow->dl_src, &fdb_info)) {
-               ovsp4rt_config_fdb_entry(fdb_info, true, grpc_addr);
+               ovsp4rt_config_fdb_entry(fdb_info, true, p4ovs_grpc_addr);
                ctx->xbridge->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
            } else {
                VLOG_DBG("Error retrieving FDB information, skipping programming "
@@ -3330,7 +3330,7 @@ xlate_normal(struct xlate_ctx *ctx)
        if (ovs_p4_offload_enabled()) {
           struct ip_mac_map_info ip_info = {0};
           if (update_ip_mac_map_info(flow, &ip_info)) {
-             ovsp4rt_config_ip_mac_map_entry(ip_info, true, grpc_addr);
+             ovsp4rt_config_ip_mac_map_entry(ip_info, true, p4ovs_grpc_addr);
           }
        } else {
           VLOG_DBG("P4 offload disabled, skipping programming ");
@@ -8614,7 +8614,7 @@ xlate_add_static_mac_entry(const struct ofproto_dpif *ofproto,
         memset(&fdb_info, 0, sizeof(fdb_info));
 
         if (!get_fdb_data(ovs_port, dl_src, &fdb_info)) {
-            ovsp4rt_config_fdb_entry(fdb_info, true, grpc_addr);
+            ovsp4rt_config_fdb_entry(fdb_info, true, p4ovs_grpc_addr);
             ofproto->ml->p4_bridge_id = ovs_port->xbundle->p4_bridge_id;
         } else {
             VLOG_DBG("Error retrieving FDB information, skipping programming "
