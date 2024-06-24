@@ -6,7 +6,7 @@
 #include <config.h>
 #include <string.h>
 
-#include "openvswitch/p4ovs.h"
+#include "lib/p4ovs.h"
 #include "util.h"
 
 char p4ovs_grpc_addr[32] = "localhost:9559";
