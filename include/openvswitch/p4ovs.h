@@ -22,7 +22,7 @@ extern "C" {
 
 extern struct ovs_mutex p4ovs_fdb_entry_lock;
 
-extern char grpc_addr[32];
+extern char p4ovs_grpc_addr[32];
 
 /* Control OvS offload with an environment variable during runtime.
  * If env variable OVS_P4_OFFLOAD=false, then disable OVS offload, else

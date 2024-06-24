@@ -2374,9 +2374,9 @@ ConfigureP4Target(struct bridge *br, struct port *port,
             tnl_info.bridge_id = br->p4_bridge_id;
             tnl_info.src_port = port->p4_src_port;
 
-            ovsp4rt_config_tunnel_entry(tnl_info, insert_entry, grpc_addr);
+            ovsp4rt_config_tunnel_entry(tnl_info, insert_entry, p4ovs_grpc_addr);
             ovsp4rt_config_rx_tunnel_src_entry(tnl_info, insert_entry,
-                                               grpc_addr);
+                                               p4ovs_grpc_addr);
         } else {
             VLOG_ERR("Error retrieving tunnel information, "
                      "skipping programming P4 entry");
@@ -2392,9 +2392,9 @@ ConfigureP4Target(struct bridge *br, struct port *port,
                                                       port->p4_src_port};
             /* When VLAN tag is configured */
             ovsp4rt_config_vlan_entry(port->p4_vlan_id, insert_entry,
-                                      grpc_addr);
+                                      p4ovs_grpc_addr);
             ovsp4rt_config_tunnel_src_port_entry(tnl_src_port_info,
-                                                 insert_entry, grpc_addr);
+                                                 insert_entry, p4ovs_grpc_addr);
         } else {
             /* Wild card VLAN 0 */
             struct src_port_info tnl_src_port_info = {br->p4_bridge_id,
@@ -2402,7 +2402,7 @@ ConfigureP4Target(struct bridge *br, struct port *port,
                                                       port->p4_src_port};
 
             ovsp4rt_config_tunnel_src_port_entry(tnl_src_port_info,
-                                                 insert_entry, grpc_addr);
+                                                 insert_entry, p4ovs_grpc_addr);
         }
         port->is_src_port_configured = insert_entry;
     } else if (!insert_entry || iface->cfg->mac_in_use) {
@@ -2423,9 +2423,9 @@ ConfigureP4Target(struct bridge *br, struct port *port,
                                                       port->p4_src_port};
 
             ovsp4rt_config_vlan_entry(port->p4_vlan_id, insert_entry,
-                                      grpc_addr);
+                                      p4ovs_grpc_addr);
             ovsp4rt_config_src_port_entry(vsi_src_port_info, insert_entry,
-                                          grpc_addr);
+                                          p4ovs_grpc_addr);
         } else if (port->p4_vlan_mode == P4_PORT_VLAN_UNSUPPORTED) {
             /* Do nothing, unsupported vlan mode */
         } else if (port->p4_src_port) {
@@ -2434,7 +2434,7 @@ ConfigureP4Target(struct bridge *br, struct port *port,
                                                       port->p4_src_port};
 
             ovsp4rt_config_src_port_entry(vsi_src_port_info, insert_entry,
-                                          grpc_addr);
+                                          p4ovs_grpc_addr);
         } else {
             VLOG_DBG("Invalid P4 use case for source port to "
                      "bridge mapping");
