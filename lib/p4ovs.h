@@ -2,12 +2,14 @@
  * Copyright (c) 2023-2024 Intel Corporation.
  * SPDX-License-Identifier: Apache-2.0
  *
- * Defines the P4 OvS specific definitions. These need be used under
- * if defined(P4OVS) scope only.
+ * Definitions specific to P4OVS.
+ *
+ * OVS code that references this file must do so under protection of an
+ * #ifdef P4OVS conditional.
  */
 
-#ifndef OPENVSWITCH_P4OVS_H
-#define OPENVSWITCH_P4OVS_H
+#ifndef LIB_P4OVS_H
+#define LIB_P4OVS_H
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -63,4 +65,4 @@ void ovs_set_grpc_addr(const char* optarg);
 }  // extern "C"
 #endif
 
-#endif  // OPENVSWITCH_P4OVS_H
+#endif  // LIB_P4OVS_H

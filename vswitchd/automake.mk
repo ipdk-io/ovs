@@ -10,11 +10,7 @@ vswitchd_sources = \
 	vswitchd/system-stats.c \
 	vswitchd/system-stats.h
 
-if P4OVS
-vswitchd_sources += vswitchd/p4ovs.c
-endif
-
-if P4OVS
+if LEGACY_P4OVS
 # Build a static library instead of an executable.
 lib_LTLIBRARIES += vswitchd/libvswitchd.la
 
@@ -39,6 +35,9 @@ vswitchd_ovs_vswitchd_LDADD = \
 	lib/libopenvswitch.la
 
 vswitchd_ovs_vswitchd_LDFLAGS = $(AM_LDFLAGS) $(DPDK_vswitchd_LDFLAGS)
+if OVSP4RT
+vswitchd_ovs_vswitchd_LDFLAGS += $(OVSP4RT_LIBS)
+endif
 endif
 
 MAN_ROOTS += vswitchd/ovs-vswitchd.8.in
