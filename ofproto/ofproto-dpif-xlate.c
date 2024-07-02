@@ -3227,6 +3227,7 @@ get_p4_vlan_mode(enum port_vlan_mode vlan_mode) {
         return P4_PORT_VLAN_NATIVE_TAGGED;
     case PORT_VLAN_NATIVE_UNTAGGED:
         return P4_PORT_VLAN_NATIVE_UNTAGGED;
+    case P4_PORT_VLAN_DOT1Q_TUNNEL:
     default:
         return P4_PORT_VLAN_UNSUPPORTED;
   }
