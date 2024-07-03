@@ -5,8 +5,7 @@ bin_PROGRAMS += \
 	utilities/ovs-vsctl
 
 if LEGACY_P4OVS
-# Build test controller as static library and
-# link it as part of the ovsp4rt build.
+# Build a static library instead of an executable.
 lib_LTLIBRARIES += utilities/libtestcontroller.la
 else
 bin_PROGRAMS += utilities/ovs-testcontroller

@@ -1,8 +1,26 @@
 dnl OVS_CHECK_OVSP4RT - Process P4 options.
-
+dnl
 dnl Copyright(c) 2021-2024 Intel Corporation.
 dnl SPDX-License-Identifier: Apache 2.0
-
+dnl
+dnl Implements the --with-p4ovs and --with-ovsp4rt flags.
+dnl
+dnl For --with-ovsp4rt, the directory containing the libovsp4rt
+dnl pkg-config files must be listed by the PKG_CONFIG_PATH
+dnl environment variable.
+dnl
+dnl config.h symbols:
+dnl   P4OVS - enables P4 support
+dnl
+dnl autoconf symbols:
+dnl   OVSP4RT_CFLAGS - compiler parameters
+dnl   OVSP4RT_LIBS - linker parameters
+dnl
+dnl automake conditionals:
+dnl   P4OVS - enables P4 support
+dnl   OVSP4RT - links with ovsp4rt internally
+dnl   LEGACY_P4OVS - links with ovsp4rt externally
+dnl
 AC_DEFUN([OVS_CHECK_OVSP4RT], [
   AC_ARG_WITH([ovsp4rt],
               [AC_HELP_STRING([--with-ovsp4rt@<:@=stubs@:>@],
@@ -34,7 +52,7 @@ AC_DEFUN([OVS_CHECK_OVSP4RT], [
     legacy_p4ovs=false
   fi
 
-  dnl config.h variable
+  dnl define variable in config.h file
   if test $have_p4ovs = true; then
     AC_DEFINE([P4OVS], [1], [System includes P4 support.])
   fi
