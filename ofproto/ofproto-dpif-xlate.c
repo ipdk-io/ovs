@@ -75,8 +75,8 @@
 #include <sys/ioctl.h>
 
 #include "lib/netdev.h"
+#include "lib/p4ovs.h"
 #include "ovsp4rt/ovs-p4rt.h"
-#include "openvswitch/p4ovs.h"
 #endif
 
 COVERAGE_DEFINE(xlate_actions);

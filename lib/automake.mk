@@ -426,6 +426,12 @@ lib_libopenvswitch_la_SOURCES += \
 	lib/stream-unix.c
 endif
 
+if P4OVS
+lib_libopenvswitch_la_SOURCES += \
+	lib/p4ovs.c \
+	lib/p4ovs.h
+endif
+
 EXTRA_DIST += \
 	lib/stdio.h.in \
 	lib/string.h.in

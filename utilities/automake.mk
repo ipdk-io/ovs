@@ -4,9 +4,8 @@ bin_PROGRAMS += \
 	utilities/ovs-ofctl \
 	utilities/ovs-vsctl
 
-# Build test controller as static library and
-# link to sidecar before building its executable
-if P4OVS
+if LEGACY_P4OVS
+# Build a static library instead of an executable.
 lib_LTLIBRARIES += utilities/libtestcontroller.la
 else
 bin_PROGRAMS += utilities/ovs-testcontroller
@@ -116,13 +115,16 @@ man_MANS += \
 utilities_ovs_appctl_SOURCES = utilities/ovs-appctl.c
 utilities_ovs_appctl_LDADD = lib/libopenvswitch.la
 
-if P4OVS
+if LEGACY_P4OVS
 utilities_libtestcontroller_la_CPPFLAGS = $(AM_CPPFLAGS)
 utilities_libtestcontroller_la_SOURCES = utilities/ovs-testcontroller.c
 utilities_libtestcontroller_la_LIBADD = lib/libopenvswitch.la $(SSL_LIBS)
 else
 utilities_ovs_testcontroller_SOURCES = utilities/ovs-testcontroller.c
 utilities_ovs_testcontroller_LDADD = lib/libopenvswitch.la $(SSL_LIBS)
+if OVSP4RT
+utilities_ovs_testcontroller_LDADD += $(OVSP4RT_LIBS)
+endif
 endif
 
 utilities_ovs_dpctl_SOURCES = utilities/ovs-dpctl.c
