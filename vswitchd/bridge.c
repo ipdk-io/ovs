@@ -76,8 +76,8 @@
 #if defined(P4OVS)
 #include <netinet/ether.h>
 
+#include "lib/p4ovs.h"
 #include "ovsp4rt/ovs-p4rt.h"
-#include "openvswitch/p4ovs.h"
 
 static int32_t
 get_tunnel_data(struct netdev *netdev,

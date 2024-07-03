@@ -52,11 +52,6 @@ openvswitchinclude_HEADERS = \
 	include/openvswitch/vlog.h \
 	include/openvswitch/nsh.h
 
-if P4OVS
-openvswitchinclude_HEADERS += \
-	include/openvswitch/p4ovs.h
-endif
-
 if HAVE_CXX
 # OVS does not use C++ itself, but it provides public header files
 # that a C++ compiler should accept, so when --enable-Werror is in

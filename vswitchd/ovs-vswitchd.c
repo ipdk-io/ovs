@@ -55,7 +55,7 @@
 #include "lib/vswitch-idl.h"
 #include "lib/dns-resolve.h"
 #if defined(P4OVS)
-#include "openvswitch/p4ovs.h"
+#include "lib/p4ovs.h"
 #endif
 
 VLOG_DEFINE_THIS_MODULE(vswitchd);
