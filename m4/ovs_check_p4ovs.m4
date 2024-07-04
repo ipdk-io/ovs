@@ -45,11 +45,16 @@ AC_DEFUN([OVS_CHECK_OVSP4RT], [
       OVSP4RT_LIBS=$ovsp4rt_LIBS
     fi
     have_p4ovs=true
-  fi
-
-  legacy_p4ovs=$have_p4ovs
-  if test $have_ovsp4rt = true; then
     legacy_p4ovs=false
+  else
+    AC_MSG_CHECKING([whether P4OVS is enabled])
+    if test $have_p4ovs == true; then
+      AC_MSG_RESULT([yes])
+      legacy_p4ovs=true
+    else
+      AC_MSG_RESULT([no])
+      legacy_p4ovs=false
+    fi
   fi
 
   dnl define variable in config.h file
