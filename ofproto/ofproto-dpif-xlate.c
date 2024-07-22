@@ -3267,7 +3267,7 @@ get_fdb_data(struct xport *port, struct eth_addr mac_addr,
 
         int underlay_ifindex = netdev_get_ifindex(port->netdev);
         if (underlay_ifindex < 0) {
-            VLOG_ERR("Invalid tunnel ifindex");
+            VLOG_DBG("Invalid tunnel ifindex");
             return -1;
         }
 

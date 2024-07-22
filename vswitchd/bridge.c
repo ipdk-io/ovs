@@ -74,18 +74,19 @@
 #include "vlan-bitmap.h"
 
 #if defined(P4OVS)
+
 #include <netinet/ether.h>
 
 #include "lib/p4ovs.h"
 #include "ovsp4rt/ovs-p4rt.h"
 
 static int32_t
-get_tunnel_data(struct netdev *netdev,
-                struct tunnel_info *tnl_info);
+get_tunnel_data(struct netdev *netdev, struct tunnel_info *tnl_info);
 
 uint8_t last_p4_bridge_id_used = 0;
 uint32_t unique_tunnel_src_port = P4_VXLAN_SOURCE_PORT_OFFSET;
 struct ovs_mutex p4ovs_fdb_entry_lock = OVS_MUTEX_INITIALIZER;
+
 #endif
 
 VLOG_DEFINE_THIS_MODULE(bridge);
@@ -2265,8 +2266,7 @@ error:
 
 #if defined(P4OVS)
 static int32_t
-get_tunnel_data(struct netdev *netdev,
-                struct tunnel_info *tnl_info)
+get_tunnel_data(struct netdev *netdev, struct tunnel_info *tnl_info)
 {
      const struct netdev_tunnel_config *underlay_tnl = NULL;
      underlay_tnl = netdev_get_tunnel_config(netdev);
@@ -2276,7 +2276,7 @@ get_tunnel_data(struct netdev *netdev,
      }
      int underlay_ifindex = netdev_get_ifindex(netdev);
      if (underlay_ifindex < 0) {
-         VLOG_ERR("Invalid tunnel ifindex");
+         VLOG_DBG("Invalid tunnel ifindex");
          return -1;
      }
      tnl_info->ifindex = (uint32_t)underlay_ifindex;
@@ -2378,8 +2378,7 @@ ConfigureP4Target(struct bridge *br, struct port *port,
             ovsp4rt_config_rx_tunnel_src_entry(tnl_info, insert_entry,
                                                p4ovs_grpc_addr);
         } else {
-            VLOG_ERR("Error retrieving tunnel information, "
-                     "skipping programming P4 entry");
+            VLOG_DBG("Error getting tunnel data, P4 entry not programmed");
         }
 
         if (port->p4_vlan_mode == P4_PORT_VLAN_NATIVE_TAGGED) {
