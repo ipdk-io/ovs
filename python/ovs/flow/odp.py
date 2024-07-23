@@ -204,6 +204,7 @@ class ODPFlow(Flow):
         """Generate the arguments for the action KVDecoders."""
         _decoders = {
             "drop": decode_flag,
+            "meter": decode_int,
             "lb_output": decode_int,
             "trunc": decode_int,
             "recirc": decode_int,
@@ -225,7 +226,7 @@ class ODPFlow(Flow):
                             KVDecoders(
                                 {
                                     "probability": decode_int,
-                                    "collector_sed_id": decode_int,
+                                    "collector_set_id": decode_int,
                                     "obs_domain_id": decode_int,
                                     "obs_point_id": decode_int,
                                     "output_port": decode_default,
@@ -303,6 +304,21 @@ class ODPFlow(Flow):
             ),
             "pop_nsh": decode_flag,
             "tnl_pop": decode_int,
+            "pop_mpls": KVDecoders({"eth_type": decode_int}),
+            **dict.fromkeys(
+                ["push_mpls", "add_mpls"],
+                nested_kv_decoder(
+                    KVDecoders(
+                        {
+                            "label": decode_int,
+                            "tc": decode_int,
+                            "ttl": decode_int,
+                            "bos": decode_int,
+                            "eth_type": decode_int,
+                        }
+                    )
+                ),
+            ),
             "ct_clear": decode_flag,
             "ct": nested_kv_decoder(
                 KVDecoders(
@@ -319,46 +335,68 @@ class ODPFlow(Flow):
                 )
             ),
             **ODPFlow._tnl_action_decoder_args(),
+            "hash": nested_kv_decoder(
+                KVDecoders(
+                    {
+                        "l4": decode_int,
+                        "sym_l4": decode_int,
+                    }
+                )
+            ),
+            "psample": nested_kv_decoder(
+                KVDecoders(
+                    {
+                        "group": decode_int,
+                        "cookie": decode_default,
+                    }
+                )
+            )
         }
 
+        _decoders["sample"] = nested_kv_decoder(
+            KVDecoders(
+                {
+                    "sample": (lambda x: float(x.strip("%"))),
+                    "actions": nested_kv_decoder(
+                        KVDecoders(
+                            decoders=_decoders,
+                            default_free=decode_free_output,
+                        ),
+                        is_list=True,
+                    ),
+                }
+            )
+        )
+
         _decoders["clone"] = nested_kv_decoder(
-            KVDecoders(decoders=_decoders, default_free=decode_free_output)
+            KVDecoders(decoders=_decoders, default_free=decode_free_output),
+            is_list=True,
+        )
+
+        _decoders["check_pkt_len"] = nested_kv_decoder(
+            KVDecoders(
+                {
+                    "size": decode_int,
+                    "gt": nested_kv_decoder(
+                        KVDecoders(
+                            decoders=_decoders,
+                            default_free=decode_free_output,
+                        ),
+                        is_list=True,
+                    ),
+                    "le": nested_kv_decoder(
+                        KVDecoders(
+                            decoders=_decoders,
+                            default_free=decode_free_output,
+                        ),
+                        is_list=True,
+                    ),
+                }
+            )
         )
 
         return {
             **_decoders,
-            "sample": nested_kv_decoder(
-                KVDecoders(
-                    {
-                        "sample": (lambda x: float(x.strip("%"))),
-                        "actions": nested_kv_decoder(
-                            KVDecoders(
-                                decoders=_decoders,
-                                default_free=decode_free_output,
-                            )
-                        ),
-                    }
-                )
-            ),
-            "check_pkt_len": nested_kv_decoder(
-                KVDecoders(
-                    {
-                        "size": decode_int,
-                        "gt": nested_kv_decoder(
-                            KVDecoders(
-                                decoders=_decoders,
-                                default_free=decode_free_output,
-                            )
-                        ),
-                        "le": nested_kv_decoder(
-                            KVDecoders(
-                                decoders=_decoders,
-                                default_free=decode_free_output,
-                            )
-                        ),
-                    }
-                )
-            ),
         }
 
     @staticmethod
@@ -412,7 +450,7 @@ class ODPFlow(Flow):
                                             {
                                                 "src": decode_int,
                                                 "dst": decode_int,
-                                                "dsum": Mask16,
+                                                "csum": Mask16,
                                             }
                                         )
                                     ),
@@ -454,6 +492,14 @@ class ODPFlow(Flow):
                                                 "flags": decode_int,
                                                 "msgtype": decode_int,
                                                 "teid": decode_int,
+                                            }
+                                        )
+                                    ),
+                                    "srv6": nested_kv_decoder(
+                                        KVDecoders(
+                                            {
+                                                "segments_left": decode_int,
+                                                "segs": decode_default,
                                             }
                                         )
                                     ),
@@ -499,8 +545,8 @@ class ODPFlow(Flow):
                         "src": IPMask,
                         "dst": IPMask,
                         "proto": Mask8,
-                        "tcp_src": Mask16,
-                        "tcp_dst": Mask16,
+                        "tp_src": Mask16,
+                        "tp_dst": Mask16,
                     }
                 )
             ),
@@ -541,6 +587,8 @@ class ODPFlow(Flow):
                         "vxlan": nested_kv_decoder(
                             KVDecoders(
                                 {
+                                    "flags": decode_int,
+                                    "vni": decode_int,
                                     "gbp": nested_kv_decoder(
                                         KVDecoders(
                                             {
@@ -548,7 +596,7 @@ class ODPFlow(Flow):
                                                 "flags": Mask8,
                                             }
                                         )
-                                    )
+                                    ),
                                 }
                             )
                         ),

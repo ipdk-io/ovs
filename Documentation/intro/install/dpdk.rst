@@ -33,7 +33,7 @@ userspace.
 
     The :doc:`releases FAQ </faq/releases>` lists support for the required
     versions of DPDK for each version of Open vSwitch. If building OVS and
-    DPDK outside of the master build tree users should consult this list
+    DPDK outside of the main build tree users should consult this list
     first.
 
 Build requirements
@@ -42,7 +42,7 @@ Build requirements
 In addition to the requirements described in :doc:`general`, building Open
 vSwitch with DPDK will require the following:
 
-- DPDK 21.11.2
+- DPDK 23.11.1
 
 - A `DPDK supported NIC`_
 
@@ -59,8 +59,8 @@ vSwitch with DPDK will require the following:
 
 Detailed system requirements can be found at `DPDK requirements`_.
 
-.. _DPDK supported NIC: https://doc.dpdk.org/guides-21.11/nics/index.html
-.. _DPDK requirements: https://doc.dpdk.org/guides-21.11/linux_gsg/sys_reqs.html
+.. _DPDK supported NIC: https://doc.dpdk.org/guides-23.11/nics/index.html
+.. _DPDK requirements: https://doc.dpdk.org/guides-23.11/linux_gsg/sys_reqs.html
 
 .. _dpdk-install:
 
@@ -73,9 +73,9 @@ Install DPDK
 #. Download the `DPDK sources`_, extract the file and set ``DPDK_DIR``::
 
        $ cd /usr/src/
-       $ wget https://fast.dpdk.org/rel/dpdk-21.11.2.tar.xz
-       $ tar xf dpdk-21.11.2.tar.xz
-       $ export DPDK_DIR=/usr/src/dpdk-stable-21.11.2
+       $ wget https://fast.dpdk.org/rel/dpdk-23.11.1.tar.xz
+       $ tar xf dpdk-23.11.1.tar.xz
+       $ export DPDK_DIR=/usr/src/dpdk-stable-23.11.1
        $ cd $DPDK_DIR
 
 #. Configure and install DPDK using Meson
@@ -121,7 +121,7 @@ Install DPDK
 
 .. _DPDK sources: http://dpdk.org/rel
 .. _DPDK documentation:
-   https://doc.dpdk.org/guides-21.11/linux_gsg/build_dpdk.html
+   https://doc.dpdk.org/guides-23.11/linux_gsg/build_dpdk.html
 
 Install OVS
 ~~~~~~~~~~~
@@ -174,7 +174,7 @@ Additional information can be found in :doc:`general`.
   daemon will run as a non-root user.  This implies that you must have a
   working IOMMU.  Visit the `RHEL README`__ for additional information.
 
-__ https://github.com/openvswitch/ovs/blob/master/rhel/README.RHEL.rst
+__ https://github.com/openvswitch/ovs/blob/main/rhel/README.RHEL.rst
 
 
 Possible issues when enabling AVX512
@@ -232,7 +232,7 @@ Mount the hugepages, if not already mounted by default::
 Setup DPDK devices using VFIO
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-VFIO is prefered to the UIO driver when using recent versions of DPDK. VFIO
+VFIO is preferred to the UIO driver when using recent versions of DPDK. VFIO
 support required support from both the kernel and BIOS. For the former, kernel
 version > 3.6 must be used. For the latter, you must enable VT-d in the BIOS
 and ensure this is configured via grub. To ensure VT-d is enabled via the BIOS,
@@ -506,17 +506,17 @@ options.
 Affinity
 ~~~~~~~~
 
-For superior performance, DPDK pmd threads and Qemu vCPU threads needs to be
-affinitized accordingly.
+For superior performance, DPDK pmd threads and Qemu vCPU threads need to
+have affinity set accordingly.
 
 - PMD thread Affinity
 
   A poll mode driver (pmd) thread handles the I/O of all DPDK interfaces
   assigned to it. A pmd thread shall poll the ports for incoming packets,
   switch the packets and send to tx port.  A pmd thread is CPU bound, and needs
-  to be affinitized to isolated cores for optimum performance.  Even though a
-  PMD thread may exist, the thread only starts consuming CPU cycles if there is
-  at least one receive queue assigned to the pmd.
+  to be have affinity set to isolated cores for optimum performance.  Even
+  though a PMD thread may exist, the thread only starts consuming CPU cycles if
+  there is at least one receive queue assigned to the pmd.
 
   .. note::
     On NUMA systems, PCI devices are also local to a NUMA node.  Unbound rx
@@ -722,7 +722,7 @@ Limitations
   release notes`_.
 
 .. _DPDK release notes:
-   https://doc.dpdk.org/guides-21.11/rel_notes/release_21_11.html
+   https://doc.dpdk.org/guides-23.11/rel_notes/release_23_11.html
 
 - Upper bound MTU: DPDK device drivers differ in how the L2 frame for a
   given MTU value is calculated e.g. i40e driver includes 2 x vlan headers in

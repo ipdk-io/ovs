@@ -125,7 +125,7 @@ xlate_push_stats_entry(struct xc_entry *entry,
     case XC_LEARN: {
         enum ofperr error;
         error = ofproto_flow_mod_learn(entry->learn.ofm, true,
-                                       entry->learn.limit, NULL);
+                                       entry->learn.limit, NULL, stats->used);
         if (error) {
             static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
             VLOG_WARN_RL(&rl, "xcache LEARN action execution failed.");
@@ -300,4 +300,38 @@ xlate_cache_steal_entries(struct xlate_cache *dst, struct xlate_cache *src)
     p = ofpbuf_put_uninit(dst_entries, src_entries->size);
     memcpy(p, src_entries->data, src_entries->size);
     ofpbuf_clear(src_entries);
+}
+
+void
+xlate_xcache_format(struct ds *s, const struct xlate_cache *xcache)
+{
+    struct ofpbuf entries = xcache->entries;
+    struct xc_entry *entry;
+    struct ofgroup *ofg;
+
+    XC_ENTRY_FOR_EACH (entry, &entries) {
+        switch (entry->type) {
+        case XC_RULE:
+            ofproto_rule_stats_ds(s, &entry->rule->up, true);
+            break;
+        case XC_GROUP:
+            ofg = &entry->group.group->up;
+            ofputil_group_format(s, ofg->group_id, ofg->type,
+                                 entry->group.bucket, &ofg->buckets,
+                                 &ofg->props, OFP15_VERSION,
+                                 false, NULL, NULL);
+            break;
+        case XC_TABLE:
+        case XC_BOND:
+        case XC_NETDEV:
+        case XC_NETFLOW:
+        case XC_MIRROR:
+        case XC_LEARN:
+        case XC_NORMAL:
+        case XC_FIN_TIMEOUT:
+        case XC_TNL_NEIGH:
+        case XC_TUNNEL_HEADER:
+            break;
+        }
+    }
 }

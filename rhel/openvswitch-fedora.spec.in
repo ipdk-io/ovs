@@ -26,8 +26,10 @@
 %bcond_without libcapng
 # To enable DPDK support, specify '--with dpdk' when building
 %bcond_with dpdk
-# To enable AF_XDP support, specify '--with afxdp' when building
-%bcond_with afxdp
+# To disable AF_XDP support, specify '--without afxdp' when building
+%bcond_without afxdp
+# To control the USDT support
+%bcond_without usdt
 
 # If there is a need to automatically enable the package after installation,
 # specify the "--with autoenable"
@@ -71,11 +73,14 @@ BuildRequires: libcap-ng libcap-ng-devel
 %endif
 %if %{with dpdk}
 BuildRequires: libpcap-devel numactl-devel
-BuildRequires: dpdk-devel >= 21.11
+BuildRequires: dpdk-devel >= 23.11
 Provides: %{name}-dpdk = %{version}-%{release}
 %endif
 %if %{with afxdp}
-BuildRequires: libbpf-devel numactl-devel
+BuildRequires: libxdp-devel libbpf-devel numactl-devel
+%endif
+%if %{with usdt}
+BuildRequires: libbpf-devel systemtap-sdt-devel
 %endif
 BuildRequires: unbound unbound-devel
 
@@ -113,7 +118,7 @@ Summary: Open vSwitch python3 bindings
 License: ASL 2.0
 BuildArch: noarch
 Requires: python3
-Suggests: python3-netaddr python3-pyparsing
+Suggests: python3-netaddr python3-pyparsing python3-unbound
 %{?python_provide:%python_provide python3-openvswitch = %{version}-%{release}}
 
 %description -n python3-openvswitch
@@ -171,11 +176,17 @@ This package provides IPsec tunneling support for OVS tunnels.
 %endif
 %if %{with afxdp}
         --enable-afxdp \
+%else
+        --disable-afxdp \
+%endif
+%if %{with usdt}
+        --enable-usdt-probes \
 %endif
         --enable-ssl \
         --disable-static \
         --enable-shared \
         --with-pkidir=%{_sharedstatedir}/openvswitch/pki \
+        --with-version-suffix=-%{release} \
         PYTHON3=%{__python3}
 
 build-aux/dpdkstrip.py \
@@ -238,8 +249,6 @@ rm -rf $RPM_BUILD_ROOT/%{_datadir}/openvswitch/python/
 
 install -d -m 0755 $RPM_BUILD_ROOT/%{_sharedstatedir}/openvswitch
 
-touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/conf.db
-touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/.conf.db.~lock~
 touch $RPM_BUILD_ROOT%{_sysconfdir}/openvswitch/system-id.conf
 
 install -p -m 644 -D selinux/openvswitch-custom.pp \
@@ -328,6 +337,21 @@ if [ $1 -eq 1 ]; then
 fi
 %endif
 
+# Ensure that /etc/openvswitch/conf.db links to /var/lib/openvswitch,
+# moving an existing file if there is one.
+#
+# Ditto for .conf.db.~lock~.
+for base in conf.db .conf.db.~lock~; do
+    new=/var/lib/openvswitch/$base
+    old=/etc/openvswitch/$base
+    if test -f $old && test ! -e $new; then
+        mv $old $new
+    fi
+    if test ! -e $old && test ! -h $old; then
+        ln -s $new $old
+    fi
+done
+
 %if 0%{?systemd_post:1}
     # This may not enable openvswitch service or do daemon-reload.
     %systemd_post %{name}.service
@@ -383,6 +407,7 @@ fi
 %{_bindir}/ovs-pcap
 %{_bindir}/ovs-tcpdump
 %{_bindir}/ovs-tcpundump
+%{_datadir}/openvswitch/scripts/usdt/*
 %{_mandir}/man8/ovs-test.8*
 %{_mandir}/man8/ovs-vlan-test.8*
 %{_mandir}/man8/ovs-l3ping.8*
@@ -413,8 +438,8 @@ fi
 %endif
 %dir %{_sysconfdir}/openvswitch
 %{_sysconfdir}/openvswitch/default.conf
-%config %ghost %{_sysconfdir}/openvswitch/conf.db
-%ghost %{_sysconfdir}/openvswitch/.conf.db.~lock~
+%config %ghost %{_sharedstatedir}/openvswitch/conf.db
+%ghost %{_sharedstatedir}/openvswitch/.conf.db.~lock~
 %config %ghost %{_sysconfdir}/openvswitch/system-id.conf
 %config(noreplace) %{_sysconfdir}/sysconfig/openvswitch
 %defattr(-,root,root)
@@ -486,7 +511,11 @@ fi
 %{_prefix}/lib/udev/rules.d/91-vfio.rules
 %endif
 %doc NOTICE README.rst NEWS rhel/README.RHEL.rst
-/var/lib/openvswitch
+%if %{with dpdk}
+%attr(750,openvswitch,hugetlbfs) /var/lib/openvswitch
+%else
+%attr(750,openvswitch,openvswitch) /var/lib/openvswitch
+%endif
 %attr(750,root,root) /var/log/openvswitch
 %ghost %attr(755,root,root) %{_rundir}/openvswitch
 %ghost %attr(644,root,root) %{_rundir}/openvswitch.useropts

@@ -31,33 +31,33 @@ dummy@ovs-dummy: hit:0 missed:0
 
 ovs-appctl time/stop
 
-# Send IGMPv3 query on p2 with vlan 1725
+# Send IGMPv3 query on p2 with vlan 1725.
 # 5c:8a:38:55:25:52 > 01:00:5e:00:00:01, ethertype 802.1Q (0x8100), length 64: vlan 1725, p 0, ethertype IPv4,
 # 172.17.25.1 > 224.0.0.1: igmp query v3
 AT_CHECK([ovs-appctl netdev-dummy/receive p2 \
 '01005e0000015c8a38552552810006bd080046c000240000000001027f00ac111901e0000001940400001164ec1e00000000027d000000000000000000000000'])
 
-# Send IGMPv3 query on p2 with vlan 1728
+# Send IGMPv3 query on p2 with vlan 1728.
 # 5c:8a:38:55:25:52 > 01:00:5e:00:00:01, ethertype 802.1Q (0x8100), length 64: vlan 1728, p 0, ethertype IPv4,
 # 172.17.28.1 > 224.0.0.1: igmp query v3
 AT_CHECK([ovs-appctl netdev-dummy/receive p2 \
 '01005e0000015c8a38552552810006c0080046c000240000000001027c00ac111c01e0000001940400001164ec1e00000000027d000000000000000000000000'])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
-    2  1725  querier               0
-    2  1728  querier               0
+ port  VLAN  protocol  GROUP                Age
+    2  1725  UNKNOWN   querier               0
+    2  1728  UNKNOWN   querier               0
 ])
 
 AT_CHECK([ovs-vsctl set Interface p2 options:tx_pcap=p2.pcap])
 
-# Send a multicast packet on p1
+# Send a multicast packet on p1.
 AT_CHECK([
     ovs-appctl netdev-dummy/receive p1 \
     'in_port(1),eth(src=aa:55:aa:55:00:01,dst=01:00:5e:5e:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=239.94.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)'
 ])
 
-# Check this packet was forwarded exactly once to p2 and has vlan tag 1725
+# Check this packet was forwarded exactly once to p2 and has vlan tag 1725.
 # aa:55:aa:55:00:01 > 01:00:5e:5e:01:01, ethertype 802.1Q (0x8100), length 46: vlan 1725, p 0, ethertype IPv4,
 # 10.0.0.1.0 > 239.94.1.1.8000: UDP, length 0
 AT_CHECK([ovs-pcap p2.pcap > p2.pcap.txt 2>&1])
@@ -75,7 +75,7 @@ AT_CHECK([ovs-appctl netdev-dummy/receive p2 \
 '01005e0000015c8a38552552810006bd080046c000240000000001027f00ac111901e0000001940400001164ec1000000000027d000000000000000000000000'])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
+ port  VLAN  protocol  GROUP                Age
 ])
 
 
@@ -87,8 +87,8 @@ AT_CHECK([ovs-appctl netdev-dummy/receive p2 \
 '3333ff0e4c67000c290e4c6786dd600000000020000100000000000000000000000000000000ff0200000000000000000001ff0e4c673a000502000001008300e7b800000000ff0200000000000000000001ff0e4c67'])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
-    2     0  ff02::1:ff0e:4c67           0
+ port  VLAN  protocol  GROUP                Age
+    2     0  MLDv1     ff02::1:ff0e:4c67           0
 ])
 
 AT_CHECK([ovs-appctl mdb/flush br0], [0], [dnl
@@ -99,11 +99,333 @@ AT_CHECK([ovs-appctl netdev-dummy/receive p2 \
 '3333ff0e4c67000c290e4c6786dd600000000020000100000000000000000000000000000000ff0200000000000000000001ff0e4c673a000502000001008300e7b000000000ff0200000000000000000001ff0e4c67'])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
+ port  VLAN  protocol  GROUP                Age
 ])
 
 OVS_VSWITCHD_STOP
 AT_CLEANUP
+
+
+AT_SETUP([mcast - check multicast per port flooding])
+OVS_VSWITCHD_START([])
+
+AT_CHECK([
+    ovs-vsctl set bridge br0 \
+    datapath_type=dummy \
+    mcast_snooping_enable=true \
+    other-config:mcast-snooping-disable-flood-unregistered=false
+], [0])
+
+AT_CHECK([ovs-ofctl add-flow br0 action=normal])
+
+AT_CHECK([
+    ovs-vsctl add-port br0 p1 \
+    -- set Interface p1 type=dummy other-config:hwaddr=aa:55:aa:55:00:01 ofport_request=1 \
+    -- add-port br0 p2 \
+    -- set Interface p2 type=dummy other-config:hwaddr=aa:55:aa:55:00:02 ofport_request=2 \
+    -- add-port br0 p3 \
+    -- set Interface p3 type=dummy other-config:hwaddr=aa:55:aa:55:00:03 ofport_request=3 \
+], [0])
+
+ovs-appctl time/stop
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [stdout])
+AT_CHECK([grep -v 'Datapath actions:' stdout], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> unregistered multicast, flooding
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+])
+AT_CHECK([sed -ne 's/^Datapath actions: \(.*\)$/\1/p' stdout | tr "," "\n" | sort -n], [0], [dnl
+1
+2
+100
+])
+
+# Send report packets.
+AT_CHECK([
+    ovs-appctl netdev-dummy/receive p1  \
+        '01005E010101000C29A027A108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'
+], [0])
+AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
+ port  VLAN  protocol  GROUP                Age
+    1     0  IGMPv1    224.1.1.1           0
+])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding to mcast group port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: 1
+])
+
+AT_CHECK([ovs-vsctl set port p2 other_config:mcast-snooping-flood=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding to mcast group port
+     -> forwarding to mcast flood port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: 1,2
+])
+
+AT_CHECK([ovs-vsctl set port p3 other_config:mcast-snooping-flood=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding to mcast group port
+     -> forwarding to mcast flood port
+     -> mcast flood port is input port, dropping
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: 1,2
+])
+
+# Change p2 ofport to force a ofbundle change and check that the mdb contains
+# no stale port.
+AT_CHECK([ovs-vsctl set interface p2 ofport_request=4])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding to mcast group port
+     -> mcast flood port is input port, dropping
+     -> forwarding to mcast flood port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: 1,2
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+
+AT_SETUP([mcast - check multicast per port flooding (unregistered flood disabled)])
+OVS_VSWITCHD_START([])
+
+AT_CHECK([
+    ovs-vsctl set bridge br0 \
+    datapath_type=dummy \
+    mcast_snooping_enable=true \
+    other-config:mcast-snooping-disable-flood-unregistered=true
+], [0])
+
+AT_CHECK([ovs-ofctl add-flow br0 action=normal])
+
+AT_CHECK([
+    ovs-vsctl add-port br0 p1 \
+    -- set Interface p1 type=dummy other-config:hwaddr=aa:55:aa:55:00:01 ofport_request=1 \
+    -- add-port br0 p2 \
+    -- set Interface p2 type=dummy other-config:hwaddr=aa:55:aa:55:00:02 ofport_request=2 \
+    -- add-port br0 p3 \
+    -- set Interface p3 type=dummy other-config:hwaddr=aa:55:aa:55:00:03 ofport_request=3 \
+], [0])
+
+ovs-appctl time/stop
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: drop
+])
+
+AT_CHECK([ovs-vsctl set port p2 other_config:mcast-snooping-flood=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding to mcast flood port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: 2
+])
+
+AT_CHECK([ovs-vsctl set port p3 other_config:mcast-snooping-flood=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(3),eth(src=aa:55:aa:55:00:ff,dst=01:00:5e:01:01:01),eth_type(0x0800),ipv4(src=10.0.0.1,dst=224.1.1.1,proto=17,tos=0,ttl=64,frag=no),udp(src=0,dst=8000)"], [0], [dnl
+Flow: udp,in_port=3,vlan_tci=0x0000,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_src=10.0.0.1,nw_dst=224.1.1.1,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=0,tp_dst=8000
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding to mcast flood port
+     -> mcast flood port is input port, dropping
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,udp,in_port=3,dl_src=aa:55:aa:55:00:ff,dl_dst=01:00:5e:01:01:01,nw_dst=224.1.1.1,nw_frag=no
+Datapath actions: 2
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+
+AT_SETUP([mcast - check reports per port flooding])
+OVS_VSWITCHD_START([])
+
+AT_CHECK([
+    ovs-vsctl set bridge br0 \
+    datapath_type=dummy \
+    mcast_snooping_enable=true \
+    other-config:mcast-snooping-disable-flood-unregistered=false
+], [0])
+
+AT_CHECK([ovs-ofctl add-flow br0 action=normal])
+
+AT_CHECK([
+    ovs-vsctl add-port br0 p1 \
+    -- set Interface p1 type=dummy other-config:hwaddr=aa:55:aa:55:00:01 ofport_request=1 \
+    -- add-port br0 p2 \
+    -- set Interface p2 type=dummy other-config:hwaddr=aa:55:aa:55:00:02 ofport_request=2 \
+    -- add-port br0 p3 \
+    -- set Interface p3 type=dummy other-config:hwaddr=aa:55:aa:55:00:03 ofport_request=3 \
+], [0])
+
+ovs-appctl time/stop
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(1)" '01005E010101000C29A027A108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'], [0], [dnl
+Flow: ip,in_port=1,vlan_tci=0x0000,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_src=172.16.34.30,nw_dst=224.1.1.1,nw_proto=2,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=18,tp_dst=20
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> learned that 00:0c:29:a0:27:a1 is on port p1 in VLAN 0
+     -> multicast snooping learned that 224.1.1.1 is on port p1 in VLAN 0
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,ip,in_port=1,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_proto=2,nw_frag=no
+Datapath actions: drop
+This flow is handled by the userspace slow path because it:
+  - Uses action(s) not supported by datapath.
+])
+
+AT_CHECK([ovs-vsctl set port p3 other_config:mcast-snooping-flood-reports=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(1)" '01005E010101000C29A027A108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'], [0], [dnl
+Flow: ip,in_port=1,vlan_tci=0x0000,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_src=172.16.34.30,nw_dst=224.1.1.1,nw_proto=2,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=18,tp_dst=20
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding report to mcast flagged port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,ip,in_port=1,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_proto=2,nw_frag=no
+Datapath actions: 3
+This flow is handled by the userspace slow path because it:
+  - Uses action(s) not supported by datapath.
+])
+
+AT_CHECK([ovs-vsctl set port p2 other_config:mcast-snooping-flood-reports=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(1)" '01005E010101000C29A027A108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'], [0], [dnl
+Flow: ip,in_port=1,vlan_tci=0x0000,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_src=172.16.34.30,nw_dst=224.1.1.1,nw_proto=2,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=18,tp_dst=20
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding report to mcast flagged port
+     -> forwarding report to mcast flagged port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,ip,in_port=1,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_proto=2,nw_frag=no
+Datapath actions: 3,2
+This flow is handled by the userspace slow path because it:
+  - Uses action(s) not supported by datapath.
+])
+
+AT_CHECK([ovs-vsctl set port p1 other_config:mcast-snooping-flood-reports=true])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(1)" '01005E010101000C29A027A108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'], [0], [dnl
+Flow: ip,in_port=1,vlan_tci=0x0000,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_src=172.16.34.30,nw_dst=224.1.1.1,nw_proto=2,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=18,tp_dst=20
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding report to mcast flagged port
+     -> forwarding report to mcast flagged port
+     -> mcast port is input port, dropping the Report
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,ip,in_port=1,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_proto=2,nw_frag=no
+Datapath actions: 3,2
+This flow is handled by the userspace slow path because it:
+  - Uses action(s) not supported by datapath.
+])
+
+# Change p2 ofport to force a ofbundle change and check that the mdb contains
+# no stale port.
+AT_CHECK([ovs-vsctl set interface p3 ofport_request=4])
+
+AT_CHECK([ovs-appctl ofproto/trace "in_port(1)" '01005E010101000C29A027A108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'], [0], [dnl
+Flow: ip,in_port=1,vlan_tci=0x0000,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_src=172.16.34.30,nw_dst=224.1.1.1,nw_proto=2,nw_tos=0,nw_ecn=0,nw_ttl=64,nw_frag=no,tp_src=18,tp_dst=20
+
+bridge("br0")
+-------------
+ 0. priority 32768
+    NORMAL
+     -> forwarding report to mcast flagged port
+     -> mcast port is input port, dropping the Report
+     -> forwarding report to mcast flagged port
+
+Final flow: unchanged
+Megaflow: recirc_id=0,eth,ip,in_port=1,dl_src=00:0c:29:a0:27:a1,dl_dst=01:00:5e:01:01:01,nw_proto=2,nw_frag=no
+Datapath actions: 2,3
+This flow is handled by the userspace slow path because it:
+  - Uses action(s) not supported by datapath.
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
 
 AT_SETUP([mcast - delete the port mdb when vlan configuration changed])
 OVS_VSWITCHD_START([])
@@ -128,7 +450,7 @@ AT_CHECK([
 
 ovs-appctl time/stop
 
-# send report packets
+# Send report packets.
 AT_CHECK([
     ovs-appctl netdev-dummy/receive p1  \
         '01005E010101000C29A027A18100000108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'
@@ -136,7 +458,7 @@ AT_CHECK([
         '01005E010101000C29A027A28100000208004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'
 ], [0])
 
-# send query packets
+# Send query packets.
 AT_CHECK([
     ovs-appctl netdev-dummy/receive p3  \
        '01005E010101000C29A027D18100000108004500001C000100004002CBCBAC102201E00101011114EEEB00000000'
@@ -145,19 +467,19 @@ AT_CHECK([
 ], [0])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
-    1     1  224.1.1.1           0
-    1     2  224.1.1.1           0
-    3     1  querier               0
-    3     2  querier               0
+ port  VLAN  protocol  GROUP                Age
+    1     1  IGMPv1    224.1.1.1           0
+    1     2  IGMPv1    224.1.1.1           0
+    3     1  UNKNOWN   querier               0
+    3     2  UNKNOWN   querier               0
 ])
 
 AT_CHECK([ovs-vsctl set port p3 tag=2], [0])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
-    1     1  224.1.1.1           0
-    1     2  224.1.1.1           0
+ port  VLAN  protocol  GROUP                Age
+    1     1  IGMPv1    224.1.1.1           0
+    1     2  IGMPv1    224.1.1.1           0
 ])
 
 AT_CLEANUP
@@ -183,7 +505,7 @@ AT_CHECK([
 
 ovs-appctl time/stop
 
-# send report packets
+# Send report packets.
 AT_CHECK([
     ovs-appctl netdev-dummy/receive p1  \
         '01005E010101000C29A027A18100000108004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'
@@ -191,7 +513,7 @@ AT_CHECK([
         '01005E010101000C29A027A28100000208004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'
 ], [0])
 
-# send query packets
+# Send query packets.
 AT_CHECK([
     ovs-appctl netdev-dummy/receive p2  \
        '01005E010101000C29A027D18100000108004500001C000100004002CBCBAC102201E00101011114EEEB00000000'
@@ -200,19 +522,19 @@ AT_CHECK([
 ], [0])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
-    1     1  224.1.1.1           0
-    1     2  224.1.1.1           0
-    2     1  querier               0
-    2     2  querier               0
+ port  VLAN  protocol  GROUP                Age
+    1     1  IGMPv1    224.1.1.1           0
+    1     2  IGMPv1    224.1.1.1           0
+    2     1  UNKNOWN   querier               0
+    2     2  UNKNOWN   querier               0
 ])
 
 AT_CHECK([ovs-vsctl del-port br0 p2], [0])
 
 AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
- port  VLAN  GROUP                Age
-    1     1  224.1.1.1           0
-    1     2  224.1.1.1           0
+ port  VLAN  protocol  GROUP                Age
+    1     1  IGMPv1    224.1.1.1           0
+    1     2  IGMPv1    224.1.1.1           0
 ])
 
 AT_CLEANUP
@@ -277,9 +599,91 @@ AT_CHECK([ovs-appctl dpctl/dump-flows | grep -e .*ipv4 | sort | dnl
           sed 's/pid=[[0-9]]*,//
                s/,packet_type(ns=[[0-9]]*,id=[[0-9]]*),/,/'],
                      [0], [dnl
-ct_state(+new-inv+trk),recirc_id(<recirc>),in_port(1),eth_type(0x0800),ipv4(proto=1,frag=no), packets:0, bytes:0, used:never, actions:2
-ct_state(+new-inv+trk),recirc_id(<recirc>),in_port(1),eth_type(0x0800),ipv4(proto=2,frag=no), packets:0, bytes:0, used:never, actions:userspace(controller(reason=1,dont_send=0,continuation=0,recirc_id=<recirc>,rule_cookie=0,controller_id=0,max_len=65535))
 recirc_id(<recirc>),in_port(1),eth_type(0x0800),ipv4(frag=no), packets:0, bytes:0, used:0.0s, actions:ct(zone=64000),recirc(<recirc>)
+recirc_id(<recirc>),in_port(1),ct_state(+new-inv+trk),eth_type(0x0800),ipv4(proto=1,frag=no), packets:0, bytes:0, used:never, actions:2
+recirc_id(<recirc>),in_port(1),ct_state(+new-inv+trk),eth_type(0x0800),ipv4(proto=2,frag=no), packets:0, bytes:0, used:never, actions:userspace(controller(reason=1,dont_send=0,continuation=0,recirc_id=<recirc>,rule_cookie=0,controller_id=0,max_len=65535))
 ])
 
+AT_CLEANUP
+
+AT_SETUP([mcast - mcast_group protocol updated in mdb])
+OVS_VSWITCHD_START([])
+
+AT_CHECK([
+    ovs-vsctl set bridge br0 \
+    datapath_type=dummy \
+    mcast_snooping_enable=true \
+], [0])
+
+AT_CHECK([ovs-ofctl add-flow br0 action=normal])
+
+AT_CHECK([
+    ovs-vsctl add-port br0 p1 -- set Interface p1 type=dummy \
+    other-config:hwaddr=aa:55:aa:55:00:01 ofport_request=1 \
+], [0])
+
+AT_CHECK([ovs-appctl time/stop])
+
+# Send IGMPv1 report packet.
+AT_CHECK([
+    ovs-appctl netdev-dummy/receive p1  \
+        '01005E010101000C29A027A18100000008004500001C000100004002CBAEAC10221EE001010112140CE9E0010101'
+], [0])
+
+# Send IGMPv2 report packet.
+AT_CHECK([
+    ovs-appctl netdev-dummy/receive p1  \
+        '01005e010102505400000103080046c00020000040000102f8110a000103e001010294040000160008fce0010102'
+], [0])
+
+# Send IGMPv3 report packet.
+AT_CHECK([
+    ovs-appctl netdev-dummy/receive p1  \
+        '01005e000016505400000003080046c00028000040000102f9f60a000003e0000016940400002200e3e10000000104000000e9360ce6'
+], [0])
+
+# Check that all the ipv4 mcast groups were updated in
+# the mdb with the appropriate protocol.
+AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
+ port  VLAN  protocol  GROUP                Age
+    1     0  IGMPv1    224.1.1.1           0
+    1     0  IGMPv2    224.1.1.2           0
+    1     0  IGMPv3    233.54.12.230           0
+])
+
+# Send IGMPv1 report packet to address 224.1.1.2
+# and make sure that the protocol will be updated to
+# IGMPV1.
+AT_CHECK([
+    ovs-appctl netdev-dummy/receive p1  \
+        '01005e010102505400000103080046c00020000040000102f8110a000103e00101029404000012000cfce0010102'
+], [0])
+
+AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
+ port  VLAN  protocol  GROUP                Age
+    1     0  IGMPv1    224.1.1.1           0
+    1     0  IGMPv3    233.54.12.230           0
+    1     0  IGMPv1    224.1.1.2           0
+])
+
+# Flush the mdb.
+AT_CHECK([ovs-appctl mdb/flush br0], [0], [dnl
+table successfully flushed
+])
+
+# Send MLDV2 packet.
+AT_CHECK([ovs-appctl netdev-dummy/receive p1 \
+'333300000016d0509956ddf986dd60000000001c3a01fe80000000000000712065589886fa88ff0200000000000000000000000000168f00134d0000000104000000ff0200000000000000000001ff52f3e1'])
+
+# Send MLDV1 packet.
+AT_CHECK([ovs-appctl netdev-dummy/receive p1 \
+'3333ff0e4c67000c290e4c6786dd600000000020000100000000000000000000000000000000ff0200000000000000000001ff0e4c673a000502000001008300e7b800000000ff0200000000000000000001ff0e4c67'])
+
+# Check that all the ipv6 mcast groups were updated in
+# the mdb with the appropriate protocol.
+AT_CHECK([ovs-appctl mdb/show br0], [0], [dnl
+ port  VLAN  protocol  GROUP                Age
+    1     0  MLDv2     ff02::1:ff52:f3e1           0
+    1     0  MLDv1     ff02::1:ff0e:4c67           0
+])
 AT_CLEANUP

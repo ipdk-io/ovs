@@ -21,6 +21,7 @@
 #include "dp-packet.h"
 #include "netdev-afxdp.h"
 #include "netdev-dpdk.h"
+#include "netdev-provider.h"
 #include "openvswitch/dynamic-string.h"
 #include "util.h"
 
@@ -33,10 +34,14 @@ dp_packet_init__(struct dp_packet *b, size_t allocated, enum dp_packet_source so
     pkt_metadata_init(&b->md, 0);
     dp_packet_reset_cutlen(b);
     dp_packet_reset_offload(b);
+    dp_packet_set_tso_segsz(b, 0);
     /* Initialize implementation-specific fields of dp_packet. */
     dp_packet_init_specific(b);
     /* By default assume the packet type to be Ethernet. */
     b->packet_type = htonl(PT_ETH);
+    /* Reset csum start and offset. */
+    b->csum_start = 0;
+    b->csum_offset = 0;
 }
 
 static void
@@ -134,11 +139,7 @@ dp_packet_uninit(struct dp_packet *b)
         if (b->source == DPBUF_MALLOC) {
             free(dp_packet_base(b));
         } else if (b->source == DPBUF_DPDK) {
-#ifdef DPDK_NETDEV
-            /* If this dp_packet was allocated by DPDK it must have been
-             * created as a dp_packet */
-            free_dpdk_buf((struct dp_packet*) b);
-#endif
+            free_dpdk_buf(b);
         } else if (b->source == DPBUF_AFXDP) {
             free_afxdp_buf(b);
         }
@@ -150,7 +151,11 @@ dp_packet_uninit(struct dp_packet *b)
 struct dp_packet *
 dp_packet_new(size_t size)
 {
+#ifdef DPDK_NETDEV
+    struct dp_packet *b = xmalloc_cacheline(sizeof *b);
+#else
     struct dp_packet *b = xmalloc(sizeof *b);
+#endif
     dp_packet_init(b, size);
     return b;
 }
@@ -171,6 +176,7 @@ dp_packet_new_with_headroom(size_t size, size_t headroom)
 struct dp_packet *
 dp_packet_clone(const struct dp_packet *buffer)
 {
+    ovs_assert(buffer);
     return dp_packet_clone_with_headroom(buffer, 0);
 }
 
@@ -180,12 +186,15 @@ dp_packet_clone(const struct dp_packet *buffer)
 struct dp_packet *
 dp_packet_clone_with_headroom(const struct dp_packet *buffer, size_t headroom)
 {
+    const void *data_dp = dp_packet_data(buffer);
     struct dp_packet *new_buffer;
     uint32_t mark;
 
-    new_buffer = dp_packet_clone_data_with_headroom(dp_packet_data(buffer),
-                                                 dp_packet_size(buffer),
-                                                 headroom);
+    ovs_assert(data_dp);
+
+    new_buffer = dp_packet_clone_data_with_headroom(data_dp,
+                                                    dp_packet_size(buffer),
+                                                    headroom);
     /* Copy the following fields into the returned buffer: l2_pad_size,
      * l2_5_ofs, l3_ofs, l4_ofs, cutlen, packet_type and md. */
     memcpy(&new_buffer->l2_pad_size, &buffer->l2_pad_size,
@@ -194,6 +203,8 @@ dp_packet_clone_with_headroom(const struct dp_packet *buffer, size_t headroom)
 
     *dp_packet_ol_flags_ptr(new_buffer) = *dp_packet_ol_flags_ptr(buffer);
     *dp_packet_ol_flags_ptr(new_buffer) &= DP_PACKET_OL_SUPPORTED_MASK;
+
+    dp_packet_set_tso_segsz(new_buffer, dp_packet_get_tso_segsz(buffer));
 
     if (dp_packet_rss_valid(buffer)) {
         dp_packet_set_rss_hash(new_buffer, dp_packet_get_rss_hash(buffer));
@@ -322,8 +333,12 @@ dp_packet_shift(struct dp_packet *b, int delta)
                : true);
 
     if (delta != 0) {
-        char *dst = (char *) dp_packet_data(b) + delta;
-        memmove(dst, dp_packet_data(b), dp_packet_size(b));
+        const void *data_dp = dp_packet_data(b);
+        char *dst = (char *) data_dp + delta;
+
+        ovs_assert(data_dp);
+
+        memmove(dst, data_dp, dp_packet_size(b));
         dp_packet_set_data(b, dst);
     }
 }
@@ -348,7 +363,7 @@ void *
 dp_packet_put_zeros(struct dp_packet *b, size_t size)
 {
     void *dst = dp_packet_put_uninit(b, size);
-    memset(dst, 0, size);
+    nullable_memset(dst, 0, size);
     return dst;
 }
 
@@ -359,7 +374,7 @@ void *
 dp_packet_put(struct dp_packet *b, const void *p, size_t size)
 {
     void *dst = dp_packet_put_uninit(b, size);
-    memcpy(dst, p, size);
+    nullable_memcpy(dst, p, size);
     return dst;
 }
 
@@ -431,7 +446,7 @@ void *
 dp_packet_push_zeros(struct dp_packet *b, size_t size)
 {
     void *dst = dp_packet_push_uninit(b, size);
-    memset(dst, 0, size);
+    nullable_memset(dst, 0, size);
     return dst;
 }
 
@@ -442,7 +457,7 @@ void *
 dp_packet_push(struct dp_packet *b, const void *p, size_t size)
 {
     void *dst = dp_packet_push_uninit(b, size);
-    memcpy(dst, p, size);
+    nullable_memcpy(dst, p, size);
     return dst;
 }
 
@@ -492,6 +507,8 @@ dp_packet_resize_l2_5(struct dp_packet *b, int increment)
     /* Adjust layer offsets after l2_5. */
     dp_packet_adjust_layer_offset(&b->l3_ofs, increment);
     dp_packet_adjust_layer_offset(&b->l4_ofs, increment);
+    dp_packet_adjust_layer_offset(&b->inner_l3_ofs, increment);
+    dp_packet_adjust_layer_offset(&b->inner_l4_ofs, increment);
 
     return dp_packet_data(b);
 }
@@ -514,19 +531,121 @@ dp_packet_compare_offsets(struct dp_packet *b1, struct dp_packet *b2,
     if ((b1->l2_pad_size != b2->l2_pad_size) ||
         (b1->l2_5_ofs != b2->l2_5_ofs) ||
         (b1->l3_ofs != b2->l3_ofs) ||
-        (b1->l4_ofs != b2->l4_ofs)) {
+        (b1->l4_ofs != b2->l4_ofs) ||
+        (b1->inner_l3_ofs != b2->inner_l3_ofs) ||
+        (b1->inner_l4_ofs != b2->inner_l4_ofs)) {
         if (err_str) {
             ds_put_format(err_str, "Packet offset comparison failed\n");
             ds_put_format(err_str, "Buffer 1 offsets: l2_pad_size %u,"
-                          " l2_5_ofs : %u l3_ofs %u, l4_ofs %u\n",
+                          " l2_5_ofs : %u l3_ofs %u, l4_ofs %u,"
+                          " inner_l3_ofs %u, inner_l4_ofs %u\n",
                           b1->l2_pad_size, b1->l2_5_ofs,
-                          b1->l3_ofs, b1->l4_ofs);
+                          b1->l3_ofs, b1->l4_ofs,
+                          b1->inner_l3_ofs, b1->inner_l4_ofs);
             ds_put_format(err_str, "Buffer 2 offsets: l2_pad_size %u,"
-                          " l2_5_ofs : %u l3_ofs %u, l4_ofs %u\n",
+                          " l2_5_ofs : %u l3_ofs %u, l4_ofs %u,"
+                          " inner_l3_ofs %u, inner_l4_ofs %u\n",
                           b2->l2_pad_size, b2->l2_5_ofs,
-                          b2->l3_ofs, b2->l4_ofs);
+                          b2->l3_ofs, b2->l4_ofs,
+                          b2->inner_l3_ofs, b2->inner_l4_ofs);
         }
         return false;
     }
     return true;
+}
+
+void
+dp_packet_tnl_outer_ol_send_prepare(struct dp_packet *p,
+                                    uint64_t flags)
+{
+    if (dp_packet_hwol_is_outer_ipv4_cksum(p)) {
+        if (!(flags & NETDEV_TX_OFFLOAD_OUTER_IP_CKSUM)) {
+            dp_packet_ip_set_header_csum(p, false);
+            dp_packet_ol_set_ip_csum_good(p);
+            dp_packet_hwol_reset_outer_ipv4_csum(p);
+        }
+    }
+
+    if (!dp_packet_hwol_is_outer_udp_cksum(p)) {
+        return;
+    }
+
+    if (!(flags & NETDEV_TX_OFFLOAD_OUTER_UDP_CKSUM)) {
+        packet_udp_complete_csum(p, false);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_outer_udp_csum(p);
+    }
+}
+
+/* Checks if the packet 'p' is compatible with netdev_ol_flags 'flags'
+ * and if not, updates the packet with the software fall back. */
+void
+dp_packet_ol_send_prepare(struct dp_packet *p, uint64_t flags)
+{
+    bool tnl_inner = false;
+
+    if (!dp_packet_hwol_tx_is_any_csum(p)) {
+        /* Only checksumming needs actions. */
+        return;
+    }
+
+    if (dp_packet_hwol_is_tunnel_geneve(p) ||
+        dp_packet_hwol_is_tunnel_vxlan(p)) {
+        tnl_inner = true;
+
+        /* If the TX interface doesn't support UDP tunnel offload but does
+         * support inner checksum offload and an outer UDP checksum is
+         * required, then we can't offload inner checksum either. As that would
+         * invalidate the outer checksum. */
+        if (!(flags & NETDEV_TX_OFFLOAD_OUTER_UDP_CKSUM) &&
+                dp_packet_hwol_is_outer_udp_cksum(p)) {
+            flags &= ~(NETDEV_TX_OFFLOAD_TCP_CKSUM |
+                       NETDEV_TX_OFFLOAD_UDP_CKSUM |
+                       NETDEV_TX_OFFLOAD_SCTP_CKSUM |
+                       NETDEV_TX_OFFLOAD_IPV4_CKSUM);
+        }
+    }
+
+    if (dp_packet_hwol_tx_ip_csum(p)) {
+        if (dp_packet_ip_checksum_good(p)) {
+            dp_packet_hwol_reset_tx_ip_csum(p);
+        } else if (!(flags & NETDEV_TX_OFFLOAD_IPV4_CKSUM)) {
+            dp_packet_ip_set_header_csum(p, tnl_inner);
+            dp_packet_ol_set_ip_csum_good(p);
+            dp_packet_hwol_reset_tx_ip_csum(p);
+        }
+    }
+
+    if (!dp_packet_hwol_tx_l4_checksum(p)) {
+        if (tnl_inner) {
+            dp_packet_tnl_outer_ol_send_prepare(p, flags);
+        }
+        return;
+    }
+
+    if (dp_packet_l4_checksum_good(p) && !tnl_inner) {
+        dp_packet_hwol_reset_tx_l4_csum(p);
+        return;
+    }
+
+    if (dp_packet_hwol_l4_is_tcp(p)
+        && !(flags & NETDEV_TX_OFFLOAD_TCP_CKSUM)) {
+        packet_tcp_complete_csum(p, tnl_inner);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_tx_l4_csum(p);
+    } else if (dp_packet_hwol_l4_is_udp(p)
+               && !(flags & NETDEV_TX_OFFLOAD_UDP_CKSUM)) {
+        packet_udp_complete_csum(p, tnl_inner);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_tx_l4_csum(p);
+    } else if (!(flags & NETDEV_TX_OFFLOAD_SCTP_CKSUM)
+               && dp_packet_hwol_l4_is_sctp(p)) {
+        packet_sctp_complete_csum(p, tnl_inner);
+        dp_packet_ol_set_l4_csum_good(p);
+        dp_packet_hwol_reset_tx_l4_csum(p);
+    }
+
+    if (tnl_inner) {
+        dp_packet_tnl_outer_ol_send_prepare(p, flags);
+    }
 }

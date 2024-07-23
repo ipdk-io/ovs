@@ -37,6 +37,19 @@ def connect_to_target(target):
     return client
 
 
+def reply_to_string(reply, fmt=ovs.unixctl.UnixctlOutputFormat.TEXT,
+                    fmt_flags={}):
+    if fmt == ovs.unixctl.UnixctlOutputFormat.TEXT:
+        body = str(reply)
+    else:
+        body = ovs.json.to_string(reply, **fmt_flags)
+
+    if body and not body.endswith("\n"):
+        body += "\n"
+
+    return body
+
+
 def main():
     parser = argparse.ArgumentParser(description="Python Implementation of"
                                      " ovs-appctl.")
@@ -49,25 +62,51 @@ def main():
                         help="Arguments to the command.")
     parser.add_argument("-T", "--timeout", metavar="SECS",
                         help="wait at most SECS seconds for a response")
+    parser.add_argument("-f", "--format", metavar="FMT",
+                        help="Output format.", default="text",
+                        choices=[fmt.name.lower()
+                                 for fmt in ovs.unixctl.UnixctlOutputFormat],
+                        type=str.lower)
+    parser.add_argument("--pretty", action="store_true",
+                        help="Format the output in a more readable fashion."
+                             " Requires: --format json.")
     args = parser.parse_args()
+
+    if (args.format != ovs.unixctl.UnixctlOutputFormat.JSON.name.lower()
+        and args.pretty):
+        ovs.util.ovs_fatal(0, "--pretty is supported with --format json only")
 
     signal_alarm(int(args.timeout) if args.timeout else None)
 
     ovs.vlog.Vlog.init()
     target = args.target
+    format = ovs.unixctl.UnixctlOutputFormat[args.format.upper()]
+    format_flags = dict(pretty=True) if args.pretty else {}
     client = connect_to_target(target)
+
+    if format != ovs.unixctl.UnixctlOutputFormat.TEXT:
+        err_no, error, _ = client.transact(
+            "set-options", ["--format", args.format])
+
+        if err_no:
+            ovs.util.ovs_fatal(err_no, "%s: transaction error" % target)
+        elif error is not None:
+            sys.stderr.write(reply_to_string(error))
+            ovs.util.ovs_error(0, "%s: server returned an error" % target)
+            sys.exit(2)
+
     err_no, error, result = client.transact(args.command, args.argv)
     client.close()
 
     if err_no:
         ovs.util.ovs_fatal(err_no, "%s: transaction error" % target)
     elif error is not None:
-        sys.stderr.write(error)
+        sys.stderr.write(reply_to_string(error))
         ovs.util.ovs_error(0, "%s: server returned an error" % target)
         sys.exit(2)
     else:
         assert result is not None
-        sys.stdout.write(result)
+        sys.stdout.write(reply_to_string(result, format, format_flags))
 
 
 if __name__ == '__main__':

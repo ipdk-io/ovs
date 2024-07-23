@@ -870,7 +870,8 @@ do_parse_rows(struct ovs_cmdl_context *ctx)
         row = ovsdb_row_create(table);
 
         json = unbox_json(parse_json(ctx->argv[i]));
-        check_ovsdb_error(ovsdb_row_from_json(row, json, NULL, &columns));
+        check_ovsdb_error(ovsdb_row_from_json(row, json, NULL,
+                                              &columns, false));
         json_destroy(json);
 
         print_and_free_json(ovsdb_row_to_json(row, &all_columns));
@@ -937,7 +938,7 @@ do_compare_rows(struct ovs_cmdl_context *ctx)
         }
         names[i] = xstrdup(json->array.elems[0]->string);
         check_ovsdb_error(ovsdb_row_from_json(rows[i], json->array.elems[1],
-                                              NULL, NULL));
+                                              NULL, NULL, false));
         json_destroy(json);
     }
     for (i = 0; i < n_rows; i++) {
@@ -1050,7 +1051,7 @@ do_evaluate_condition__(struct ovs_cmdl_context *ctx, int mode)
     for (i = 0; i < n_rows; i++) {
         rows[i] = ovsdb_row_create(table);
         check_ovsdb_error(ovsdb_row_from_json(rows[i], json->array.elems[i],
-                                              NULL, NULL));
+                                              NULL, NULL, false));
     }
     json_destroy(json);
 
@@ -1224,7 +1225,7 @@ do_execute_mutations(struct ovs_cmdl_context *ctx)
     for (i = 0; i < n_rows; i++) {
         rows[i] = ovsdb_row_create(table);
         check_ovsdb_error(ovsdb_row_from_json(rows[i], json->array.elems[i],
-                                              NULL, NULL));
+                                              NULL, NULL, false));
     }
     json_destroy(json);
 
@@ -1338,7 +1339,7 @@ do_query(struct ovs_cmdl_context *ctx)
         struct ovsdb_row *row = ovsdb_row_create(table);
         uuid_generate(ovsdb_row_get_uuid_rw(row));
         check_ovsdb_error(ovsdb_row_from_json(row, json->array.elems[i],
-                                              NULL, NULL));
+                                              NULL, NULL, false));
         if (ovsdb_table_get_row(table, ovsdb_row_get_uuid(row))) {
             ovs_fatal(0, "duplicate UUID "UUID_FMT" in table",
                       UUID_ARGS(ovsdb_row_get_uuid(row)));
@@ -1445,7 +1446,7 @@ do_query_distinct(struct ovs_cmdl_context *ctx)
         row = ovsdb_row_create(table);
         uuid_generate(ovsdb_row_get_uuid_rw(row));
         check_ovsdb_error(ovsdb_row_from_json(row, json->array.elems[i],
-                                              NULL, NULL));
+                                              NULL, NULL, false));
 
         /* Initialize row and find equivalence class. */
         rows[i].uuid = *ovsdb_row_get_uuid(row);
@@ -1797,7 +1798,7 @@ do_transact_modify(struct ovs_cmdl_context *ctx)
     struct ovsdb_row *row_rw;
 
     row_ro = do_transact_find_row(ctx->argv[1]);
-    row_rw = ovsdb_txn_row_modify(do_transact_txn, row_ro);
+    ovsdb_txn_row_modify(do_transact_txn, row_ro, &row_rw, NULL);
     do_transact_set_i_j(row_rw, ctx->argv[2], ctx->argv[3]);
 }
 
@@ -2023,6 +2024,24 @@ print_idl_row_updated_link2(const struct idltest_link2 *l2, int step)
 }
 
 static void
+print_idl_row_updated_indexed(const struct idltest_indexed *ind, int step)
+{
+    struct ds updates = DS_EMPTY_INITIALIZER;
+
+    for (size_t i = 0; i < IDLTEST_INDEXED_N_COLUMNS; i++) {
+        if (idltest_indexed_is_updated(ind, i)) {
+            ds_put_format(&updates, " %s", idltest_indexed_columns[i].name);
+        }
+    }
+    if (updates.length) {
+        print_and_log("%03d: table %s: updated columns:%s",
+                      step, ind->header_.table->class_->name,
+                      ds_cstr(&updates));
+        ds_destroy(&updates);
+    }
+}
+
+static void
 print_idl_row_updated_simple3(const struct idltest_simple3 *s3, int step)
 {
     struct ds updates = DS_EMPTY_INITIALIZER;
@@ -2172,6 +2191,21 @@ print_idl_row_link2(const struct idltest_link2 *l2, int step, bool terse)
 }
 
 static void
+print_idl_row_indexed(const struct idltest_indexed *ind, int step, bool terse)
+{
+    struct ds msg = DS_EMPTY_INITIALIZER;
+
+    ds_put_format(&msg, "i=%"PRId64, ind->i);
+
+    char *row_msg = format_idl_row(&ind->header_, step, ds_cstr(&msg), terse);
+    print_and_log("%s", row_msg);
+    ds_destroy(&msg);
+    free(row_msg);
+
+    print_idl_row_updated_indexed(ind, step);
+}
+
+static void
 print_idl_row_simple3(const struct idltest_simple3 *s3, int step, bool terse)
 {
     struct ds msg = DS_EMPTY_INITIALIZER;
@@ -2251,6 +2285,7 @@ print_idl_row_singleton(const struct idltest_singleton *sng, int step,
 static void
 print_idl(struct ovsdb_idl *idl, int step, bool terse)
 {
+    const struct idltest_indexed *ind;
     const struct idltest_simple3 *s3;
     const struct idltest_simple4 *s4;
     const struct idltest_simple6 *s6;
@@ -2284,6 +2319,10 @@ print_idl(struct ovsdb_idl *idl, int step, bool terse)
         print_idl_row_simple6(s6, step, terse);
         n++;
     }
+    IDLTEST_INDEXED_FOR_EACH (ind, idl) {
+        print_idl_row_indexed(ind, step, terse);
+        n++;
+    }
     IDLTEST_SINGLETON_FOR_EACH (sng, idl) {
         print_idl_row_singleton(sng, step, terse);
         n++;
@@ -2296,6 +2335,7 @@ print_idl(struct ovsdb_idl *idl, int step, bool terse)
 static void
 print_idl_track(struct ovsdb_idl *idl, int step, bool terse)
 {
+    const struct idltest_indexed *ind;
     const struct idltest_simple3 *s3;
     const struct idltest_simple4 *s4;
     const struct idltest_simple6 *s6;
@@ -2326,6 +2366,10 @@ print_idl_track(struct ovsdb_idl *idl, int step, bool terse)
     }
     IDLTEST_SIMPLE6_FOR_EACH_TRACKED (s6, idl) {
         print_idl_row_simple6(s6, step, terse);
+        n++;
+    }
+    IDLTEST_INDEXED_FOR_EACH (ind, idl) {
+        print_idl_row_indexed(ind, step, terse);
         n++;
     }
 
@@ -2400,7 +2444,7 @@ idltest_find_simple(struct ovsdb_idl *idl, int i)
     return NULL;
 }
 
-static void
+static bool
 idl_set(struct ovsdb_idl *idl, char *commands, int step)
 {
     char *cmd, *save_ptr1 = NULL;
@@ -2458,6 +2502,19 @@ idl_set(struct ovsdb_idl *idl, char *commands, int step)
 
             s = idltest_simple_insert(txn);
             idltest_simple_set_i(s, atoi(arg1));
+        } else if (!strcmp(name, "insert_uuid")) {
+            struct idltest_simple *s;
+
+            if (!arg1 || !arg2) {
+                ovs_fatal(0, "\"insert\" command requires 2 arguments");
+            }
+
+            struct uuid s_uuid;
+            if (!uuid_from_string(&s_uuid, arg1)) {
+                 ovs_fatal(0, "\"insert_uuid\" command requires valid uuid");
+            }
+            s = idltest_simple_insert_persist_uuid(txn, &s_uuid);
+            idltest_simple_set_i(s, atoi(arg2));
         } else if (!strcmp(name, "delete")) {
             const struct idltest_simple *s;
 
@@ -2522,7 +2579,7 @@ idl_set(struct ovsdb_idl *idl, char *commands, int step)
             print_and_log("%03d: destroy", step);
             ovsdb_idl_txn_destroy(txn);
             ovsdb_idl_check_consistency(idl);
-            return;
+            return true;
         } else {
             ovs_fatal(0, "unknown command %s", name);
         }
@@ -2543,6 +2600,8 @@ idl_set(struct ovsdb_idl *idl, char *commands, int step)
 
     ovsdb_idl_txn_destroy(txn);
     ovsdb_idl_check_consistency(idl);
+
+    return (status != TXN_ERROR);
 }
 
 static const struct ovsdb_idl_table_class *
@@ -2612,11 +2671,12 @@ parse_link2_json_clause(struct ovsdb_idl_condition *cond,
     }
 }
 
-static void
-update_conditions(struct ovsdb_idl *idl, char *commands)
+static unsigned int
+update_conditions(struct ovsdb_idl *idl, char *commands, int step)
 {
-    char *cmd, *save_ptr1 = NULL;
     const struct ovsdb_idl_table_class *tc;
+    unsigned int next_cond_seqno = 0;
+    char *cmd, *save_ptr1 = NULL;
 
     for (cmd = strtok_r(commands, ";", &save_ptr1); cmd;
          cmd = strtok_r(NULL, ";", &save_ptr1)) {
@@ -2667,15 +2727,20 @@ update_conditions(struct ovsdb_idl *idl, char *commands)
         unsigned int seqno = ovsdb_idl_get_condition_seqno(idl);
         unsigned int next_seqno = ovsdb_idl_set_condition(idl, tc, &cond);
         if (seqno == next_seqno ) {
-            ovs_fatal(0, "condition unchanged");
+            print_and_log("%03d: %s: conditions unchanged",
+                          step, table_name);
+        } else {
+            print_and_log("%03d: %s: change conditions", step, table_name);
         }
         unsigned int new_next_seqno = ovsdb_idl_set_condition(idl, tc, &cond);
         if (next_seqno != new_next_seqno) {
             ovs_fatal(0, "condition expected seqno changed");
         }
+        next_cond_seqno = MAX(next_cond_seqno, next_seqno);
         ovsdb_idl_condition_destroy(&cond);
         json_destroy(json);
     }
+    return next_cond_seqno;
 }
 
 static void
@@ -2684,6 +2749,7 @@ do_idl(struct ovs_cmdl_context *ctx)
     struct test_ovsdb_pvt_context *pvt = ctx->pvt;
     struct jsonrpc *rpc;
     struct ovsdb_idl *idl;
+    unsigned int next_cond_seqno = 0;
     unsigned int seqno = 0;
     struct ovsdb_symbol_table *symtab;
     size_t n_uuids = 0;
@@ -2720,8 +2786,8 @@ do_idl(struct ovs_cmdl_context *ctx)
     const char remote_s[] = "set-remote ";
     const char cond_s[] = "condition ";
     if (ctx->argc > 2 && strstr(ctx->argv[2], cond_s)) {
-        update_conditions(idl, ctx->argv[2] + strlen(cond_s));
-        print_and_log("%03d: change conditions", step++);
+        next_cond_seqno =
+            update_conditions(idl, ctx->argv[2] + strlen(cond_s), step++);
         i = 3;
     } else {
         i = 2;
@@ -2740,6 +2806,21 @@ do_idl(struct ovs_cmdl_context *ctx)
         if (*arg == '+') {
             /* The previous transaction didn't change anything. */
             arg++;
+        } else if (*arg == '^') {
+            /* Wait for condition change to be acked by the server. */
+            arg++;
+            for (;;) {
+                ovsdb_idl_run(idl);
+                ovsdb_idl_check_consistency(idl);
+                if (ovsdb_idl_get_condition_seqno(idl) == next_cond_seqno) {
+                    break;
+                }
+                jsonrpc_run(rpc);
+
+                ovsdb_idl_wait(idl);
+                jsonrpc_wait(rpc);
+                poll_block();
+            }
         } else {
             /* Wait for update. */
             for (;;) {
@@ -2762,6 +2843,13 @@ do_idl(struct ovs_cmdl_context *ctx)
             } else {
                 print_idl(idl, step++, terse);
             }
+
+            /* Just run IDL forever for a simple monitoring. */
+            if (!strcmp(arg, "monitor")) {
+                seqno = ovsdb_idl_get_seqno(idl);
+                i--;
+                continue;
+            }
         }
         seqno = ovsdb_idl_get_seqno(idl);
 
@@ -2774,10 +2862,17 @@ do_idl(struct ovs_cmdl_context *ctx)
                           arg + strlen(remote_s),
                           ovsdb_idl_is_connected(idl) ? "true" : "false");
         }  else if (!strncmp(arg, cond_s, strlen(cond_s))) {
-            update_conditions(idl, arg + strlen(cond_s));
-            print_and_log("%03d: change conditions", step++);
+            next_cond_seqno = update_conditions(idl, arg + strlen(cond_s),
+                                                step++);
         } else if (arg[0] != '[') {
-            idl_set(idl, arg, step++);
+            if (!idl_set(idl, arg, step++)) {
+                /* If idl_set() returns false, then no transaction
+                 * was sent to the server and most likely 'seqno'
+                 * would remain the same.  And the above 'Wait for update'
+                 * for loop poll_block() would never return.
+                 * So set seqno to 0. */
+                seqno = 0;
+            }
         } else {
             struct json *json = parse_json(arg);
             substitute_uuids(json, symtab);

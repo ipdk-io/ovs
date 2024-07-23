@@ -21,6 +21,8 @@
 
 struct json;
 struct ovsdb;
+struct ovsdb_row;
+struct ovsdb_schema;
 struct ovsdb_table;
 struct uuid;
 
@@ -41,15 +43,17 @@ struct ovsdb_error *ovsdb_txn_propose_commit_block(struct ovsdb_txn *,
 void ovsdb_txn_complete(struct ovsdb_txn *);
 
 struct ovsdb_txn_progress *ovsdb_txn_propose_schema_change(
-    struct ovsdb *, const struct json *schema, const struct json *data);
+    struct ovsdb *, const struct ovsdb_schema *,
+    const struct json *data, struct uuid *txnid);
 
 bool ovsdb_txn_progress_is_complete(const struct ovsdb_txn_progress *);
 const struct ovsdb_error *ovsdb_txn_progress_get_error(
     const struct ovsdb_txn_progress *);
 void ovsdb_txn_progress_destroy(struct ovsdb_txn_progress *);
 
-struct ovsdb_row *ovsdb_txn_row_modify(struct ovsdb_txn *,
-                                       const struct ovsdb_row *);
+void ovsdb_txn_row_modify(struct ovsdb_txn *, const struct ovsdb_row *,
+                          struct ovsdb_row **row_new,
+                          struct ovsdb_row **row_diff);
 void ovsdb_txn_row_insert(struct ovsdb_txn *, struct ovsdb_row *);
 void ovsdb_txn_row_delete(struct ovsdb_txn *, const struct ovsdb_row *);
 

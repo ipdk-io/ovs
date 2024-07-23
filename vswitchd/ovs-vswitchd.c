@@ -60,28 +60,32 @@
 
 VLOG_DEFINE_THIS_MODULE(vswitchd);
 
-/* --mlockall: If set, locks all process memory into physical RAM, preventing
+/* --mlockall: If set, locks all present process memory pages into physical
+ * RAM and all the new pages the moment they are faulted in, preventing
  * the kernel from paging any of its memory to disk. */
 static bool want_mlockall;
+
+/* --hw-rawio-access: If set, retains CAP_SYS_RAWIO privileges.  */
+static bool hw_rawio_access;
 
 static unixctl_cb_func ovs_vswitchd_exit;
 
 static char *parse_options(int argc, char *argv[], char **unixctl_path);
 OVS_NO_RETURN static void usage(void);
 
-struct ovs_vswitchd_exit_args {
-    bool *exiting;
-    bool *cleanup;
-};
+static struct ovs_vswitchd_exit_args {
+    struct unixctl_conn **conns;
+    size_t n_conns;
+    bool exiting;
+    bool cleanup;
+} exit_args;
 
 int
 main(int argc, char *argv[])
 {
-    char *unixctl_path = NULL;
     struct unixctl_server *unixctl;
+    char *unixctl_path = NULL;
     char *remote;
-    bool exiting, cleanup;
-    struct ovs_vswitchd_exit_args exit_args = {&exiting, &cleanup};
     int retval;
 
     set_program_name(argv[0]);
@@ -93,14 +97,20 @@ main(int argc, char *argv[])
     remote = parse_options(argc, argv, &unixctl_path);
     fatal_ignore_sigpipe();
 
-    daemonize_start(true);
+    daemonize_start(true, hw_rawio_access);
 
     if (want_mlockall) {
 #ifdef HAVE_MLOCKALL
-        if (mlockall(MCL_CURRENT | MCL_FUTURE)) {
-            VLOG_ERR("mlockall failed: %s", ovs_strerror(errno));
-        } else {
-            set_memory_locked();
+/* MCL_ONFAULT introduced in Linux kernel 4.4. */
+#ifndef MCL_ONFAULT
+#define MCL_ONFAULT 4
+#endif
+        if (mlockall(MCL_CURRENT | MCL_FUTURE | MCL_ONFAULT)) {
+            if (mlockall(MCL_CURRENT | MCL_FUTURE)) {
+                VLOG_ERR("mlockall failed: %s", ovs_strerror(errno));
+            } else {
+                set_all_memory_locked();
+            }
         }
 #else
         VLOG_ERR("mlockall not supported on this system");
@@ -112,14 +122,12 @@ main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
     unixctl_command_register("exit", "[--cleanup]", 0, 1,
-                             ovs_vswitchd_exit, &exit_args);
+                             ovs_vswitchd_exit, NULL);
 
     bridge_init(remote);
     free(remote);
 
-    exiting = false;
-    cleanup = false;
-    while (!exiting) {
+    while (!exit_args.exiting) {
         OVS_USDT_PROBE(main, run_start);
         memory_run();
         if (memory_should_report()) {
@@ -138,16 +146,22 @@ main(int argc, char *argv[])
         bridge_wait();
         unixctl_server_wait(unixctl);
         netdev_wait();
-        if (exiting) {
+        if (exit_args.exiting) {
             poll_immediate_wake();
         }
         OVS_USDT_PROBE(main, poll_block);
         poll_block();
         if (should_service_stop()) {
-            exiting = true;
+            exit_args.exiting = true;
         }
     }
-    bridge_exit(cleanup);
+    bridge_exit(exit_args.cleanup);
+
+    for (size_t i = 0; i < exit_args.n_conns; i++) {
+        unixctl_command_reply(exit_args.conns[i], NULL);
+    }
+    free(exit_args.conns);
+
     unixctl_server_destroy(unixctl);
     service_stop();
     vlog_disable_async();
@@ -173,6 +187,7 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
         OPT_DPDK,
         SSL_OPTION_ENUMS,
         OPT_DUMMY_NUMA,
+        OPT_HW_RAWIO_ACCESS,
 #if defined(P4OVS)
         OPT_GRPC_ADDR,
 #endif
@@ -192,6 +207,7 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
         {"disable-system-route", no_argument, NULL, OPT_DISABLE_SYSTEM_ROUTE},
         {"dpdk", optional_argument, NULL, OPT_DPDK},
         {"dummy-numa", required_argument, NULL, OPT_DUMMY_NUMA},
+        {"hw-rawio-access", no_argument, NULL, OPT_HW_RAWIO_ACCESS},
 #if defined(P4OVS)
         {"grpc-addr", optional_argument, NULL, 'g'},
 #endif
@@ -259,6 +275,10 @@ parse_options(int argc, char *argv[], char **unixctl_pathp)
             ovs_numa_set_dummy(optarg);
             break;
 
+        case OPT_HW_RAWIO_ACCESS:
+            hw_rawio_access = true;
+            break;
+
 #if defined(P4OVS)
         case OPT_GRPC_ADDR:
         case 'g':
@@ -317,10 +337,14 @@ usage(void)
 
 static void
 ovs_vswitchd_exit(struct unixctl_conn *conn, int argc,
-                  const char *argv[], void *exit_args_)
+                  const char *argv[], void *args OVS_UNUSED)
 {
-    struct ovs_vswitchd_exit_args *exit_args = exit_args_;
-    *exit_args->exiting = true;
-    *exit_args->cleanup = argc == 2 && !strcmp(argv[1], "--cleanup");
-    unixctl_command_reply(conn, NULL);
+    exit_args.n_conns++;
+    exit_args.conns = xrealloc(exit_args.conns,
+                               exit_args.n_conns * sizeof *exit_args.conns);
+    exit_args.conns[exit_args.n_conns - 1] = conn;
+    exit_args.exiting = true;
+    if (!exit_args.cleanup) {
+        exit_args.cleanup = argc == 2 && !strcmp(argv[1], "--cleanup");
+    }
 }

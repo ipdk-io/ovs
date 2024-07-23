@@ -44,9 +44,10 @@ try:
     from ovs import jsonrpc
     from ovs.poller import Poller
     from ovs.stream import Stream
+    from ovs.fatal_signal import add_hook
 except Exception:
     print("ERROR: Please install the correct Open vSwitch python support")
-    print("       libraries (version @VERSION@).")
+    print("       libraries (version @VERSION@@VERSION_SUFFIX@).")
     print("       Alternatively, check that your PYTHONPATH is pointing to")
     print("       the correct location.")
     sys.exit(1)
@@ -95,6 +96,10 @@ def _install_dst_if_linux(tap_name, mtu_value=None):
         *(['ip', 'link', 'set', 'dev', str(tap_name), 'up']))
     pipe.wait()
 
+    pipe = _doexec(
+        *(['ip', '-6', 'addr', 'flush', 'dev', str(tap_name)]))
+    pipe.wait()
+
 
 def _remove_dst_if_linux(tap_name):
     _doexec(
@@ -137,6 +142,7 @@ The following options are available:
    --mirror-to                The name for the mirror port to use (optional)
                               Default 'miINTERFACE'
    --span                     If specified, mirror all ports (optional)
+   --filter                   Set an OpenFlow formatted preselection filter
 """ % {'prog': sys.argv[0]})
     sys.exit(0)
 
@@ -225,6 +231,13 @@ class OVSDB(object):
     def interface_mtu(self, intf_name):
         try:
             intf = self._find_row_by_name('Interface', intf_name)
+            if intf is None:
+                mtu = 1500
+                port = self._find_row_by_name('Port', intf_name)
+                for intf in port.interfaces:
+                    if mtu < intf.mtu[0]:
+                        mtu = intf.mtu[0]
+                return mtu
             return intf.mtu[0]
         except Exception:
             return None
@@ -342,13 +355,16 @@ class OVSDB(object):
         return result
 
     def bridge_mirror(self, intf_name, mirror_intf_name, br_name,
-                      mirror_select_all=False):
+                      mirror_select_all=False, mirror_filter=None):
 
         txn = self._start_txn()
         mirror = txn.insert(self.get_table('Mirror'))
         mirror.name = 'm_%s' % intf_name
 
         mirror.select_all = mirror_select_all
+
+        if mirror_filter is not None:
+            mirror.filter = mirror_filter
 
         mirrored_port = self._find_row_by_name('Port', intf_name)
 
@@ -405,6 +421,24 @@ def py_which(executable):
                for path in os.environ["PATH"].split(os.pathsep))
 
 
+def teardown(db_sock, interface, mirror_interface, tap_created):
+    def cleanup_mirror():
+        try:
+            ovsdb = OVSDB(db_sock)
+            ovsdb.destroy_mirror(interface, ovsdb.port_bridge(interface))
+            ovsdb.destroy_port(mirror_interface, ovsdb.port_bridge(interface))
+            if tap_created is True:
+                _del_taps[sys.platform](mirror_interface)
+        except Exception:
+            print("Unable to tear down the ports and mirrors.")
+            print("Please use ovs-vsctl to remove the ports and mirrors"
+                  " created.")
+            print(" ex: ovs-vsctl --db=%s del-port %s" % (db_sock,
+                                                          mirror_interface))
+
+    add_hook(cleanup_mirror, None, True)
+
+
 def main():
     rundir = os.environ.get('OVS_RUNDIR', '@RUNDIR@')
     db_sock = 'unix:%s' % os.path.join(rundir, "db.sock")
@@ -415,6 +449,7 @@ def main():
     mirror_interface = None
     mirror_select_all = False
     dump_cmd = 'tcpdump'
+    mirror_filter = None
 
     for cur, nxt in argv_tuples(sys.argv[1:]):
         if skip_next:
@@ -423,7 +458,7 @@ def main():
         if cur in ['-h', '--help']:
             usage()
         elif cur in ['-V', '--version']:
-            print("ovs-tcpdump (Open vSwitch) @VERSION@")
+            print("ovs-tcpdump (Open vSwitch) @VERSION@@VERSION_SUFFIX@")
             sys.exit(0)
         elif cur in ['--db-sock']:
             db_sock = nxt
@@ -443,6 +478,10 @@ def main():
             continue
         elif cur in ['--span']:
             mirror_select_all = True
+            continue
+        elif cur in ['--filter']:
+            mirror_filter = nxt
+            skip_next = True
             continue
         tcpdargs.append(cur)
 
@@ -489,48 +528,34 @@ def main():
         print("ERROR: Mirror port (%s) exists for port %s." %
               (mirror_interface, interface))
         sys.exit(1)
+
+    teardown(db_sock, interface, mirror_interface, tap_created)
+
     try:
         ovsdb.make_port(mirror_interface, ovsdb.port_bridge(interface))
         ovsdb.bridge_mirror(interface, mirror_interface,
                             ovsdb.port_bridge(interface),
-                            mirror_select_all)
+                            mirror_select_all, mirror_filter=mirror_filter)
     except OVSDBException as oe:
         print("ERROR: Unable to properly setup the mirror: %s." % str(oe))
-        try:
-            ovsdb.destroy_port(mirror_interface, ovsdb.port_bridge(interface))
-            if tap_created is True:
-                _del_taps[sys.platform](mirror_interface)
-        except Exception:
-            pass
         sys.exit(1)
 
     ovsdb.close_idl()
 
     pipes = _doexec(*([dump_cmd, '-i', mirror_interface] + tcpdargs))
+    while pipes.poll() is None:
+        data = pipes.stdout.readline().strip(b'\n')
+        if len(data) == 0:
+            break
+        print(data.decode('utf-8'))
+
     try:
-        while pipes.poll() is None:
-            data = pipes.stdout.readline().strip(b'\n')
-            if len(data) == 0:
-                raise KeyboardInterrupt
-            print(data.decode('utf-8'))
-        raise KeyboardInterrupt
-    except KeyboardInterrupt:
-        if pipes.poll() is None:
-            pipes.terminate()
+        sys.stdout.close()
+    except IOError:
+        pass
 
-        ovsdb = OVSDB(db_sock)
-        ovsdb.destroy_mirror(interface, ovsdb.port_bridge(interface))
-        ovsdb.destroy_port(mirror_interface, ovsdb.port_bridge(interface))
-        if tap_created is True:
-            _del_taps[sys.platform](mirror_interface)
-    except Exception:
-        print("Unable to tear down the ports and mirrors.")
-        print("Please use ovs-vsctl to remove the ports and mirrors created.")
-        print(" ex: ovs-vsctl --db=%s del-port %s" % (db_sock,
-                                                      mirror_interface))
-        sys.exit(1)
-
-    sys.exit(0)
+    if pipes.poll() is None:
+        pipes.terminate()
 
 
 if __name__ == '__main__':

@@ -107,6 +107,8 @@ void ovsdb_base_type_clone(struct ovsdb_base_type *,
 void ovsdb_base_type_destroy(struct ovsdb_base_type *);
 
 bool ovsdb_base_type_is_valid(const struct ovsdb_base_type *);
+bool ovsdb_base_type_equals(const struct ovsdb_base_type *,
+                            const struct ovsdb_base_type *);
 bool ovsdb_base_type_has_constraints(const struct ovsdb_base_type *);
 void ovsdb_base_type_clear_constraints(struct ovsdb_base_type *);
 const struct ovsdb_type *ovsdb_base_type_get_enum_type(enum ovsdb_atomic_type);
@@ -157,6 +159,7 @@ void ovsdb_type_clone(struct ovsdb_type *, const struct ovsdb_type *);
 void ovsdb_type_destroy(struct ovsdb_type *);
 
 bool ovsdb_type_is_valid(const struct ovsdb_type *);
+bool ovsdb_type_equals(const struct ovsdb_type *, const struct ovsdb_type *);
 
 static inline bool ovsdb_type_is_scalar(const struct ovsdb_type *);
 static inline bool ovsdb_type_is_optional(const struct ovsdb_type *);
@@ -233,6 +236,18 @@ static inline bool ovsdb_type_is_set(const struct ovsdb_type *type)
 static inline bool ovsdb_type_is_map(const struct ovsdb_type *type)
 {
     return type->value.type != OVSDB_TYPE_VOID;
+}
+
+static inline bool ovsdb_type_has_strong_refs(const struct ovsdb_type *type)
+{
+    return ovsdb_base_type_is_strong_ref(&type->key)
+           || ovsdb_base_type_is_strong_ref(&type->value);
+}
+
+static inline bool ovsdb_type_has_weak_refs(const struct ovsdb_type *type)
+{
+    return ovsdb_base_type_is_weak_ref(&type->key)
+           || ovsdb_base_type_is_weak_ref(&type->value);
 }
 
 #ifdef __cplusplus

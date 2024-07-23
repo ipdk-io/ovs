@@ -1065,6 +1065,7 @@ vtep_ctl_context_populate_cache(struct ctl_context *ctx)
             continue;
         }
         ps = shash_find_data(&vtepctl_ctx->pswitches, ps_cfg->name);
+        ovs_assert(ps);
         for (j = 0; j < ps_cfg->n_ports; j++) {
             struct vteprec_physical_port *port_cfg = ps_cfg->ports[j];
             struct vtep_ctl_port *port;
@@ -1858,17 +1859,20 @@ del_mcast_entry(struct ctl_context *ctx,
                 const char *encap, const char *dst_ip, bool local)
 {
     struct vtep_ctl_context *vtepctl_ctx = vtep_ctl_context_cast(ctx);
+    struct vteprec_physical_locator_set *ploc_set_cfg;
+    struct vteprec_physical_locator *ploc_cfg;
     struct vtep_ctl_mcast_mac *mcast_mac;
     struct shash *mcast_shash;
-    struct vteprec_physical_locator *ploc_cfg;
-    struct vteprec_physical_locator_set *ploc_set_cfg;
+    struct shash_node *mcast_node;
 
     mcast_shash = local ? &ls->mcast_local : &ls->mcast_remote;
 
-    mcast_mac = shash_find_data(mcast_shash, mac);
-    if (!mcast_mac) {
+    mcast_node = shash_find(mcast_shash, mac);
+    if (!mcast_node || !mcast_node->data) {
         return;
     }
+
+    mcast_mac = mcast_node->data;
 
     ploc_cfg = find_ploc(vtepctl_ctx, encap, dst_ip);
     if (!ploc_cfg) {
@@ -1882,8 +1886,6 @@ del_mcast_entry(struct ctl_context *ctx,
 
     del_ploc_from_mcast_mac(mcast_mac, ploc_cfg);
     if (ovs_list_is_empty(&mcast_mac->locators)) {
-        struct shash_node *node = shash_find(mcast_shash, mac);
-
         vteprec_physical_locator_set_delete(ploc_set_cfg);
 
         if (local) {
@@ -1892,8 +1894,8 @@ del_mcast_entry(struct ctl_context *ctx,
             vteprec_mcast_macs_remote_delete(mcast_mac->remote_cfg);
         }
 
-        free(node->data);
-        shash_delete(mcast_shash, node);
+        free(mcast_node->data);
+        shash_delete(mcast_shash, mcast_node);
     } else {
         if (local) {
             vteprec_mcast_macs_local_set_locator_set(mcast_mac->local_cfg,
@@ -2207,9 +2209,9 @@ static const struct ctl_table_class tables[VTEPREC_N_TABLES] = {
 
 static void
 vtep_ctl_context_init_command(struct vtep_ctl_context *vtepctl_ctx,
-                              struct ctl_command *command)
+                              struct ctl_command *command, bool last_command)
 {
-    ctl_context_init_command(&vtepctl_ctx->base, command);
+    ctl_context_init_command(&vtepctl_ctx->base, command, last_command);
     vtepctl_ctx->verified_ports = false;
 
 }
@@ -2304,7 +2306,8 @@ do_vtep_ctl(const char *args, struct ctl_command *commands,
     }
     vtep_ctl_context_init(&vtepctl_ctx, NULL, idl, txn, vtep_global, symtab);
     for (c = commands; c < &commands[n_commands]; c++) {
-        vtep_ctl_context_init_command(&vtepctl_ctx, c);
+        vtep_ctl_context_init_command(&vtepctl_ctx, c,
+                                      c == &commands[n_commands - 1]);
         if (c->syntax->run) {
             (c->syntax->run)(&vtepctl_ctx.base);
         }

@@ -68,10 +68,11 @@ load the Open vSwitch kernel module.
 .PP
 .SH OPTIONS
 .IP "\fB\-\-mlockall\fR"
-Causes \fBovs\-vswitchd\fR to call the \fBmlockall()\fR function, to
-attempt to lock all of its process memory into physical RAM,
-preventing the kernel from paging any of its memory to disk.  This
-helps to avoid networking interruptions due to system memory pressure.
+Causes \fBovs\-vswitchd\fR to call the \fBmlockall()\fR function, to attempt to
+lock all of its process memory into physical RAM on page faults (on allocation,
+when running on Linux kernel 4.4 or older), preventing the kernel from paging
+any of its memory to disk.  This helps to avoid networking interruptions due to
+system memory pressure.
 .IP
 Some systems do not support \fBmlockall()\fR at all, and other systems
 only allow privileged users, such as the superuser, to use it.
@@ -81,6 +82,15 @@ unavailable or unsuccessful.
 .SS "DPDK Options"
 For details on initializing \fBovs\-vswitchd\fR to use DPDK ports,
 refer to the documentation or \fBovs\-vswitchd.conf.db\fR(5).
+.SS "DPDK HW Access Options"
+.IP "\fB\-\-hw\-rawio\-access\fR"
+Tells \fBovs\-vswitchd\fR to retain the \fBCAP_SYS_RAWIO\fR capability,
+to allow userspace drivers access to raw hardware memory.  This will
+also allow the \fBovs\-vswitchd\fR daemon to call \fBiopl()\fR and
+\fBioperm()\fR functions as well as access memory devices to set port
+access.  This is a \fBvery\fR powerful capability, so generally only
+enable as needed for specific hardware (for example mlx5 with full
+hardware offload via rte_flow).
 .SS "Daemon Options"
 .ds DD \
 \fBovs\-vswitchd\fR detaches only after it has connected to the \

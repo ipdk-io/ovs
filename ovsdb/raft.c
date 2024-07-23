@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <unistd.h>
 
+#include "cooperative-multitasking.h"
 #include "hash.h"
 #include "jsonrpc.h"
 #include "lockfile.h"
@@ -80,6 +81,7 @@ enum raft_failure_test {
     FT_STOP_RAFT_RPC,
     FT_TRANSFER_LEADERSHIP,
     FT_TRANSFER_LEADERSHIP_AFTER_SEND_APPEND_REQ,
+    FT_TRANSFER_LEADERSHIP_AFTER_STARTING_TO_ADD,
 };
 static enum raft_failure_test failure_test;
 
@@ -279,6 +281,7 @@ struct raft {
     /* Used for joining a cluster. */
     bool joining;                 /* Attempting to join the cluster? */
     struct sset remote_addresses; /* Addresses to try to find other servers. */
+#define RAFT_JOIN_TIMEOUT_MS 1000
     long long int join_timeout;   /* Time to re-send add server request. */
 
     /* Used for leaving a cluster. */
@@ -305,6 +308,11 @@ struct raft {
 
     /* Candidates only.  Reinitialized at start of election. */
     int n_votes;                /* Number of votes for me. */
+    bool prevote_passed;        /* Indicates if it passed pre-vote phase.
+                                 * Pre-vote mechanism is introduced in raft
+                                 * paper section 9.6. We implement it as a
+                                 * sub-state of candidate to minimize the
+                                 * change and keep backward compatibility. */
 
     /* Followers and candidates only. */
     bool candidate_retrying;    /* The earlier election timed-out and we are
@@ -372,12 +380,14 @@ static void raft_become_follower(struct raft *);
 static void raft_reset_election_timer(struct raft *);
 static void raft_reset_ping_timer(struct raft *);
 static void raft_send_heartbeats(struct raft *);
-static void raft_start_election(struct raft *, bool leadership_transfer);
+static void raft_start_election(struct raft *, bool is_prevote,
+                                bool leadership_transfer);
 static bool raft_truncate(struct raft *, uint64_t new_end);
 static void raft_get_servers_from_log(struct raft *, enum vlog_level);
 static void raft_get_election_timer_from_log(struct raft *);
 
 static bool raft_handle_write_error(struct raft *, struct ovsdb_error *);
+static bool raft_has_uncommitted_configuration(const struct raft *);
 
 static void raft_run_reconfigure(struct raft *);
 
@@ -987,10 +997,13 @@ raft_reset_election_timer(struct raft *raft)
     raft->election_timeout = raft->election_base + duration;
 }
 
+#define RAFT_TIMER_THRESHOLD(t) (t / 3)
+
 static void
 raft_reset_ping_timer(struct raft *raft)
 {
-    raft->ping_timeout = time_msec() + raft->election_timer / 3;
+    raft->ping_timeout =
+        time_msec() + RAFT_TIMER_THRESHOLD(raft->election_timer);
 }
 
 static void
@@ -1005,8 +1018,13 @@ raft_conn_update_probe_interval(struct raft *raft, struct raft_conn *r_conn)
      * inactivity probe follower will just try to initiate election
      * indefinitely staying in 'candidate' role.  And the leader will continue
      * to send heartbeats to the dead connection thinking that remote server
-     * is still part of the cluster. */
-    int probe_interval = raft->election_timer + ELECTION_RANGE_MSEC;
+     * is still part of the cluster.
+     *
+     * While joining, the real value of the election timeout is not known to
+     * this server, so using the maximum. */
+    int probe_interval = (raft->joining ? ELECTION_MAX_MSEC
+                                        : raft->election_timer)
+                         + ELECTION_RANGE_MSEC;
 
     jsonrpc_session_set_probe_interval(r_conn->js, probe_interval);
 }
@@ -1069,10 +1087,11 @@ raft_open(struct ovsdb_log *log, struct raft **raftp)
         /* If there's only one server, start an election right away so that the
          * cluster bootstraps quickly. */
         if (hmap_count(&raft->servers) == 1) {
-            raft_start_election(raft, false);
+            /* No pre-vote needed since we are the only one. */
+            raft_start_election(raft, false, false);
         }
     } else {
-        raft->join_timeout = time_msec() + 1000;
+        raft->join_timeout = time_msec() + RAFT_JOIN_TIMEOUT_MS;
     }
 
     raft_reset_ping_timer(raft);
@@ -1250,10 +1269,30 @@ raft_transfer_leadership(struct raft *raft, const char *reason)
         return;
     }
 
-    struct raft_server *s;
+    struct raft_server **servers, *s;
+    uint64_t threshold = 0;
+    size_t n = 0, start, i;
+
+    servers = xmalloc(hmap_count(&raft->servers) * sizeof *servers);
+
     HMAP_FOR_EACH (s, hmap_node, &raft->servers) {
-        if (!uuid_equals(&raft->sid, &s->sid)
-            && s->phase == RAFT_PHASE_STABLE) {
+        if (uuid_equals(&raft->sid, &s->sid)
+            || s->phase != RAFT_PHASE_STABLE) {
+            continue;
+        }
+        if (s->match_index > threshold) {
+            threshold = s->match_index;
+        }
+        servers[n++] = s;
+    }
+
+    start = n ? random_range(n) : 0;
+
+retry:
+    for (i = 0; i < n; i++) {
+        s = servers[(start + i) % n];
+
+        if (s->match_index >= threshold) {
             struct raft_conn *conn = raft_find_conn_by_sid(raft, &s->sid);
             if (!conn) {
                 continue;
@@ -1269,7 +1308,10 @@ raft_transfer_leadership(struct raft *raft, const char *reason)
                     .term = raft->term,
                 }
             };
-            raft_send_to_conn(raft, &rpc, conn);
+
+            if (!raft_send_to_conn(raft, &rpc, conn)) {
+                continue;
+            }
 
             raft_record_note(raft, "transfer leadership",
                              "transferring leadership to %s because %s",
@@ -1277,6 +1319,23 @@ raft_transfer_leadership(struct raft *raft, const char *reason)
             break;
         }
     }
+
+    if (n && i == n && threshold) {
+        if (threshold > raft->commit_index) {
+            /* Failed to transfer to servers with the highest 'match_index'.
+             * Try other servers that are not behind the majority. */
+            threshold = raft->commit_index;
+        } else {
+            /* Try any other server.  It is safe, because they either have all
+             * the append requests queued up for them before the leadership
+             * transfer message or their connection is broken and we will not
+             * transfer anyway. */
+            threshold = 0;
+        }
+        goto retry;
+    }
+
+    free(servers);
 }
 
 /* Send a RemoveServerRequest to the rest of the servers in the cluster.
@@ -1360,9 +1419,11 @@ void
 raft_take_leadership(struct raft *raft)
 {
     if (raft->role != RAFT_LEADER) {
-        raft_start_election(raft, true);
+        raft_start_election(raft, false, true);
     }
 }
+
+static void raft_run_cb(void *arg);
 
 /* Closes everything owned by 'raft' that might be visible outside the process:
  * network connections, commands, etc.  This is part of closing 'raft'; it is
@@ -1390,6 +1451,8 @@ raft_close__(struct raft *raft)
     LIST_FOR_EACH_SAFE (conn, list_node, &raft->conns) {
         raft_conn_close(conn);
     }
+
+    cooperative_multitasking_remove(&raft_run_cb, raft);
 }
 
 /* Closes and frees 'raft'.
@@ -1766,12 +1829,12 @@ raft_set_term(struct raft *raft, uint64_t term, const struct uuid *vote)
     return true;
 }
 
-static void
+static bool
 raft_accept_vote(struct raft *raft, struct raft_server *s,
                  const struct uuid *vote)
 {
     if (uuid_equals(&s->vote, vote)) {
-        return;
+        return false;
     }
     if (!uuid_is_zero(&s->vote)) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
@@ -1785,13 +1848,18 @@ raft_accept_vote(struct raft *raft, struct raft_server *s,
     s->vote = *vote;
     if (uuid_equals(vote, &raft->sid)
         && ++raft->n_votes > hmap_count(&raft->servers) / 2) {
-        raft_become_leader(raft);
+        return true;
     }
+    return false;
 }
 
 static void
-raft_start_election(struct raft *raft, bool leadership_transfer)
+raft_start_election(struct raft *raft, bool is_prevote,
+                    bool leadership_transfer)
 {
+    /* Leadership transfer doesn't use pre-vote. */
+    ovs_assert(!is_prevote || !leadership_transfer);
+
     if (raft->leaving) {
         return;
     }
@@ -1801,7 +1869,7 @@ raft_start_election(struct raft *raft, bool leadership_transfer)
         return;
     }
 
-    if (!raft_set_term(raft, raft->term + 1, &raft->sid)) {
+    if (!is_prevote && !raft_set_term(raft, raft->term + 1, &raft->sid)) {
         return;
     }
 
@@ -1809,26 +1877,33 @@ raft_start_election(struct raft *raft, bool leadership_transfer)
 
     raft->leader_sid = UUID_ZERO;
     raft->role = RAFT_CANDIDATE;
-    /* If there was no leader elected since last election, we know we are
-     * retrying now. */
-    raft->candidate_retrying = !raft->had_leader;
-    raft->had_leader = false;
+    raft->prevote_passed = !is_prevote;
+
+    if (is_prevote || leadership_transfer) {
+        /* If there was no leader elected since last election, we know we are
+         * retrying now. */
+        raft->candidate_retrying = !raft->had_leader;
+        raft->had_leader = false;
+
+        raft->election_start = time_msec();
+        raft->election_won = 0;
+    }
 
     raft->n_votes = 0;
 
-    raft->election_start = time_msec();
-    raft->election_won = 0;
     raft->leadership_transfer = leadership_transfer;
 
     static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
     if (!VLOG_DROP_INFO(&rl)) {
         long long int now = time_msec();
+        char *comment = is_prevote ? "pre-vote" : "vote";
         if (now >= raft->election_timeout) {
             VLOG_INFO("term %"PRIu64": %lld ms timeout expired, "
-                      "starting election",
-                      raft->term, now - raft->election_base);
+                      "starting election (%s)",
+                      raft->term, now - raft->election_base, comment);
         } else {
-            VLOG_INFO("term %"PRIu64": starting election", raft->term);
+            VLOG_INFO("term %"PRIu64": starting election (%s)",
+                      raft->term, comment);
         }
     }
     raft_reset_election_timer(raft);
@@ -1853,6 +1928,7 @@ raft_start_election(struct raft *raft, bool leadership_transfer)
                     ? raft->entries[raft->log_end - raft->log_start - 1].term
                     : raft->snap.term),
                 .leadership_transfer = leadership_transfer,
+                .is_prevote = is_prevote,
             },
         };
         if (failure_test != FT_DONT_SEND_VOTE_REQUEST) {
@@ -1861,7 +1937,13 @@ raft_start_election(struct raft *raft, bool leadership_transfer)
     }
 
     /* Vote for ourselves. */
-    raft_accept_vote(raft, me, &raft->sid);
+    if (raft_accept_vote(raft, me, &raft->sid)) {
+        /* We just started vote, so it shouldn't be accepted yet unless this is
+         * a one-node cluster. In such case we don't do pre-vote, and become
+         * leader immediately. */
+        ovs_assert(!is_prevote);
+        raft_become_leader(raft);
+    }
 }
 
 static void
@@ -2041,10 +2123,10 @@ raft_run(struct raft *raft)
                 raft_reset_election_timer(raft);
             } else {
                 raft_become_follower(raft);
-                raft_start_election(raft, false);
+                raft_start_election(raft, true, false);
             }
         } else {
-            raft_start_election(raft, false);
+            raft_start_election(raft, hmap_count(&raft->servers) > 1, false);
         }
 
     }
@@ -2054,7 +2136,7 @@ raft_run(struct raft *raft)
     }
 
     if (raft->joining && time_msec() >= raft->join_timeout) {
-        raft->join_timeout = time_msec() + 1000;
+        raft->join_timeout = time_msec() + RAFT_JOIN_TIMEOUT_MS;
         LIST_FOR_EACH (conn, list_node, &raft->conns) {
             raft_send_add_server_request(raft, conn);
         }
@@ -2088,12 +2170,27 @@ raft_run(struct raft *raft)
         raft_reset_ping_timer(raft);
     }
 
+    uint64_t interval = raft->joining
+                        ? RAFT_JOIN_TIMEOUT_MS
+                        : RAFT_TIMER_THRESHOLD(raft->election_timer);
+    cooperative_multitasking_set(
+        &raft_run_cb, (void *) raft, time_msec(),
+        interval + interval / 10, "raft_run");
+
     /* Do this only at the end; if we did it as soon as we set raft->left or
      * raft->failed in handling the RemoveServerReply, then it could easily
      * cause references to freed memory in RPC sessions, etc. */
     if (raft->left || raft->failed) {
         raft_close__(raft);
     }
+}
+
+static void
+raft_run_cb(void *arg)
+{
+    struct raft *raft = (struct raft *) arg;
+
+    raft_run(raft);
 }
 
 static void
@@ -2210,10 +2307,53 @@ raft_get_eid(const struct raft *raft, uint64_t index)
     return &raft->snap.eid;
 }
 
-const struct uuid *
+static const struct uuid *
 raft_current_eid(const struct raft *raft)
 {
     return raft_get_eid(raft, raft->log_end - 1);
+}
+
+bool
+raft_precheck_prereq(const struct raft *raft, const struct uuid *prereq)
+{
+    if (!uuid_equals(raft_current_eid(raft), prereq)) {
+        VLOG_DBG("%s: prerequisites (" UUID_FMT ") "
+                 "do not match current eid (" UUID_FMT ")",
+                 __func__, UUID_ARGS(prereq),
+                 UUID_ARGS(raft_current_eid(raft)));
+        return false;
+    }
+
+    /* Incomplete commands on a leader will not change the leader's current
+     * 'eid' on commit as they are already part of the leader's log. */
+    if (raft->role == RAFT_LEADER) {
+        return true;
+    }
+
+    /* Having incomplete commands on a follower means that the leader has
+     * these commands and they will change the prerequisites once added to
+     * the leader's log.
+     *
+     * There is a chance that all these commands will actually fail and the
+     * record with current prerequisites will in fact succeed, but, since
+     * these are our own commands, the chances are low. */
+    struct raft_command *cmd;
+    HMAP_FOR_EACH (cmd, hmap_node, &raft->commands) {
+        /* Skip commands that are already part of the log (have non-zero
+         * index) and ones that do not carry any data (have zero 'eid'),
+         * as they can't change prerequisites.
+         *
+         * Database will not re-run triggers unless the data changes or
+         * one of the data-carrying triggers completes.  So, pre-check must
+         * not fail if there are no outstanding data-carrying commands. */
+        if (!cmd->index && !uuid_is_zero(&cmd->eid)) {
+            VLOG_DBG("%s: follower still has an incomplete command "
+                     UUID_FMT, __func__, UUID_ARGS(&cmd->eid));
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static struct raft_command *
@@ -2649,15 +2789,22 @@ raft_become_follower(struct raft *raft)
      * new configuration.  Our AppendEntries processing will properly update
      * the server configuration later, if necessary.
      *
+     * However, since we're sending replies about a failure to add, those new
+     * servers has to be cleaned up.  Otherwise, they will stuck in a 'CATCHUP'
+     * phase in case this server regains leadership before they join through
+     * the current new leader.  They are not yet in 'raft->servers', so not
+     * part of the shared configuration.
+     *
      * Also we do not complete commands here, as they can still be completed
      * if their log entries have already been replicated to other servers.
      * If the entries were actually committed according to the new leader, our
      * AppendEntries processing will complete the corresponding commands.
      */
     struct raft_server *s;
-    HMAP_FOR_EACH (s, hmap_node, &raft->add_servers) {
+    HMAP_FOR_EACH_POP (s, hmap_node, &raft->add_servers) {
         raft_send_add_server_reply__(raft, &s->sid, s->address, false,
                                      RAFT_SERVER_LOST_LEADERSHIP);
+        raft_server_destroy(s);
     }
     if (raft->remove_server) {
         raft_send_remove_server_reply__(raft, &raft->remove_server->sid,
@@ -2721,6 +2868,13 @@ raft_send_heartbeats(struct raft *raft)
     raft_reset_ping_timer(raft);
 }
 
+static void
+raft_join_complete(struct raft *raft)
+{
+    raft->joining = false;
+    raft_update_probe_intervals(raft);
+}
+
 /* Initializes the fields in 's' that represent the leader's view of the
  * server. */
 static void
@@ -2757,6 +2911,18 @@ raft_become_leader(struct raft *raft)
     raft_set_leader(raft, &raft->sid);
     raft_reset_election_timer(raft);
     raft_reset_ping_timer(raft);
+
+    if (raft->joining) {
+        /* It is possible that the server committing this one to the list of
+         * servers lost leadership before the entry is committed but after
+         * it was already replicated to majority of servers.  In this case
+         * other servers will recognize this one as a valid cluster member
+         * and may transfer leadership to it and vote for it.  This way
+         * we're becoming a cluster leader without receiving reply for a
+         * join request and will commit addition of this server ourselves. */
+        VLOG_INFO_RL(&rl, "elected as leader while joining");
+        raft_join_complete(raft);
+    }
 
     struct raft_server *s;
     HMAP_FOR_EACH (s, hmap_node, &raft->servers) {
@@ -2916,12 +3082,12 @@ raft_update_commit_index(struct raft *raft, uint64_t new_commit_index)
     }
 
     while (raft->commit_index < new_commit_index) {
+        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 5);
         uint64_t index = ++raft->commit_index;
         const struct raft_entry *e = raft_get_entry(raft, index);
 
         if (raft_entry_has_data(e)) {
             struct raft_command *cmd = raft_find_command_by_eid(raft, &e->eid);
-            static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 5);
 
             if (cmd) {
                 if (!cmd->index && raft->role == RAFT_LEADER) {
@@ -2965,6 +3131,35 @@ raft_update_commit_index(struct raft *raft, uint64_t new_commit_index)
              * reallocate raft->entries, which would invalidate 'e', so
              * this case must be last, after the one for 'e->data'. */
             raft_run_reconfigure(raft);
+        } else if (e->servers && !raft_has_uncommitted_configuration(raft)) {
+            struct ovsdb_error *error;
+            struct raft_server *s;
+            struct hmap servers;
+
+            error = raft_servers_from_json(e->servers, &servers);
+            ovs_assert(!error);
+            HMAP_FOR_EACH (s, hmap_node, &servers) {
+                struct raft_server *server = raft_find_server(raft, &s->sid);
+
+                if (server && server->phase == RAFT_PHASE_COMMITTING) {
+                    /* This server lost leadership while committing
+                     * server 's', but it was committed later by a
+                     * new leader. */
+                    server->phase = RAFT_PHASE_STABLE;
+                }
+
+                if (raft->joining && uuid_equals(&s->sid, &raft->sid)) {
+                    /* Leadership change happened before previous leader
+                     * could commit the change of a servers list, but it
+                     * was replicated and a new leader committed it. */
+                    VLOG_INFO_RL(&rl,
+                        "added to configuration without reply "
+                        "(eid: "UUID_FMT", commit index: %"PRIu64")",
+                        UUID_ARGS(&e->eid), index);
+                    raft_join_complete(raft);
+                }
+            }
+            raft_servers_destroy(&servers);
         }
     }
 
@@ -3673,6 +3868,10 @@ raft_handle_vote_request__(struct raft *raft,
         return false;
     }
 
+    if (rq->is_prevote) {
+        return true;
+    }
+
     /* Record a vote for the peer. */
     if (!raft_set_term(raft, raft->term, &rq->common.sid)) {
         return false;
@@ -3685,7 +3884,7 @@ raft_handle_vote_request__(struct raft *raft,
 
 static void
 raft_send_vote_reply(struct raft *raft, const struct uuid *dst,
-                     const struct uuid *vote)
+                     const struct uuid *vote, bool is_prevote)
 {
     union raft_rpc rpy = {
         .vote_reply = {
@@ -3695,6 +3894,7 @@ raft_send_vote_reply(struct raft *raft, const struct uuid *dst,
             },
             .term = raft->term,
             .vote = *vote,
+            .is_prevote = is_prevote,
         },
     };
     raft_send(raft, &rpy);
@@ -3705,7 +3905,9 @@ raft_handle_vote_request(struct raft *raft,
                          const struct raft_vote_request *rq)
 {
     if (raft_handle_vote_request__(raft, rq)) {
-        raft_send_vote_reply(raft, &rq->common.sid, &raft->vote);
+        raft_send_vote_reply(raft, &rq->common.sid,
+                             rq->is_prevote ? &rq->common.sid : &raft->vote,
+                             rq->is_prevote);
     }
 }
 
@@ -3723,7 +3925,14 @@ raft_handle_vote_reply(struct raft *raft,
 
     struct raft_server *s = raft_find_peer(raft, &rpy->common.sid);
     if (s) {
-        raft_accept_vote(raft, s, &rpy->vote);
+        if (raft_accept_vote(raft, s, &rpy->vote)) {
+            if (raft->prevote_passed) {
+                raft_become_leader(raft);
+            } else {
+                /* Start the real election. */
+                raft_start_election(raft, false, false);
+            }
+        }
     }
 }
 
@@ -3877,6 +4086,10 @@ raft_handle_add_server_request(struct raft *raft,
                  "to cluster "CID_FMT, s->nickname, SID_ARGS(&s->sid),
                  rq->address, CID_ARGS(&raft->cid));
     raft_send_append_request(raft, s, 0, "initialize new server");
+
+    if (failure_test == FT_TRANSFER_LEADERSHIP_AFTER_STARTING_TO_ADD) {
+        failure_test = FT_TRANSFER_LEADERSHIP;
+    }
 }
 
 static void
@@ -3891,7 +4104,7 @@ raft_handle_add_server_reply(struct raft *raft,
     }
 
     if (rpy->success) {
-        raft->joining = false;
+        raft_join_complete(raft);
 
         /* It is tempting, at this point, to check that this server is part of
          * the current configuration.  However, this is not necessarily the
@@ -4357,7 +4570,7 @@ raft_handle_become_leader(struct raft *raft,
         VLOG_INFO("received leadership transfer from %s in term %"PRIu64,
                   raft_get_nickname(raft, &rq->common.sid, buf, sizeof buf),
                   rq->term);
-        raft_start_election(raft, true);
+        raft_start_election(raft, false, true);
     }
 }
 
@@ -4865,6 +5078,7 @@ raft_get_election_timer_from_log(struct raft *raft)
             break;
         }
     }
+    raft_update_probe_intervals(raft);
 }
 
 static void
@@ -5002,6 +5216,8 @@ raft_unixctl_failure_test(struct unixctl_conn *conn OVS_UNUSED,
     } else if (!strcmp(test,
                        "transfer-leadership-after-sending-append-request")) {
         failure_test = FT_TRANSFER_LEADERSHIP_AFTER_SEND_APPEND_REQ;
+    } else if (!strcmp(test, "transfer-leadership-after-starting-to-add")) {
+        failure_test = FT_TRANSFER_LEADERSHIP_AFTER_STARTING_TO_ADD;
     } else if (!strcmp(test, "transfer-leadership")) {
         failure_test = FT_TRANSFER_LEADERSHIP;
     } else if (!strcmp(test, "clear")) {

@@ -269,7 +269,7 @@ similar to the following::
 
     QEMU waiting for connection on: disconnected:unix:/path/to/socket,server
 
-QEMU will wait until the port is created sucessfully in OVS to boot the VM.
+QEMU will wait until the port is created successfully in OVS to boot the VM.
 One benefit of using this mode is the ability for vHost ports to 'reconnect' in
 event of the switch crashing or being brought down. Once it is brought back up,
 the vHost ports will reconnect automatically and normal service will resume.
@@ -312,7 +312,7 @@ predictable migration time. Mostly used as a second phase after the normal
 
 More information can be found in QEMU `docs`_.
 
-.. _`docs`: https://git.qemu.org/?p=qemu.git;a=blob;f=docs/devel/migration.rst
+.. _`docs`: https://www.qemu.org/docs/master/devel/migration/postcopy.html
 
 Post-copy support may be enabled via a global config value
 ``vhost-postcopy-support``. Setting this to ``true`` enables Post-copy support
@@ -340,8 +340,10 @@ The default value is ``false``.
     fixes (like userfaulfd leak) was released in 3.0.1.
 
     DPDK Post-copy feature requires avoiding to populate the guest memory
-    (application must not call mlock* syscall). So enabling mlockall is
-    incompatible with post-copy feature.
+    (application must not call mlock* syscall without MCL_ONFAULT).
+    So enabling mlockall is incompatible with post-copy feature in OVS 3.3 and
+    older. Newer versions of OVS only lock memory pages that are faulted in,
+    so both features can be used at the same time.
 
     Note that during migration of vhost-user device, PMD threads hang for the
     time of faulted pages download from source host. Transferring 1GB hugepage
@@ -485,7 +487,7 @@ Sample XML
       </devices>
     </domain>
 
-.. _QEMU documentation: http://git.qemu-project.org/?p=qemu.git;a=blob;f=docs/specs/vhost-user.txt;h=7890d7169;hb=HEAD
+.. _QEMU documentation: https://www.qemu.org/docs/master/interop/vhost-user.html
 
 Jumbo Frames
 ------------
@@ -539,4 +541,4 @@ shown with::
 
 Further information can be found in the
 `DPDK documentation
-<https://doc.dpdk.org/guides-21.11/prog_guide/vhost_lib.html>`__
+<https://doc.dpdk.org/guides-23.11/prog_guide/vhost_lib.html>`__

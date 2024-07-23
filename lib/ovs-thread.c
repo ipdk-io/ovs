@@ -31,6 +31,7 @@
 #include "openvswitch/poll-loop.h"
 #include "seq.h"
 #include "socket-util.h"
+#include "timeval.h"
 #include "util.h"
 
 #ifdef __CHECKER__
@@ -62,13 +63,14 @@ static bool multithreaded;
  \
         /* Verify that 'l' was initialized. */ \
         if (OVS_UNLIKELY(!l->where)) { \
-            ovs_abort(0, "%s: %s() passed uninitialized ovs_"#TYPE, \
-                      where, __func__); \
+            VLOG_ABORT("%s: %s() passed uninitialized ovs_"#TYPE, \
+                       where, __func__); \
         } \
  \
         error = pthread_##TYPE##_##FUN(&l->lock); \
         if (OVS_UNLIKELY(error)) { \
-            ovs_abort(error, "%s: pthread_%s_%s failed", where, #TYPE, #FUN); \
+            VLOG_ABORT("%s: pthread_%s_%s failed: %s", where, #TYPE, #FUN, \
+                       ovs_strerror(error)); \
         } \
         l->where = where; \
  }
@@ -90,13 +92,14 @@ LOCK_FUNCTION(spin, lock);
  \
         /* Verify that 'l' was initialized. */ \
         if (OVS_UNLIKELY(!l->where)) { \
-            ovs_abort(0, "%s: %s() passed uninitialized ovs_"#TYPE, \
-                      where, __func__); \
+            VLOG_ABORT("%s: %s() passed uninitialized ovs_"#TYPE, \
+                       where, __func__); \
         } \
  \
         error = pthread_##TYPE##_##FUN(&l->lock); \
         if (OVS_UNLIKELY(error) && error != EBUSY) { \
-            ovs_abort(error, "%s: pthread_%s_%s failed", where, #TYPE, #FUN); \
+            VLOG_ABORT("%s: pthread_%s_%s failed: %s", where, #TYPE, #FUN, \
+                       ovs_strerror(error)); \
         } \
         if (!error) { \
             l->where = where; \
@@ -124,7 +127,8 @@ TRY_LOCK_FUNCTION(spin, trylock);
         l->where = WHERE; \
         error = pthread_##TYPE##_##FUN(&l->lock); \
         if (OVS_UNLIKELY(error)) { \
-            ovs_abort(error, "pthread_%s_%s failed", #TYPE, #FUN); \
+            VLOG_ABORT("%s: pthread_%s_%s failed: %s", l->where, #TYPE, #FUN, \
+                       ovs_strerror(error)); \
         } \
     }
 UNLOCK_FUNCTION(mutex, unlock, "<unlocked>");
@@ -142,7 +146,8 @@ UNLOCK_FUNCTION(spin, destroy, NULL);
     {                                                   \
         int error = FUNCTION(arg1);                     \
         if (OVS_UNLIKELY(error)) {                      \
-            ovs_abort(error, "%s failed", #FUNCTION);   \
+            VLOG_ABORT("%s failed: %s", #FUNCTION,      \
+                       ovs_strerror(error));            \
         }                                               \
     }
 #define XPTHREAD_FUNC2(FUNCTION, PARAM1, PARAM2)        \
@@ -151,7 +156,8 @@ UNLOCK_FUNCTION(spin, destroy, NULL);
     {                                                   \
         int error = FUNCTION(arg1, arg2);               \
         if (OVS_UNLIKELY(error)) {                      \
-            ovs_abort(error, "%s failed", #FUNCTION);   \
+            VLOG_ABORT("%s failed: %s", #FUNCTION,      \
+                       ovs_strerror(error));            \
         }                                               \
     }
 #define XPTHREAD_FUNC3(FUNCTION, PARAM1, PARAM2, PARAM3)\
@@ -160,7 +166,8 @@ UNLOCK_FUNCTION(spin, destroy, NULL);
     {                                                   \
         int error = FUNCTION(arg1, arg2, arg3);         \
         if (OVS_UNLIKELY(error)) {                      \
-            ovs_abort(error, "%s failed", #FUNCTION);   \
+            VLOG_ABORT("%s failed: %s", #FUNCTION,      \
+                       ovs_strerror(error));            \
         }                                               \
     }
 
@@ -203,7 +210,7 @@ ovs_mutex_init__(const struct ovs_mutex *l_, int type)
     xpthread_mutexattr_settype(&attr, type);
     error = pthread_mutex_init(&l->lock, &attr);
     if (OVS_UNLIKELY(error)) {
-        ovs_abort(error, "pthread_mutex_init failed");
+        VLOG_ABORT("pthread_mutex_init failed: %s", ovs_strerror(error));
     }
     xpthread_mutexattr_destroy(&attr);
 }
@@ -256,7 +263,7 @@ ovs_rwlock_init(const struct ovs_rwlock *l_)
 #endif
 
     if (OVS_UNLIKELY(error)) {
-        ovs_abort(error, "pthread_rwlock_init failed");
+        VLOG_ABORT("pthread_rwlock_init failed: %s", ovs_strerror(error));
     }
 }
 
@@ -274,7 +281,7 @@ ovs_mutex_cond_wait(pthread_cond_t *cond, const struct ovs_mutex *mutex_)
     error = pthread_cond_wait(cond, &mutex->lock);
 
     if (OVS_UNLIKELY(error)) {
-        ovs_abort(error, "pthread_cond_wait failed");
+        VLOG_ABORT("pthread_cond_wait failed: %s", ovs_strerror(error));
     }
 }
 
@@ -288,7 +295,7 @@ ovs_spin_init__(const struct ovs_spin *l_, int pshared)
     l->where = "<unlocked>";
     error = pthread_spin_init(&l->lock, pshared);
     if (OVS_UNLIKELY(error)) {
-        ovs_abort(error, "pthread_spin_init failed");
+        VLOG_ABORT("pthread_spin_init failed: %s", ovs_strerror(error));
     }
 }
 
@@ -430,13 +437,15 @@ set_min_stack_size(pthread_attr_t *attr, size_t min_stacksize)
 
     error = pthread_attr_getstacksize(attr, &stacksize);
     if (error) {
-        ovs_abort(error, "pthread_attr_getstacksize failed");
+        VLOG_ABORT("pthread_attr_getstacksize failed: %s",
+                   ovs_strerror(error));
     }
 
     if (stacksize < min_stacksize) {
         error = pthread_attr_setstacksize(attr, min_stacksize);
         if (error) {
-            ovs_abort(error, "pthread_attr_setstacksize failed");
+            VLOG_ABORT("pthread_attr_setstacksize failed: %s",
+                       ovs_strerror(error));
         }
     }
 }
@@ -485,7 +494,7 @@ ovs_thread_create(const char *name, void *(*start)(void *), void *arg)
 
     error = pthread_create(&thread, &attr, ovsthread_wrapper, aux);
     if (error) {
-        ovs_abort(error, "pthread_create failed");
+        VLOG_ABORT("pthread_create failed: %s", ovs_strerror(error));
     }
     pthread_attr_destroy(&attr);
     return thread;
@@ -627,40 +636,58 @@ ovs_thread_stats_next_bucket(const struct ovsthread_stats *stats, size_t i)
 }
 
 
-/* Returns the total number of cores available to this process, or 0 if the
- * number cannot be determined. */
+static int
+count_cpu_cores__(void)
+{
+    long int n_cores;
+
+#ifndef _WIN32
+    n_cores = sysconf(_SC_NPROCESSORS_ONLN);
+#else
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    n_cores = sysinfo.dwNumberOfProcessors;
+#endif
+#ifdef __linux__
+    if (n_cores > 0) {
+        cpu_set_t *set = CPU_ALLOC(n_cores);
+
+        if (set) {
+            size_t size = CPU_ALLOC_SIZE(n_cores);
+
+            if (!sched_getaffinity(0, size, set)) {
+                n_cores = CPU_COUNT_S(size, set);
+            }
+            CPU_FREE(set);
+        }
+    }
+#endif
+    return n_cores > 0 ? n_cores : 0;
+}
+
+/* It's unlikely that the available cpus change several times per second and
+ * even if it does, it's not needed (or desired) to react to such changes so
+ * quickly. */
+#define COUNT_CPU_UPDATE_TIME_MS 10000
+
+static struct ovs_mutex cpu_cores_mutex = OVS_MUTEX_INITIALIZER;
+
+/* Returns the current total number of cores available to this process, or 0
+ * if the number cannot be determined. */
 int
 count_cpu_cores(void)
 {
-    static struct ovsthread_once once = OVSTHREAD_ONCE_INITIALIZER;
-    static long int n_cores;
+    static long long int last_updated = 0;
+    long long int now = time_msec();
+    static int cpu_cores;
 
-    if (ovsthread_once_start(&once)) {
-#ifndef _WIN32
-        n_cores = sysconf(_SC_NPROCESSORS_ONLN);
-#ifdef __linux__
-        if (n_cores > 0) {
-            cpu_set_t *set = CPU_ALLOC(n_cores);
-
-            if (set) {
-                size_t size = CPU_ALLOC_SIZE(n_cores);
-
-                if (!sched_getaffinity(0, size, set)) {
-                    n_cores = CPU_COUNT_S(size, set);
-                }
-                CPU_FREE(set);
-            }
-        }
-#endif
-#else
-        SYSTEM_INFO sysinfo;
-        GetSystemInfo(&sysinfo);
-        n_cores = sysinfo.dwNumberOfProcessors;
-#endif
-        ovsthread_once_done(&once);
+    ovs_mutex_lock(&cpu_cores_mutex);
+    if (!last_updated || now - last_updated >= COUNT_CPU_UPDATE_TIME_MS) {
+        last_updated = now;
+        cpu_cores = count_cpu_cores__();
     }
-
-    return n_cores > 0 ? n_cores : 0;
+    ovs_mutex_unlock(&cpu_cores_mutex);
+    return cpu_cores;
 }
 
 /* Returns the total number of cores on the system, or 0 if the

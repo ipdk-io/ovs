@@ -1,28 +1,230 @@
-Post-v3.0.0
+Post-v3.4.0
 --------------------
+
+
+v3.4.0 - xx xxx xxxx
+--------------------
+   - Option '--mlockall' now only locks memory pages on fault, if possible.
+     This also makes it compatible with vHost Post-copy Live Migration.
+   - ovs-appctl:
+     * Added new option [-f|--format] to choose the output format, e.g. 'json'
+       or 'text' (by default).
+     * Added new option [--pretty] to print JSON output in a readable fashion.
+     * 'dpif/show' and 'list-commands' now support output in JSON format.
+     * Added 'ofproto/detrace' command that outputs the set of OpenFlow rules
+       and groups that contributed to the creation of a specific datapath flow.
+   - ovs-vsctl:
+     * Added a new filter column in the Mirror table which can be used to
+       apply filters to mirror ports.
+   - ovs-tcpdump:
+     * Added command line parameter --filter to enable filtering the packets
+       that are captured by tcpdump.
+   - Userspace datapath:
+     * Conntrack now supports 'random' flag for selecting ports in a range
+       while natting and 'persistent' flag for selection of the IP address
+       from a range.
+     * IPv6 UDP tunnel encapsulation including Geneve and VXLAN will now
+       honour the csum option.  Configuring the interface with
+       "options:csum=false" now has the same effect as the udp6zerocsumtx
+       option has with Linux kernel UDP tunnels.
+   - The primary development branch has been renamed from 'master' to 'main'.
+     The OVS tree remains hosted on GitHub.
+     https://github.com/openvswitch/ovs.git
+   - DPDK:
+     * OVS validated with DPDK 23.11.1.
+     * Link status changes are now handled via interrupt mode if the DPDK
+       driver supports it.  It is possible to revert to polling mode by setting
+       per interface 'options:dpdk-lsc-interrupt' to 'false'.
+   - Python:
+     * Added custom transaction support to the Idl via add_op().
+     * Added support for different output formats like 'json' to Python's
+       unixctl classes.
+   - Tunnels:
+     * Previously the kernel datapath did not enable UDP checksums by default
+       in IPv6 tunnels.  This behaviour is non-standard, differs from the
+       Linux kernel, and as also different than the userspace datapath.  Now
+       these tunnels will calculate checksums by default and that behaviour can
+       be changed with "options:csum=false" just as with the userspace
+       datapath.
+   - Local sampling is introduced.  It reuses the OpenFlow sample action and
+     allows samples to be emitted locally (instead of via IPFIX) in a
+     datapath-specific manner.  The Linux kernel datapath is the first to
+     support this feature by using the new datapath 'psample' action.  See
+     'local-group-id' column in the Flow_Sample_Collector_Set table.
+   - A new configuration knob 'other-config:explicit-sampled-drops' in the
+     Open_vSwitch table controls whether an explicit drop action shall be
+     added at the end of datapath flows whose last action is an
+     observability-driven sample action.
+   - OpenFlow:
+     * A new version of the 'sample' action (NXAST_SAMPLE4) is introduced
+       that allows use of subfields in 'obs_point_id' and 'obs_domain_id'.
+
+
+v3.3.0 - 16 Feb 2024
+--------------------
+   - OVSDB:
+     * Support pre-vote mechanism in RAFT that protects the cluster against
+       disruptive servers (section 9.6 of the original RAFT paper).  Upgrading
+       from older version is supported but it may trigger more leader elections
+       during the process, and error logs complaining unrecognized fields may
+       be observed on old nodes.
+     * New command line option --config-file that allows a fine control over
+       remotes and database configuration, including setting options for
+       connection methods for relays and active-backup replication.
+       For more details see ovsdb-server(1) and ovsdb(7).
+     * Make use of cooperative multitasking to improve maintenance of RAFT
+       cluster during long running processing such as online schema conversion.
+   - OpenFlow:
+     * NXT_CT_FLUSH extension is updated to support flushing connections
+       based on mark and labels.  'ct-flush' command of ovs-ofctl updated
+       to support these new arguments accordingly.
+   - ovs-appctl:
+     * 'ofproto/trace' now reports OpenFlow rules that make up a conjunctive
+       flow match.
+     * Output of 'dpctl/show' command no longer shows interface configuration
+       status, only values of the actual configuration options, a.k.a.
+       'requested' configuration.  The interface configuration status,
+       a.k.a. 'configured' values, can be found in the 'status' column of
+       the Interface table, i.e. with 'ovs-vsctl get interface <..> status'.
+       Reported names adjusted accordingly.
+     * Added support for removal of default CT zone limit, e.g.
+       "ovs-appctl dpctl/ct-del-limits default".
+     * 'dpctl/flush-conntrack' is now capable of flushing connections based
+       on mark and labels.
+     * 'mdb/show': support for multicast snooping to show the protocol
+       responsible for adding/updating the entry.
+   - ovs-vsctl:
+     * New commands 'set-zone-limit', 'del-zone-limit' and 'list-zone-limits'
+       to manage the maximum number of connections in conntrack zones via
+       a new 'limit' column in the 'CT_Zone' database table and
+       'ct_zone_default_limit' column in the 'Datapath' table.
+   - Userspace datapath:
+     * Added support for Generic Segmentation Offloading for the cases where
+       TSO is enabled but not supported by an egress interface (except for
+       tunnel interfaces).
+     * 'pmd-sleep-max' is updated to also accept pmd-thread-core:sleep-max.
+       The existing behaviour is maintained and a non key:value pair value
+       will be applied to all other PMD thread cores.'pmd-sleep-show' is
+       updated to show the maximum sleep for each PMD thread core.
+     * The userspace conntrack module no longer requires the user to specify
+       connection helpers in all flow rules. Instead, the helper specified
+       during connection commit will be used by default.
+   - DPDK:
+     * Add support for DPDK 23.11.
+
+
+v3.2.0 - 17 Aug 2023
+--------------------
+   - OVSDB:
+     * Changed format in which ovsdb schema conversion operations are stored in
+       clustered database files.  Such operations are now allowed to contain
+       the bare schema (without data).  This allows to significantly improve
+       the schema conversion performance.
+       New ovsdb-server process will be able to read old database format, but
+       old processes will *fail* to read database created by the new one, if
+       conversion operation is present.  For the cluster service model follow
+       upgrade instructions in 'Upgrading from version 3.1 and earlier to 3.2
+       and later' section of ovsdb(7).
+     * When ovsdb-server is running in relay mode, the probe interval is
+       now configurable via 'ovsdb-server/set-relay-source-probe-interval'
+       unixctl command.
+   - IPFIX template and statistics intervals can now be configured through two
+     new options in the IPFIX table: 'template_interval' and 'stats_interval'.
+   - Linux kernel datapath:
+     * OVS now collects per-interface upcall statistics that can be obtained
+       via 'ovs-appctl dpctl/show -s' or the interface's statistics column
+       in OVSDB.  Available with upstream kernel 6.2+.
+   - OVS route table in userspace now takes into account preferred source
+     address from cached kernel routes.
+   - ovs-appctl:
+     * Add support for selecting the source address with the
+       'ovs-appctl ovs/route/add' command.
+     * New commands "dpctl/{ct-get-sweep-interval,ct-set-sweep-interval}" that
+       allow to get and set, for the userspace datapath, the sweep interval
+       for the conntrack garbage collector.
+     * New commands "dpctl/dump-conntrack-exp" that allows to dump
+       conntrack's expectations for the userspace datapath.
+   - ovs-ctl:
+     * Added new options --[ovsdb-server|ovs-vswitchd]-umask=MODE to set umask
+       value when starting OVS daemons.  E.g., use --ovsdb-server-umask=0002
+       in order to create OVSDB sockets with access mode of 0770.
+   - QoS:
+     * Added new configuration option 'jitter' for a linux-netem QoS type.
+     * 'linux-htb' QoS type now supports rates higher than 34 Gbps.
+   - Ingress Policing:
+     * Ingress policing byte rates can now be configured higher than 34 Gbps.
+   - DPDK:
+     * ovs-vswitchd will keep the CAP_SYS_RAWIO capability when started
+       with the --hw-rawio-access command line option.  This allows the
+       process extra privileges when mapping physical interconnect memory.
+     * New experimental "rx-steering=rss+<protocol>" option to redirect
+       certain protocols (for now, only LACP) to a dedicated hardware queue
+       using the rte_flow API.
+   - SRv6 Tunnel Protocol
+     * Added support for userspace datapath (only).
+   - Userspace datapath:
+     * Connection tracking now supports extraction of SCTP L4 information.
+     * Implementation of OpenFlow meters is now lockless allowing for better
+       multi-thread scalability.
+     * IP and L4 checksum offload support is now enabled by default for
+       interfaces that support it.  See the 'status' column in the 'interface'
+       table to check the status.
+     * 'pmd-maxsleep' other_config was renamed to 'pmd-sleep-max'.
+       'pmd-maxsleep' is deprecated and will be removed in a future release.
+     * 'ovs-appctl dpif-netdev/pmd-sleep-show' command was added to get the
+       max sleep configuration of PMD thread cores.
+     * Removed experimental tag from PMD load based sleeping.
+   - Linux TC offload:
+     * Add support for offloading VXLAN tunnels with the GBP extensions.
+   - Python
+     * Added async DNS support.
+     * Dropped support for Python < 3.6.
+
+
+v3.1.0 - 16 Feb 2023
+--------------------
+   - ovs-vswitchd now detects changes in CPU affinity and adjusts the number
+     of handler and revalidator threads if necessary.
+   - AF_XDP:
+     * Added support for building with libxdp and libbpf >= 0.7.
+     * Support for AF_XDP is now enabled by default if all dependencies are
+       available at the build time.  Use --disable-afxdp to disable.
+       Use --enable-afxdp to fail the build if dependencies are not present.
    - ovs-appctl:
      * "ovs-appctl ofproto/trace" command can now display port names with the
        "--names" option.
+   - OVSDB-IDL:
+     * Add the support to specify the persistent uuid for row insert in both
+       C and Python IDLs.
    - Windows:
      * Conntrack IPv6 fragment support.
    - DPDK:
-     * OVS validated with DPDK 21.11.2.
-       DPDK 21.11.2 contains fixes for the following CVEs:
-       CVE-2022-28199 cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-28199
-       CVE-2022-2132 cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-2132
-       A bug was introduced in DPDK 21.11.1 by the commit
-       01e3dee29c02 ("vhost: fix unsafe vring addresses modifications").
-       This bug can cause a deadlock when vIOMMU is enabled and NUMA
-       reallocation of the virtqueues happen.
-       A fix has been posted and pushed to the DPDK 21.11 branch.
-       It can be found here:
-       https://patches.dpdk.org/project/dpdk/patch/20220725203206.427083-2-david.marchand@redhat.com/.
-       If a user wishes to avoid the issue then it is recommended to use
-       DPDK 21.11.0 until the release of DPDK 21.11.3.
-       It should be noted that DPDK 21.11.0 does not benefit from the numerous
-       bug and CVE fixes addressed since its release.
-       If a user wishes to benefit from these fixes it is recommended to use
-       DPDK 21.11.2.
+     * Add support for DPDK 22.11.1.
+   - For the QoS max-rate and STP/RSTP path-cost configuration OVS now assumes
+     10 Gbps link speed by default in case the actual link speed cannot be
+     determined.  Previously it was 10 Mbps.  Values can still be overridden
+     by specifying 'max-rate' or '[r]stp-path-cost' accordingly.
+   - OpenFlow:
+     * New OpenFlow extension NXT_CT_FLUSH to flush connections matching
+       the specified fields.
+   - ovs-ctl:
+     * New option '--dump-hugepages' to include hugepages in core dumps. This
+       can assist with postmortem analysis involving DPDK, but may also produce
+       significantly larger core dump files.
+   - ovs-dpctl and 'ovs-appctl dpctl/' commands:
+     * 'flush-conntrack' is now capable of handling partial 5-tuple,
+        with additional optional parameter to specify the reply direction.
+   - ovs-ofctl:
+     * New command 'flush-conntrack' that accepts zone and 5-tuple (or partial
+       5-tuple) for both directions.
+   - Support for travis-ci.org based continuous integration builds has been
+     dropped.
+   - Userspace datapath:
+     * Add '-secs' argument to appctl 'dpif-netdev/pmd-rxq-show' to show
+       the pmd usage of an Rx queue over a configurable time period.
+     * Add new experimental PMD load based sleeping feature. PMD threads can
+       request to sleep up to a user configured 'pmd-maxsleep' value under
+       low load conditions.
 
 
 v3.0.0 - 15 Aug 2022

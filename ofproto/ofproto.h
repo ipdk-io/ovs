@@ -74,6 +74,11 @@ struct ofproto_sflow_options {
     char *control_ip;
 };
 
+/* When using UDP, IPFIX Template Records must be re-sent regularly.
+ * The standard default interval is 10 minutes (600 seconds).
+ * Cf. IETF RFC 5101 Section 10.3.6. */
+#define OFPROTO_IPFIX_DEFAULT_TEMPLATE_INTERVAL 600
+
 struct ofproto_ipfix_bridge_exporter_options {
     struct sset targets;
     uint32_t sampling_rate;
@@ -81,6 +86,8 @@ struct ofproto_ipfix_bridge_exporter_options {
     uint32_t obs_point_id;  /* Bridge-wide Observation Point ID. */
     uint32_t cache_active_timeout;
     uint32_t cache_max_flows;
+    uint32_t template_interval;
+    uint32_t stats_interval;
     bool enable_tunnel_sampling;
     bool enable_input_sampling;
     bool enable_output_sampling;
@@ -92,8 +99,15 @@ struct ofproto_ipfix_flow_exporter_options {
     struct sset targets;
     uint32_t cache_active_timeout;
     uint32_t cache_max_flows;
+    uint32_t template_interval;
+    uint32_t stats_interval;
     bool enable_tunnel_sampling;
     char *virtual_obs_id;
+};
+
+struct ofproto_lsample_options {
+    uint32_t collector_set_id;
+    uint32_t group_id;
 };
 
 struct ofproto_rstp_status {
@@ -313,6 +327,8 @@ int ofproto_port_dump_done(struct ofproto_port_dump *);
 #define OFPROTO_MAX_IDLE_DEFAULT 10000 /* ms */
 #define OFPROTO_MAX_REVALIDATOR_DEFAULT 500 /* ms */
 #define OFPROTO_MIN_REVALIDATE_PPS_DEFAULT 5
+#define OFPROTO_OFFLOADED_STATS_DELAY 2000 /* ms */
+#define OFPROTO_EXPLICIT_SAMPLED_DROPS_DEFAULT false
 
 const char *ofproto_port_open_type(const struct ofproto *,
                                    const char *port_type);
@@ -342,6 +358,7 @@ void ofproto_set_flow_limit(unsigned limit);
 void ofproto_set_max_idle(unsigned max_idle);
 void ofproto_set_max_revalidator(unsigned max_revalidator);
 void ofproto_set_min_revalidate_pps(unsigned min_revalidate_pps);
+void ofproto_set_offloaded_stats_delay(unsigned offloaded_stats_delay);
 void ofproto_set_forward_bpdu(struct ofproto *, bool forward_bpdu);
 void ofproto_set_mac_table_config(struct ofproto *, unsigned idle_time,
                                   size_t max_entries);
@@ -362,6 +379,9 @@ int ofproto_set_ipfix(struct ofproto *,
                       const struct ofproto_ipfix_bridge_exporter_options *,
                       const struct ofproto_ipfix_flow_exporter_options *,
                       size_t);
+int ofproto_set_local_sample(struct ofproto *ofproto,
+                             const struct ofproto_lsample_options *,
+                             size_t n_options);
 void ofproto_set_flow_restore_wait(bool flow_restore_wait_db);
 bool ofproto_get_flow_restore_wait(void);
 int ofproto_set_stp(struct ofproto *, const struct ofproto_stp_settings *);
@@ -375,8 +395,13 @@ void ofproto_ct_set_zone_timeout_policy(const char *datapath_type,
                                         struct simap *timeout_policy);
 void ofproto_ct_del_zone_timeout_policy(const char *datapath_type,
                                         uint16_t zone);
+void ofproto_ct_zone_limit_update(const char *datapath_type, int32_t zone_id,
+                                  int64_t *limit);
+void ofproto_ct_zone_limit_protection_update(const char *datapath_type,
+                                             bool protected);
 void ofproto_get_datapath_cap(const char *datapath_type,
                               struct smap *dp_cap);
+void ofproto_set_explicit_sampled_drops(bool explicit_sampled_drops);
 
 /* Configuration of ports. */
 void ofproto_port_unregister(struct ofproto *, ofp_port_t ofp_port);
@@ -491,6 +516,9 @@ struct ofproto_mirror_settings {
     uint16_t out_vlan;          /* Output VLAN, only if out_bundle is NULL. */
     uint16_t snaplen;           /* Max packet size of a mirrored packet
                                    in byte, set to 0 equals 65535. */
+
+    /* Output filter. */
+    char *filter;
 };
 
 int ofproto_mirror_register(struct ofproto *, void *aux,

@@ -38,6 +38,22 @@
 #endif
 
 #if __GNUC__ && !__CHECKER__
+#define OVS_RETURNS_NONNULL __attribute__((returns_nonnull))
+#else
+#define OVS_RETURNS_NONNULL
+#endif
+
+#ifndef typeof
+#define typeof __typeof__
+#endif
+
+#ifndef __cplusplus
+#ifndef asm
+#define asm __asm__
+#endif
+#endif
+
+#if __GNUC__ && !__CHECKER__
 #define OVS_UNUSED __attribute__((__unused__))
 #define OVS_PRINTF_FORMAT(FMT, ARG1) __attribute__((__format__(printf, FMT, ARG1)))
 #define OVS_SCANF_FORMAT(FMT, ARG1) __attribute__((__format__(scanf, FMT, ARG1)))
@@ -51,6 +67,17 @@
 #define OVS_WARN_UNUSED_RESULT
 #define OVS_LIKELY(CONDITION) (!!(CONDITION))
 #define OVS_UNLIKELY(CONDITION) (!!(CONDITION))
+#endif
+
+/* Clang 17's implementation of ubsan enables checking that function pointers
+ * match the type of the called function.  This currently breaks ovs-rcu, which
+ * calls multiple different types of callbacks via a generic void *(void*)
+ * function pointer type.  This macro enables disabling that check for specific
+ * functions. */
+#if __clang__ && __has_feature(undefined_behavior_sanitizer)
+#define OVS_NO_SANITIZE_FUNCTION __attribute__((no_sanitize("function")))
+#else
+#define OVS_NO_SANITIZE_FUNCTION
 #endif
 
 #if __has_feature(c_thread_safety_attributes)

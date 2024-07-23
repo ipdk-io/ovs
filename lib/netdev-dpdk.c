@@ -24,11 +24,13 @@
 #include <unistd.h>
 #include <linux/virtio_net.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <linux/if.h>
 
-#include <rte_bus_pci.h>
+#include <rte_bus.h>
 #include <rte_config.h>
 #include <rte_cycles.h>
+#include <rte_dev.h>
 #include <rte_errno.h>
 #include <rte_ethdev.h>
 #include <rte_flow.h>
@@ -47,6 +49,7 @@
 #include "dpif-netdev.h"
 #include "fatal-signal.h"
 #include "if-notifier.h"
+#include "mpsc-queue.h"
 #include "netdev-provider.h"
 #include "netdev-vport.h"
 #include "odp-util.h"
@@ -55,6 +58,7 @@
 #include "openvswitch/match.h"
 #include "openvswitch/ofp-parse.h"
 #include "openvswitch/ofp-print.h"
+#include "openvswitch/poll-loop.h"
 #include "openvswitch/shash.h"
 #include "openvswitch/vlog.h"
 #include "ovs-numa.h"
@@ -76,7 +80,12 @@ VLOG_DEFINE_THIS_MODULE(netdev_dpdk);
 static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 20);
 
 COVERAGE_DEFINE(vhost_tx_contention);
-COVERAGE_DEFINE(vhost_notification);
+
+static char *vhost_sock_dir = NULL;   /* Location of vhost-user sockets */
+static bool vhost_iommu_enabled = false; /* Status of vHost IOMMU support */
+static bool vhost_postcopy_enabled = false; /* Status of vHost POSTCOPY
+                                             * support. */
+static bool per_port_memory = false; /* Status of per port memory support */
 
 #define DPDK_PORT_WATCHDOG_INTERVAL 5
 
@@ -159,7 +168,6 @@ typedef uint16_t dpdk_port_t;
 
 static const struct rte_eth_conf port_conf = {
     .rxmode = {
-        .split_hdr_size = 0,
         .offloads = 0,
     },
     .rx_adv_conf = {
@@ -181,7 +189,6 @@ static int new_device(int vid);
 static void destroy_device(int vid);
 static int vring_state_changed(int vid, uint16_t queue_id, int enable);
 static void destroy_connection(int vid);
-static void vhost_guest_notified(int vid);
 
 static const struct rte_vhost_device_ops virtio_net_device_ops =
 {
@@ -191,7 +198,6 @@ static const struct rte_vhost_device_ops virtio_net_device_ops =
     .features_changed = NULL,
     .new_connection = NULL,
     .destroy_connection = destroy_connection,
-    .guest_notified = vhost_guest_notified,
 };
 
 /* Custom software stats for dpdk ports */
@@ -406,9 +412,32 @@ enum dpdk_hw_ol_features {
     NETDEV_RX_CHECKSUM_OFFLOAD = 1 << 0,
     NETDEV_RX_HW_CRC_STRIP = 1 << 1,
     NETDEV_RX_HW_SCATTER = 1 << 2,
-    NETDEV_TX_TSO_OFFLOAD = 1 << 3,
-    NETDEV_TX_SCTP_CHECKSUM_OFFLOAD = 1 << 4,
+    NETDEV_TX_IPV4_CKSUM_OFFLOAD = 1 << 3,
+    NETDEV_TX_TCP_CKSUM_OFFLOAD = 1 << 4,
+    NETDEV_TX_UDP_CKSUM_OFFLOAD = 1 << 5,
+    NETDEV_TX_SCTP_CKSUM_OFFLOAD = 1 << 6,
+    NETDEV_TX_TSO_OFFLOAD = 1 << 7,
+    NETDEV_TX_VXLAN_TNL_TSO_OFFLOAD = 1 << 8,
+    NETDEV_TX_GENEVE_TNL_TSO_OFFLOAD = 1 << 9,
+    NETDEV_TX_OUTER_IP_CKSUM_OFFLOAD = 1 << 10,
+    NETDEV_TX_OUTER_UDP_CKSUM_OFFLOAD = 1 << 11,
 };
+
+enum dpdk_rx_steer_flags {
+    DPDK_RX_STEER_LACP = 1 << 0,
+};
+
+/* Flags for the netdev_dpdk virtio_features_state field.
+ * This is used for the virtio features recovery mechanism linked to TSO
+ * support. */
+#define OVS_VIRTIO_F_CLEAN (UINT8_C(1) << 0)
+#define OVS_VIRTIO_F_WORKAROUND (UINT8_C(1) << 1)
+#define OVS_VIRTIO_F_NEGOTIATED (UINT8_C(1) << 2)
+#define OVS_VIRTIO_F_RECONF_PENDING (UINT8_C(1) << 3)
+#define OVS_VIRTIO_F_CLEAN_NEGOTIATED \
+    (OVS_VIRTIO_F_CLEAN | OVS_VIRTIO_F_NEGOTIATED)
+#define OVS_VIRTIO_F_WORKAROUND_NEGOTIATED \
+    (OVS_VIRTIO_F_WORKAROUND | OVS_VIRTIO_F_NEGOTIATED)
 
 /*
  * In order to avoid confusion in variables names, following naming convention
@@ -435,9 +464,8 @@ struct netdev_dpdk {
         bool attached;
         /* If true, rte_eth_dev_start() was successfully called */
         bool started;
-        bool reset_needed;
-        /* 1 pad byte here. */
         struct eth_addr hwaddr;
+        /* 2 pad bytes here. */
         int mtu;
         int socket_id;
         int buf_size;
@@ -466,7 +494,11 @@ struct netdev_dpdk {
         bool vhost_reconfigured;
 
         atomic_uint8_t vhost_tx_retries_max;
-        /* 2 pad bytes here. */
+
+        /* Flags for virtio features recovery mechanism. */
+        uint8_t virtio_features_state;
+
+        /* 1 pad byte here. */
     );
 
     PADDED_MEMBERS(CACHE_LINE_SIZE,
@@ -484,6 +516,9 @@ struct netdev_dpdk {
 
         /* Array of vhost rxq states, see vring_state_changed. */
         bool *vhost_rxq_enabled;
+
+        /* Ensures that Rx metadata delivery is configured only once. */
+        bool rx_metadata_delivery_configured;
     );
 
     PADDED_MEMBERS(CACHE_LINE_SIZE,
@@ -500,6 +535,12 @@ struct netdev_dpdk {
          * netdev_dpdk*_reconfigure() is called */
         int requested_mtu;
         int requested_n_txq;
+        /* User input for n_rxq (see dpdk_set_rxq_config). */
+        int user_n_rxq;
+        /* user_n_rxq + an optional rx steering queue (see
+         * netdev_dpdk_reconfigure). This field is different from the other
+         * requested_* fields as it may contain a different value than the user
+         * input. */
         int requested_n_rxq;
         int requested_rxq_size;
         int requested_txq_size;
@@ -529,6 +570,13 @@ struct netdev_dpdk {
 
         /* VF configuration. */
         struct eth_addr requested_hwaddr;
+
+        /* Requested rx queue steering flags,
+         * from the enum set 'dpdk_rx_steer_flags'. */
+        uint64_t requested_rx_steer_flags;
+        uint64_t rx_steer_flags;
+        size_t rx_steer_flows_num;
+        struct rte_flow **rx_steer_flows;
     );
 
     PADDED_MEMBERS(CACHE_LINE_SIZE,
@@ -557,6 +605,9 @@ int netdev_dpdk_get_vid(const struct netdev_dpdk *dev);
 
 struct ingress_policer *
 netdev_dpdk_get_ingress_policer(const struct netdev_dpdk *dev);
+
+static void netdev_dpdk_mbuf_dump(const char *prefix, const char *message,
+                                  const struct rte_mbuf *);
 
 static bool
 is_dpdk_class(const struct netdev_class *class)
@@ -687,11 +738,11 @@ dpdk_mp_sweep(void) OVS_REQUIRES(dpdk_mp_mutex)
  * calculating.
  */
 static uint32_t
-dpdk_calculate_mbufs(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
+dpdk_calculate_mbufs(struct netdev_dpdk *dev, int mtu)
 {
     uint32_t n_mbufs;
 
-    if (!per_port_mp) {
+    if (!per_port_memory) {
         /* Shared memory are being used.
          * XXX: this is a really rough method of provisioning memory.
          * It's impossible to determine what the exact memory requirements are
@@ -722,7 +773,7 @@ dpdk_calculate_mbufs(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
 }
 
 static struct dpdk_mp *
-dpdk_mp_create(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
+dpdk_mp_create(struct netdev_dpdk *dev, int mtu)
 {
     char mp_name[RTE_MEMPOOL_NAMESIZE];
     const char *netdev_name = netdev_get_name(&dev->up);
@@ -747,7 +798,7 @@ dpdk_mp_create(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
     /* Get the size of each mbuf, based on the MTU */
     mbuf_size = MTU_TO_FRAME_LEN(mtu);
 
-    n_mbufs = dpdk_calculate_mbufs(dev, mtu, per_port_mp);
+    n_mbufs = dpdk_calculate_mbufs(dev, mtu);
 
     do {
         /* Full DPDK memory pool name must be unique and cannot be
@@ -833,15 +884,15 @@ dpdk_mp_create(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
 }
 
 static struct dpdk_mp *
-dpdk_mp_get(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
+dpdk_mp_get(struct netdev_dpdk *dev, int mtu)
 {
-    struct dpdk_mp *dmp, *next;
+    struct dpdk_mp *dmp = NULL, *next;
     bool reuse = false;
 
     ovs_mutex_lock(&dpdk_mp_mutex);
     /* Check if shared memory is being used, if so check existing mempools
      * to see if reuse is possible. */
-    if (!per_port_mp) {
+    if (!per_port_memory) {
         /* If user has provided defined mempools, check if one is suitable
          * and get new buffer size.*/
         mtu = dpdk_get_user_adjusted_mtu(mtu, dev->requested_mtu,
@@ -860,7 +911,7 @@ dpdk_mp_get(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
     dpdk_mp_sweep();
 
     if (!reuse) {
-        dmp = dpdk_mp_create(dev, mtu, per_port_mp);
+        dmp = dpdk_mp_create(dev, mtu);
         if (dmp) {
             /* Shared memory will hit the reuse case above so will not
              * request a mempool that already exists but we need to check
@@ -870,7 +921,7 @@ dpdk_mp_get(struct netdev_dpdk *dev, int mtu, bool per_port_mp)
              * dmp to point to the existing entry and increment the refcount
              * to avoid being freed at a later stage.
              */
-            if (per_port_mp && rte_errno == EEXIST) {
+            if (per_port_memory && rte_errno == EEXIST) {
                 LIST_FOR_EACH (next, list_node, &dpdk_mp_list) {
                     if (dmp->mp == next->mp) {
                         rte_free(dmp);
@@ -915,17 +966,16 @@ netdev_dpdk_mempool_configure(struct netdev_dpdk *dev)
     uint32_t buf_size = dpdk_buf_size(dev->requested_mtu);
     struct dpdk_mp *dmp;
     int ret = 0;
-    bool per_port_mp = dpdk_per_port_memory();
 
     /* With shared memory we do not need to configure a mempool if the MTU
      * and socket ID have not changed, the previous configuration is still
      * valid so return 0 */
-    if (!per_port_mp && dev->mtu == dev->requested_mtu
+    if (!per_port_memory && dev->mtu == dev->requested_mtu
         && dev->socket_id == dev->requested_socket_id) {
         return ret;
     }
 
-    dmp = dpdk_mp_get(dev, FRAME_LEN_TO_MTU(buf_size), per_port_mp);
+    dmp = dpdk_mp_get(dev, FRAME_LEN_TO_MTU(buf_size));
     if (!dmp) {
         VLOG_ERR("Failed to create memory pool for netdev "
                  "%s, with MTU %d on socket %d: %s\n",
@@ -1003,6 +1053,45 @@ dpdk_watchdog(void *dummy OVS_UNUSED)
     return NULL;
 }
 
+static void
+netdev_dpdk_update_netdev_flag(struct netdev_dpdk *dev,
+                               enum dpdk_hw_ol_features hw_ol_features,
+                               enum netdev_ol_flags flag)
+    OVS_REQUIRES(dev->mutex)
+{
+    struct netdev *netdev = &dev->up;
+
+    if (dev->hw_ol_features & hw_ol_features) {
+        netdev->ol_flags |= flag;
+    } else {
+        netdev->ol_flags &= ~flag;
+    }
+}
+
+static void
+netdev_dpdk_update_netdev_flags(struct netdev_dpdk *dev)
+    OVS_REQUIRES(dev->mutex)
+{
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_IPV4_CKSUM_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_IPV4_CKSUM);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_TCP_CKSUM_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_TCP_CKSUM);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_UDP_CKSUM_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_UDP_CKSUM);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_SCTP_CKSUM_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_SCTP_CKSUM);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_TSO_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_TCP_TSO);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_VXLAN_TNL_TSO_OFFLOAD,
+                                   NETDEV_TX_VXLAN_TNL_TSO);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_GENEVE_TNL_TSO_OFFLOAD,
+                                   NETDEV_TX_GENEVE_TNL_TSO);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_OUTER_IP_CKSUM_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_OUTER_IP_CKSUM);
+    netdev_dpdk_update_netdev_flag(dev, NETDEV_TX_OUTER_UDP_CKSUM_OFFLOAD,
+                                   NETDEV_TX_OFFLOAD_OUTER_UDP_CKSUM);
+}
+
 static int
 dpdk_eth_dev_port_config(struct netdev_dpdk *dev, int n_rxq, int n_txq)
 {
@@ -1035,11 +1124,40 @@ dpdk_eth_dev_port_config(struct netdev_dpdk *dev, int n_rxq, int n_txq)
         conf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_KEEP_CRC;
     }
 
+    if (dev->hw_ol_features & NETDEV_TX_IPV4_CKSUM_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_IPV4_CKSUM;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_TCP_CKSUM_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_CKSUM;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_UDP_CKSUM_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_SCTP_CKSUM_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_SCTP_CKSUM;
+    }
+
     if (dev->hw_ol_features & NETDEV_TX_TSO_OFFLOAD) {
-        conf.txmode.offloads |= DPDK_TX_TSO_OFFLOAD_FLAGS;
-        if (dev->hw_ol_features & NETDEV_TX_SCTP_CHECKSUM_OFFLOAD) {
-            conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_SCTP_CKSUM;
-        }
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_TCP_TSO;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_VXLAN_TNL_TSO_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_GENEVE_TNL_TSO_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_GENEVE_TNL_TSO;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_OUTER_IP_CKSUM_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM;
+    }
+
+    if (dev->hw_ol_features & NETDEV_TX_OUTER_UDP_CKSUM_OFFLOAD) {
+        conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM;
     }
 
     /* Limit configured rss hash functions to only those supported
@@ -1136,6 +1254,45 @@ dpdk_eth_flow_ctrl_setup(struct netdev_dpdk *dev) OVS_REQUIRES(dev->mutex)
     }
 }
 
+static void
+dpdk_eth_dev_init_rx_metadata(struct netdev_dpdk *dev)
+{
+    uint64_t rx_metadata = 0;
+    int ret;
+
+    if (dev->rx_metadata_delivery_configured) {
+        return;
+    }
+
+    /* For the fallback offload (non-"transfer" rules). */
+    rx_metadata |= RTE_ETH_RX_METADATA_USER_MARK;
+
+#ifdef ALLOW_EXPERIMENTAL_API
+    /* For the tunnel offload.  */
+    rx_metadata |= RTE_ETH_RX_METADATA_TUNNEL_ID;
+#endif /* ALLOW_EXPERIMENTAL_API */
+
+    ret = rte_eth_rx_metadata_negotiate(dev->port_id, &rx_metadata);
+    if (ret == 0) {
+        if (!(rx_metadata & RTE_ETH_RX_METADATA_USER_MARK)) {
+            VLOG_DBG("%s: The NIC will not provide per-packet USER_MARK",
+                     netdev_get_name(&dev->up));
+        }
+#ifdef ALLOW_EXPERIMENTAL_API
+        if (!(rx_metadata & RTE_ETH_RX_METADATA_TUNNEL_ID)) {
+            VLOG_DBG("%s: The NIC will not provide per-packet TUNNEL_ID",
+                     netdev_get_name(&dev->up));
+        }
+#endif /* ALLOW_EXPERIMENTAL_API */
+    } else {
+        VLOG(ret == -ENOTSUP ? VLL_DBG : VLL_WARN,
+             "%s: Cannot negotiate Rx metadata: %s",
+             netdev_get_name(&dev->up), rte_strerror(-ret));
+    }
+
+    dev->rx_metadata_delivery_configured = true;
+}
+
 static int
 dpdk_eth_dev_init(struct netdev_dpdk *dev)
     OVS_REQUIRES(dev->mutex)
@@ -1145,10 +1302,21 @@ dpdk_eth_dev_init(struct netdev_dpdk *dev)
     struct rte_ether_addr eth_addr;
     int diag;
     int n_rxq, n_txq;
-    uint32_t tx_tso_offload_capa = DPDK_TX_TSO_OFFLOAD_FLAGS;
     uint32_t rx_chksm_offload_capa = RTE_ETH_RX_OFFLOAD_UDP_CKSUM |
                                      RTE_ETH_RX_OFFLOAD_TCP_CKSUM |
                                      RTE_ETH_RX_OFFLOAD_IPV4_CKSUM;
+
+    if (netdev_is_flow_api_enabled()) {
+        /*
+         * Full tunnel offload requires that tunnel ID metadata be
+         * delivered with "miss" packets from the hardware to the
+         * PMD. The same goes for megaflow mark metadata which is
+         * used in MARK + RSS offload scenario.
+         *
+         * Request delivery of such metadata.
+         */
+        dpdk_eth_dev_init_rx_metadata(dev);
+    }
 
     rte_eth_dev_info_get(dev->port_id, &info);
 
@@ -1175,20 +1343,86 @@ dpdk_eth_dev_init(struct netdev_dpdk *dev)
         dev->hw_ol_features &= ~NETDEV_RX_HW_SCATTER;
     }
 
+    if (!strcmp(info.driver_name, "net_tap")) {
+        /* FIXME: L4 checksum offloading is broken in DPDK net/tap driver.
+         * This workaround can be removed once the fix makes it to a DPDK
+         * LTS release used by OVS. */
+        VLOG_INFO("%s: disabled Tx L4 checksum offloads for a net/tap port.",
+                  netdev_get_name(&dev->up));
+        info.tx_offload_capa &= ~RTE_ETH_TX_OFFLOAD_UDP_CKSUM;
+        info.tx_offload_capa &= ~RTE_ETH_TX_OFFLOAD_TCP_CKSUM;
+    }
+
+    if (!strcmp(info.driver_name, "net_ice")
+        || !strcmp(info.driver_name, "net_i40e")
+        || !strcmp(info.driver_name, "net_iavf")) {
+        /* FIXME: Driver advertises the capability but doesn't seem
+         * to actually support it correctly.  Can remove this once
+         * the driver is fixed on DPDK side. */
+        VLOG_INFO("%s: disabled Tx outer udp checksum offloads for a "
+                  "net/ice, net/i40e or net/iavf port.",
+                  netdev_get_name(&dev->up));
+        info.tx_offload_capa &= ~RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM;
+        info.tx_offload_capa &= ~RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO;
+        info.tx_offload_capa &= ~RTE_ETH_TX_OFFLOAD_GENEVE_TNL_TSO;
+    }
+
+    if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_IPV4_CKSUM) {
+        dev->hw_ol_features |= NETDEV_TX_IPV4_CKSUM_OFFLOAD;
+    } else {
+        dev->hw_ol_features &= ~NETDEV_TX_IPV4_CKSUM_OFFLOAD;
+    }
+
+    if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_CKSUM) {
+        dev->hw_ol_features |= NETDEV_TX_TCP_CKSUM_OFFLOAD;
+    } else {
+        dev->hw_ol_features &= ~NETDEV_TX_TCP_CKSUM_OFFLOAD;
+    }
+
+    if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_UDP_CKSUM) {
+        dev->hw_ol_features |= NETDEV_TX_UDP_CKSUM_OFFLOAD;
+    } else {
+        dev->hw_ol_features &= ~NETDEV_TX_UDP_CKSUM_OFFLOAD;
+    }
+
+    if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_SCTP_CKSUM) {
+        dev->hw_ol_features |= NETDEV_TX_SCTP_CKSUM_OFFLOAD;
+    } else {
+        dev->hw_ol_features &= ~NETDEV_TX_SCTP_CKSUM_OFFLOAD;
+    }
+
+    if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_OUTER_IPV4_CKSUM) {
+        dev->hw_ol_features |= NETDEV_TX_OUTER_IP_CKSUM_OFFLOAD;
+    } else {
+        dev->hw_ol_features &= ~NETDEV_TX_OUTER_IP_CKSUM_OFFLOAD;
+    }
+
+    if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_OUTER_UDP_CKSUM) {
+        dev->hw_ol_features |= NETDEV_TX_OUTER_UDP_CKSUM_OFFLOAD;
+    } else {
+        dev->hw_ol_features &= ~NETDEV_TX_OUTER_UDP_CKSUM_OFFLOAD;
+    }
+
     dev->hw_ol_features &= ~NETDEV_TX_TSO_OFFLOAD;
     if (userspace_tso_enabled()) {
-        if ((info.tx_offload_capa & tx_tso_offload_capa)
-            == tx_tso_offload_capa) {
+        if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_TCP_TSO) {
             dev->hw_ol_features |= NETDEV_TX_TSO_OFFLOAD;
-            if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_SCTP_CKSUM) {
-                dev->hw_ol_features |= NETDEV_TX_SCTP_CHECKSUM_OFFLOAD;
-            } else {
-                VLOG_WARN("%s: Tx SCTP checksum offload is not supported, "
-                          "SCTP packets sent to this device will be dropped",
-                          netdev_get_name(&dev->up));
-            }
         } else {
             VLOG_WARN("%s: Tx TSO offload is not supported.",
+                      netdev_get_name(&dev->up));
+        }
+
+        if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_VXLAN_TNL_TSO) {
+            dev->hw_ol_features |= NETDEV_TX_VXLAN_TNL_TSO_OFFLOAD;
+        } else {
+            VLOG_WARN("%s: Tx Vxlan tunnel TSO offload is not supported.",
+                      netdev_get_name(&dev->up));
+        }
+
+        if (info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_GENEVE_TNL_TSO) {
+            dev->hw_ol_features |= NETDEV_TX_GENEVE_TNL_TSO_OFFLOAD;
+        } else {
+            VLOG_WARN("%s: Tx Geneve tunnel TSO offload is not supported.",
                       netdev_get_name(&dev->up));
         }
     }
@@ -1293,9 +1527,9 @@ common_construct(struct netdev *netdev, dpdk_port_t port_no,
     dev->requested_lsc_interrupt_mode = 0;
     ovsrcu_index_init(&dev->vid, -1);
     dev->vhost_reconfigured = false;
+    dev->virtio_features_state = OVS_VIRTIO_F_CLEAN;
     dev->attached = false;
     dev->started = false;
-    dev->reset_needed = false;
 
     ovsrcu_init(&dev->qos_conf, NULL);
 
@@ -1305,16 +1539,23 @@ common_construct(struct netdev *netdev, dpdk_port_t port_no,
 
     netdev->n_rxq = 0;
     netdev->n_txq = 0;
+    dev->user_n_rxq = NR_QUEUE;
     dev->requested_n_rxq = NR_QUEUE;
     dev->requested_n_txq = NR_QUEUE;
     dev->requested_rxq_size = NIC_PORT_DEFAULT_RXQ_SIZE;
     dev->requested_txq_size = NIC_PORT_DEFAULT_TXQ_SIZE;
+    dev->requested_rx_steer_flags = 0;
+    dev->rx_steer_flags = 0;
+    dev->rx_steer_flows_num = 0;
+    dev->rx_steer_flows = NULL;
 
     /* Initialize the flow control to NULL */
     memset(&dev->fc_conf, 0, sizeof dev->fc_conf);
 
     /* Initilize the hardware offload flags to 0 */
     dev->hw_ol_features = 0;
+
+    dev->rx_metadata_delivery_configured = false;
 
     dev->flags = NETDEV_UP | NETDEV_PROMISC;
 
@@ -1379,7 +1620,7 @@ netdev_dpdk_vhost_construct(struct netdev *netdev)
     /* Take the name of the vhost-user port and append it to the location where
      * the socket is to be created, then register the socket.
      */
-    dev->vhost_id = xasprintf("%s/%s", dpdk_get_vhost_sock_dir(), name);
+    dev->vhost_id = xasprintf("%s/%s", vhost_sock_dir, name);
 
     dev->vhost_driver_flags &= ~RTE_VHOST_USER_CLIENT;
 
@@ -1483,12 +1724,17 @@ common_destruct(struct netdev_dpdk *dev)
     ovs_mutex_destroy(&dev->mutex);
 }
 
+static void dpdk_rx_steer_unconfigure(struct netdev_dpdk *);
+
 static void
 netdev_dpdk_destruct(struct netdev *netdev)
 {
     struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
 
     ovs_mutex_lock(&dpdk_mutex);
+
+    /* Destroy any rx-steering flows to allow RXQs to be removed. */
+    dpdk_rx_steer_unconfigure(dev);
 
     rte_eth_dev_stop(dev->port_id);
     dev->started = false;
@@ -1729,39 +1975,41 @@ netdev_dpdk_get_config(const struct netdev *netdev, struct smap *args)
 
     ovs_mutex_lock(&dev->mutex);
 
-    smap_add_format(args, "requested_rx_queues", "%d", dev->requested_n_rxq);
-    smap_add_format(args, "configured_rx_queues", "%d", netdev->n_rxq);
-    smap_add_format(args, "requested_tx_queues", "%d", dev->requested_n_txq);
-    smap_add_format(args, "configured_tx_queues", "%d", netdev->n_txq);
-    smap_add_format(args, "mtu", "%d", dev->mtu);
-
-    if (dev->type == DPDK_DEV_ETH) {
-        smap_add_format(args, "requested_rxq_descriptors", "%d",
-                        dev->requested_rxq_size);
-        smap_add_format(args, "configured_rxq_descriptors", "%d",
-                        dev->rxq_size);
-        smap_add_format(args, "requested_txq_descriptors", "%d",
-                        dev->requested_txq_size);
-        smap_add_format(args, "configured_txq_descriptors", "%d",
-                        dev->txq_size);
-        if (dev->hw_ol_features & NETDEV_RX_CHECKSUM_OFFLOAD) {
-            smap_add(args, "rx_csum_offload", "true");
-        } else {
-            smap_add(args, "rx_csum_offload", "false");
-        }
-        if (dev->hw_ol_features & NETDEV_TX_TSO_OFFLOAD) {
-            smap_add(args, "tx_tso_offload", "true");
-        } else {
-            smap_add(args, "tx_tso_offload", "false");
-        }
-        smap_add(args, "lsc_interrupt_mode",
-                 dev->lsc_interrupt_mode ? "true" : "false");
-
-        if (dpdk_port_is_representor(dev)) {
-            smap_add_format(args, "dpdk-vf-mac", ETH_ADDR_FMT,
-                            ETH_ADDR_ARGS(dev->requested_hwaddr));
-        }
+    if (dev->devargs && dev->devargs[0]) {
+        smap_add_format(args, "dpdk-devargs", "%s", dev->devargs);
     }
+
+    smap_add_format(args, "n_rxq", "%d", dev->user_n_rxq);
+
+    if (dev->fc_conf.mode == RTE_ETH_FC_TX_PAUSE ||
+        dev->fc_conf.mode == RTE_ETH_FC_FULL) {
+        smap_add(args, "rx-flow-ctrl", "true");
+    }
+
+    if (dev->fc_conf.mode == RTE_ETH_FC_RX_PAUSE ||
+        dev->fc_conf.mode == RTE_ETH_FC_FULL) {
+        smap_add(args, "tx-flow-ctrl", "true");
+    }
+
+    if (dev->fc_conf.autoneg) {
+        smap_add(args, "flow-ctrl-autoneg", "true");
+    }
+
+    smap_add_format(args, "n_rxq_desc", "%d", dev->rxq_size);
+    smap_add_format(args, "n_txq_desc", "%d", dev->txq_size);
+
+    if (dev->rx_steer_flags == DPDK_RX_STEER_LACP) {
+        smap_add(args, "rx-steering", "rss+lacp");
+    }
+
+    smap_add(args, "dpdk-lsc-interrupt",
+             dev->lsc_interrupt_mode ? "true" : "false");
+
+    if (dpdk_port_is_representor(dev)) {
+        smap_add_format(args, "dpdk-vf-mac", ETH_ADDR_FMT,
+                        ETH_ADDR_ARGS(dev->requested_hwaddr));
+    }
+
     ovs_mutex_unlock(&dev->mutex);
 
     return 0;
@@ -1823,7 +2071,7 @@ static dpdk_port_t netdev_dpdk_get_port_by_devargs(const char *devargs)
 }
 
 /*
- * Normally, a PCI id (optionally followed by a representor number)
+ * Normally, a PCI id (optionally followed by a representor identifier)
  * is enough for identifying a specific DPDK port.
  * However, for some NICs having multiple ports sharing the same PCI
  * id, using PCI id won't work then.
@@ -1869,32 +2117,71 @@ netdev_dpdk_process_devargs(struct netdev_dpdk *dev,
     return new_port_id;
 }
 
+static struct seq *netdev_dpdk_reset_seq;
+static uint64_t netdev_dpdk_last_reset_seq;
+static atomic_bool netdev_dpdk_pending_reset[RTE_MAX_ETHPORTS];
+
+static void
+netdev_dpdk_wait(const struct netdev_class *netdev_class OVS_UNUSED)
+{
+    uint64_t last_reset_seq = seq_read(netdev_dpdk_reset_seq);
+
+    if (netdev_dpdk_last_reset_seq == last_reset_seq) {
+        seq_wait(netdev_dpdk_reset_seq, netdev_dpdk_last_reset_seq);
+    } else {
+        poll_immediate_wake();
+    }
+}
+
+static void
+netdev_dpdk_run(const struct netdev_class *netdev_class OVS_UNUSED)
+{
+    uint64_t reset_seq = seq_read(netdev_dpdk_reset_seq);
+
+    if (reset_seq != netdev_dpdk_last_reset_seq) {
+        dpdk_port_t port_id;
+
+        netdev_dpdk_last_reset_seq = reset_seq;
+
+        for (port_id = 0; port_id < RTE_MAX_ETHPORTS; port_id++) {
+            struct netdev_dpdk *dev;
+            bool pending_reset;
+
+            atomic_read_relaxed(&netdev_dpdk_pending_reset[port_id],
+                                &pending_reset);
+            if (!pending_reset) {
+                continue;
+            }
+
+            ovs_mutex_lock(&dpdk_mutex);
+            dev = netdev_dpdk_lookup_by_port_id(port_id);
+            if (dev) {
+                ovs_mutex_lock(&dev->mutex);
+                netdev_request_reconfigure(&dev->up);
+                VLOG_DBG_RL(&rl, "%s: Device reset requested.",
+                            netdev_get_name(&dev->up));
+                ovs_mutex_unlock(&dev->mutex);
+            }
+            ovs_mutex_unlock(&dpdk_mutex);
+        }
+    }
+}
+
 static int
 dpdk_eth_event_callback(dpdk_port_t port_id, enum rte_eth_event_type type,
                         void *param OVS_UNUSED, void *ret_param OVS_UNUSED)
 {
-    struct netdev_dpdk *dev;
-
     switch ((int) type) {
     case RTE_ETH_EVENT_INTR_RESET:
-        ovs_mutex_lock(&dpdk_mutex);
-        dev = netdev_dpdk_lookup_by_port_id(port_id);
-        if (dev) {
-            ovs_mutex_lock(&dev->mutex);
-            dev->reset_needed = true;
-            netdev_request_reconfigure(&dev->up);
-            VLOG_DBG_RL(&rl, "%s: Device reset requested.",
-                        netdev_get_name(&dev->up));
-            ovs_mutex_unlock(&dev->mutex);
-        }
-        ovs_mutex_unlock(&dpdk_mutex);
+        atomic_store_relaxed(&netdev_dpdk_pending_reset[port_id], true);
+        seq_change(netdev_dpdk_reset_seq);
         break;
 
     default:
         /* Ignore all other types. */
         break;
-   }
-   return 0;
+    }
+    return 0;
 }
 
 static void
@@ -1904,25 +2191,98 @@ dpdk_set_rxq_config(struct netdev_dpdk *dev, const struct smap *args)
     int new_n_rxq;
 
     new_n_rxq = MAX(smap_get_int(args, "n_rxq", NR_QUEUE), 1);
-    if (new_n_rxq != dev->requested_n_rxq) {
-        dev->requested_n_rxq = new_n_rxq;
+    if (new_n_rxq != dev->user_n_rxq) {
+        dev->user_n_rxq = new_n_rxq;
         netdev_request_reconfigure(&dev->up);
     }
 }
 
 static void
 dpdk_process_queue_size(struct netdev *netdev, const struct smap *args,
-                        const char *flag, int default_size, int *new_size)
+                        struct rte_eth_dev_info *info, bool is_rx)
 {
-    int queue_size = smap_get_int(args, flag, default_size);
+    struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    struct rte_eth_desc_lim *lim;
+    int default_size, queue_size, cur_size, new_requested_size;
+    int *cur_requested_size;
+    bool reconfig = false;
 
+    if (is_rx) {
+        default_size = NIC_PORT_DEFAULT_RXQ_SIZE;
+        new_requested_size = smap_get_int(args, "n_rxq_desc", default_size);
+        cur_size = dev->rxq_size;
+        cur_requested_size = &dev->requested_rxq_size;
+        lim = info ? &info->rx_desc_lim : NULL;
+    } else {
+        default_size = NIC_PORT_DEFAULT_TXQ_SIZE;
+        new_requested_size = smap_get_int(args, "n_txq_desc", default_size);
+        cur_size = dev->txq_size;
+        cur_requested_size = &dev->requested_txq_size;
+        lim = info ? &info->tx_desc_lim : NULL;
+    }
+
+    queue_size = new_requested_size;
+
+    /* Check for OVS limits. */
     if (queue_size <= 0 || queue_size > NIC_PORT_MAX_Q_SIZE
             || !is_pow2(queue_size)) {
         queue_size = default_size;
     }
 
-    if (queue_size != *new_size) {
-        *new_size = queue_size;
+    if (lim) {
+        /* Check for device limits. */
+        if (lim->nb_align) {
+            queue_size = ROUND_UP(queue_size, lim->nb_align);
+        }
+        queue_size = MIN(queue_size, lim->nb_max);
+        queue_size = MAX(queue_size, lim->nb_min);
+    }
+
+    *cur_requested_size = queue_size;
+
+    if (cur_size != queue_size) {
+        netdev_request_reconfigure(netdev);
+        reconfig = true;
+    }
+    if (new_requested_size != queue_size) {
+        VLOG(reconfig ? VLL_INFO : VLL_DBG,
+             "%s: Unable to set the number of %s descriptors to %d. "
+             "Adjusted to %d.", netdev_get_name(netdev),
+             is_rx ? "rx": "tx", new_requested_size, queue_size);
+    }
+}
+
+static void
+dpdk_set_rx_steer_config(struct netdev *netdev, struct netdev_dpdk *dev,
+                         const struct smap *args, char **errp)
+{
+    const char *arg = smap_get_def(args, "rx-steering", "rss");
+    uint64_t flags = 0;
+
+    if (!strcmp(arg, "rss+lacp")) {
+        flags = DPDK_RX_STEER_LACP;
+    } else if (strcmp(arg, "rss")) {
+        VLOG_WARN_BUF(errp, "%s: options:rx-steering "
+                      "unsupported parameter value '%s'",
+                      netdev_get_name(netdev), arg);
+    }
+
+    if (flags && dev->type != DPDK_DEV_ETH) {
+        VLOG_WARN_BUF(errp, "%s: options:rx-steering "
+                      "is only supported on ethernet ports",
+                      netdev_get_name(netdev));
+        flags = 0;
+    }
+
+    if (flags && netdev_is_flow_api_enabled()) {
+        VLOG_WARN_BUF(errp, "%s: options:rx-steering "
+                      "is incompatible with hw-offload",
+                      netdev_get_name(netdev));
+        flags = 0;
+    }
+
+    if (flags != dev->requested_rx_steer_flags) {
+        dev->requested_rx_steer_flags = flags;
         netdev_request_reconfigure(netdev);
     }
 }
@@ -1939,21 +2299,18 @@ netdev_dpdk_set_config(struct netdev *netdev, const struct smap *args,
         {RTE_ETH_FC_NONE,     RTE_ETH_FC_TX_PAUSE},
         {RTE_ETH_FC_RX_PAUSE, RTE_ETH_FC_FULL    }
     };
+    struct rte_eth_dev_info info;
     const char *new_devargs;
     const char *vf_mac;
     int err = 0;
+    int ret;
 
     ovs_mutex_lock(&dpdk_mutex);
     ovs_mutex_lock(&dev->mutex);
 
-    dpdk_set_rxq_config(dev, args);
+    dpdk_set_rx_steer_config(netdev, dev, args, errp);
 
-    dpdk_process_queue_size(netdev, args, "n_rxq_desc",
-                            NIC_PORT_DEFAULT_RXQ_SIZE,
-                            &dev->requested_rxq_size);
-    dpdk_process_queue_size(netdev, args, "n_txq_desc",
-                            NIC_PORT_DEFAULT_TXQ_SIZE,
-                            &dev->requested_txq_size);
+    dpdk_set_rxq_config(dev, args);
 
     new_devargs = smap_get(args, "dpdk-devargs");
 
@@ -2010,29 +2367,44 @@ netdev_dpdk_set_config(struct netdev *netdev, const struct smap *args,
         goto out;
     }
 
+    ret = rte_eth_dev_info_get(dev->port_id, &info);
+
+    dpdk_process_queue_size(netdev, args, !ret ? &info : NULL, true);
+    dpdk_process_queue_size(netdev, args, !ret ? &info : NULL, false);
+
     vf_mac = smap_get(args, "dpdk-vf-mac");
     if (vf_mac) {
         struct eth_addr mac;
 
         if (!dpdk_port_is_representor(dev)) {
-            VLOG_WARN_BUF(errp, "'%s' is trying to set the VF MAC '%s' "
-                          "but 'options:dpdk-vf-mac' is only supported for "
-                          "VF representors.",
-                          netdev_get_name(netdev), vf_mac);
+            VLOG_WARN("'%s' is trying to set the VF MAC '%s' "
+                      "but 'options:dpdk-vf-mac' is only supported for "
+                      "VF representors.",
+                      netdev_get_name(netdev), vf_mac);
         } else if (!eth_addr_from_string(vf_mac, &mac)) {
-            VLOG_WARN_BUF(errp, "interface '%s': cannot parse VF MAC '%s'.",
-                          netdev_get_name(netdev), vf_mac);
+            VLOG_WARN("interface '%s': cannot parse VF MAC '%s'.",
+                      netdev_get_name(netdev), vf_mac);
         } else if (eth_addr_is_multicast(mac)) {
-            VLOG_WARN_BUF(errp,
-                          "interface '%s': cannot set VF MAC to multicast "
-                          "address '%s'.", netdev_get_name(netdev), vf_mac);
+            VLOG_WARN("interface '%s': cannot set VF MAC to multicast "
+                      "address '%s'.", netdev_get_name(netdev), vf_mac);
         } else if (!eth_addr_equals(dev->requested_hwaddr, mac)) {
             dev->requested_hwaddr = mac;
             netdev_request_reconfigure(netdev);
         }
     }
 
-    lsc_interrupt_mode = smap_get_bool(args, "dpdk-lsc-interrupt", false);
+    lsc_interrupt_mode = smap_get_bool(args, "dpdk-lsc-interrupt", true);
+    if (lsc_interrupt_mode && !(*info.dev_flags & RTE_ETH_DEV_INTR_LSC)) {
+        if (smap_get(args, "dpdk-lsc-interrupt")) {
+            VLOG_WARN_BUF(errp, "'%s': link status interrupt is not "
+                          "supported.", netdev_get_name(netdev));
+            err = EINVAL;
+            goto out;
+        }
+        VLOG_DBG("'%s': not enabling link status interrupt.",
+                 netdev_get_name(netdev));
+        lsc_interrupt_mode = false;
+    }
     if (dev->requested_lsc_interrupt_mode != lsc_interrupt_mode) {
         dev->requested_lsc_interrupt_mode = lsc_interrupt_mode;
         netdev_request_reconfigure(netdev);
@@ -2062,8 +2434,8 @@ netdev_dpdk_set_config(struct netdev *netdev, const struct smap *args,
             }
             err = 0; /* Not fatal. */
         } else {
-            VLOG_WARN("%s: Cannot get flow control parameters: %s",
-                      netdev_get_name(netdev), rte_strerror(err));
+            VLOG_WARN_BUF(errp, "%s: Cannot get flow control parameters: %s",
+                          netdev_get_name(netdev), rte_strerror(err));
         }
         goto out;
     }
@@ -2079,6 +2451,29 @@ out:
     ovs_mutex_unlock(&dpdk_mutex);
 
     return err;
+}
+
+static int
+netdev_dpdk_vhost_client_get_config(const struct netdev *netdev,
+                                    struct smap *args)
+{
+    struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    int tx_retries_max;
+
+    ovs_mutex_lock(&dev->mutex);
+
+    if (dev->vhost_id) {
+        smap_add(args, "vhost-server-path", dev->vhost_id);
+    }
+
+    atomic_read_relaxed(&dev->vhost_tx_retries_max, &tx_retries_max);
+    if (tx_retries_max != VHOST_ENQ_RETRY_DEF) {
+        smap_add_format(args, "tx-retries-max", "%d", tx_retries_max);
+    }
+
+    ovs_mutex_unlock(&dev->mutex);
+
+    return 0;
 }
 
 static int
@@ -2195,31 +2590,133 @@ static bool
 netdev_dpdk_prep_hwol_packet(struct netdev_dpdk *dev, struct rte_mbuf *mbuf)
 {
     struct dp_packet *pkt = CONTAINER_OF(mbuf, struct dp_packet, mbuf);
+    void *l2;
+    void *l3;
+    void *l4;
 
-    if (mbuf->ol_flags & RTE_MBUF_F_TX_L4_MASK) {
-        mbuf->l2_len = (char *)dp_packet_l3(pkt) - (char *)dp_packet_eth(pkt);
-        mbuf->l3_len = (char *)dp_packet_l4(pkt) - (char *)dp_packet_l3(pkt);
-        mbuf->outer_l2_len = 0;
-        mbuf->outer_l3_len = 0;
-    }
+    const uint64_t all_inner_requests = (RTE_MBUF_F_TX_IP_CKSUM |
+                                         RTE_MBUF_F_TX_L4_MASK |
+                                         RTE_MBUF_F_TX_TCP_SEG);
+    const uint64_t all_outer_requests = (RTE_MBUF_F_TX_OUTER_IP_CKSUM |
+                                         RTE_MBUF_F_TX_OUTER_UDP_CKSUM);
+    const uint64_t all_requests = all_inner_requests | all_outer_requests;
+    const uint64_t all_inner_marks = (RTE_MBUF_F_TX_IPV4 |
+                                      RTE_MBUF_F_TX_IPV6);
+    const uint64_t all_outer_marks = (RTE_MBUF_F_TX_OUTER_IPV4 |
+                                      RTE_MBUF_F_TX_OUTER_IPV6 |
+                                      RTE_MBUF_F_TX_TUNNEL_MASK);
+    const uint64_t all_marks = all_inner_marks | all_outer_marks;
 
-    if (mbuf->ol_flags & RTE_MBUF_F_TX_TCP_SEG) {
-        struct tcp_header *th = dp_packet_l4(pkt);
+    if (!(mbuf->ol_flags & all_requests)) {
+        /* No offloads requested, no marks should be set. */
+        mbuf->ol_flags &= ~all_marks;
 
-        if (!th) {
-            VLOG_WARN_RL(&rl, "%s: TCP Segmentation without L4 header"
-                         " pkt len: %"PRIu32"", dev->up.name, mbuf->pkt_len);
+        uint64_t unexpected = mbuf->ol_flags & RTE_MBUF_F_TX_OFFLOAD_MASK;
+        if (OVS_UNLIKELY(unexpected)) {
+            VLOG_WARN_RL(&rl, "%s: Unexpected Tx offload flags: %#"PRIx64,
+                         netdev_get_name(&dev->up), unexpected);
+            netdev_dpdk_mbuf_dump(netdev_get_name(&dev->up),
+                                  "Packet with unexpected ol_flags", mbuf);
             return false;
         }
+        return true;
+    }
+
+    const uint64_t tunnel_type = mbuf->ol_flags & RTE_MBUF_F_TX_TUNNEL_MASK;
+    if (OVS_UNLIKELY(tunnel_type &&
+                     tunnel_type != RTE_MBUF_F_TX_TUNNEL_GENEVE &&
+                     tunnel_type != RTE_MBUF_F_TX_TUNNEL_VXLAN)) {
+        VLOG_WARN_RL(&rl, "%s: Unexpected tunnel type: %#"PRIx64,
+                     netdev_get_name(&dev->up), tunnel_type);
+        netdev_dpdk_mbuf_dump(netdev_get_name(&dev->up),
+                              "Packet with unexpected tunnel type", mbuf);
+        return false;
+    }
+
+    if (tunnel_type && (mbuf->ol_flags & all_inner_requests)) {
+        if (mbuf->ol_flags & all_outer_requests) {
+            mbuf->outer_l2_len = (char *) dp_packet_l3(pkt) -
+                                 (char *) dp_packet_eth(pkt);
+            mbuf->outer_l3_len = (char *) dp_packet_l4(pkt) -
+                                 (char *) dp_packet_l3(pkt);
+
+            /* Inner L2 length must account for the tunnel header length. */
+            l2 = dp_packet_l4(pkt);
+            l3 = dp_packet_inner_l3(pkt);
+            l4 = dp_packet_inner_l4(pkt);
+        } else {
+            /* If no outer offloading is requested, clear outer marks. */
+            mbuf->ol_flags &= ~all_outer_marks;
+            mbuf->outer_l2_len = 0;
+            mbuf->outer_l3_len = 0;
+
+            /* Skip outer headers. */
+            l2 = dp_packet_eth(pkt);
+            l3 = dp_packet_inner_l3(pkt);
+            l4 = dp_packet_inner_l4(pkt);
+        }
+    } else {
+        if (tunnel_type) {
+            /* No inner offload is requested, fallback to non tunnel
+             * checksum offloads. */
+            mbuf->ol_flags &= ~all_inner_marks;
+            if (mbuf->ol_flags & RTE_MBUF_F_TX_OUTER_IP_CKSUM) {
+                mbuf->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;
+                mbuf->ol_flags |= RTE_MBUF_F_TX_IPV4;
+            }
+            if (mbuf->ol_flags & RTE_MBUF_F_TX_OUTER_UDP_CKSUM) {
+                mbuf->ol_flags |= RTE_MBUF_F_TX_UDP_CKSUM;
+                mbuf->ol_flags |= mbuf->ol_flags & RTE_MBUF_F_TX_OUTER_IPV4
+                                  ? RTE_MBUF_F_TX_IPV4 : RTE_MBUF_F_TX_IPV6;
+            }
+            mbuf->ol_flags &= ~(all_outer_requests | all_outer_marks);
+        }
+        mbuf->outer_l2_len = 0;
+        mbuf->outer_l3_len = 0;
+
+        l2 = dp_packet_eth(pkt);
+        l3 = dp_packet_l3(pkt);
+        l4 = dp_packet_l4(pkt);
+    }
+
+    ovs_assert(l4);
+
+    mbuf->l2_len = (char *) l3 - (char *) l2;
+    mbuf->l3_len = (char *) l4 - (char *) l3;
+
+    if (mbuf->ol_flags & RTE_MBUF_F_TX_TCP_SEG) {
+        struct tcp_header *th = l4;
+        uint16_t link_tso_segsz;
+        int hdr_len;
 
         mbuf->l4_len = TCP_OFFSET(th->tcp_ctl) * 4;
-        mbuf->ol_flags |= RTE_MBUF_F_TX_TCP_CKSUM;
-        mbuf->tso_segsz = dev->mtu - mbuf->l3_len - mbuf->l4_len;
+        if (tunnel_type) {
+            link_tso_segsz = dev->mtu - mbuf->l2_len - mbuf->l3_len -
+                             mbuf->l4_len - mbuf->outer_l3_len;
+        } else {
+            link_tso_segsz = dev->mtu - mbuf->l3_len - mbuf->l4_len;
+        }
 
-        if (mbuf->ol_flags & RTE_MBUF_F_TX_IPV4) {
-            mbuf->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;
+        if (mbuf->tso_segsz > link_tso_segsz) {
+            mbuf->tso_segsz = link_tso_segsz;
+        }
+
+        hdr_len = mbuf->l2_len + mbuf->l3_len + mbuf->l4_len;
+        if (OVS_UNLIKELY((hdr_len + mbuf->tso_segsz) > dev->max_packet_len)) {
+            VLOG_WARN_RL(&rl, "%s: Oversized TSO packet. hdr: %"PRIu32", "
+                         "gso: %"PRIu32", max len: %"PRIu32"",
+                         dev->up.name, hdr_len, mbuf->tso_segsz,
+                         dev->max_packet_len);
+            return false;
         }
     }
+
+    /* If L4 checksum is requested, IPv4 should be requested as well. */
+    if (mbuf->ol_flags & RTE_MBUF_F_TX_L4_MASK
+        && mbuf->ol_flags & RTE_MBUF_F_TX_IPV4) {
+        mbuf->ol_flags |= RTE_MBUF_F_TX_IP_CKSUM;
+    }
+
     return true;
 }
 
@@ -2250,6 +2747,35 @@ netdev_dpdk_prep_hwol_batch(struct netdev_dpdk *dev, struct rte_mbuf **pkts,
     return cnt;
 }
 
+static void
+netdev_dpdk_mbuf_dump(const char *prefix, const char *message,
+                      const struct rte_mbuf *mbuf)
+{
+    static struct vlog_rate_limit dump_rl = VLOG_RATE_LIMIT_INIT(5, 5);
+    char *response = NULL;
+    FILE *stream;
+    size_t size;
+
+    if (VLOG_DROP_DBG(&dump_rl)) {
+        return;
+    }
+
+    stream = open_memstream(&response, &size);
+    if (!stream) {
+        VLOG_ERR("Unable to open memstream for mbuf dump: %s.",
+                 ovs_strerror(errno));
+        return;
+    }
+
+    rte_pktmbuf_dump(stream, mbuf, rte_pktmbuf_pkt_len(mbuf));
+
+    fclose(stream);
+
+    VLOG_DBG(prefix ? "%s: %s:\n%s" : "%s%s:\n%s",
+             prefix ? prefix : "", message, response);
+    free(response);
+}
+
 /* Tries to transmit 'pkts' to txq 'qid' of device 'dev'.  Takes ownership of
  * 'pkts', even in case of failure.
  *
@@ -2261,13 +2787,13 @@ netdev_dpdk_eth_tx_burst(struct netdev_dpdk *dev, int qid,
     uint32_t nb_tx = 0;
     uint16_t nb_tx_prep = cnt;
 
-    if (userspace_tso_enabled()) {
-        nb_tx_prep = rte_eth_tx_prepare(dev->port_id, qid, pkts, cnt);
-        if (nb_tx_prep != cnt) {
-            VLOG_WARN_RL(&rl, "%s: Output batch contains invalid packets. "
-                         "Only %u/%u are valid: %s", dev->up.name, nb_tx_prep,
-                         cnt, rte_strerror(rte_errno));
-        }
+    nb_tx_prep = rte_eth_tx_prepare(dev->port_id, qid, pkts, cnt);
+    if (nb_tx_prep != cnt) {
+        VLOG_WARN_RL(&rl, "%s: Output batch contains invalid packets. "
+                     "Only %u/%u are valid: %s", netdev_get_name(&dev->up),
+                     nb_tx_prep, cnt, rte_strerror(rte_errno));
+        netdev_dpdk_mbuf_dump(netdev_get_name(&dev->up),
+                              "First invalid packet", pkts[nb_tx_prep]);
     }
 
     while (nb_tx != nb_tx_prep) {
@@ -2283,13 +2809,8 @@ netdev_dpdk_eth_tx_burst(struct netdev_dpdk *dev, int qid,
     }
 
     if (OVS_UNLIKELY(nb_tx != cnt)) {
-        /* Free buffers, which we couldn't transmit, one at a time (each
-         * packet could come from a different mempool) */
-        int i;
-
-        for (i = nb_tx; i < cnt; i++) {
-            rte_pktmbuf_free(pkts[i]);
-        }
+        /* Free buffers, which we couldn't transmit. */
+        rte_pktmbuf_free_bulk(&pkts[nb_tx], cnt - nb_tx);
     }
 
     return cnt - nb_tx;
@@ -2357,72 +2878,6 @@ is_vhost_running(struct netdev_dpdk *dev)
     return (netdev_dpdk_get_vid(dev) >= 0 && dev->vhost_reconfigured);
 }
 
-static inline void
-netdev_dpdk_vhost_update_rx_size_counters(struct netdev_stats *stats,
-                                          unsigned int packet_size)
-{
-    /* Hard-coded search for the size bucket. */
-    if (packet_size < 256) {
-        if (packet_size >= 128) {
-            stats->rx_128_to_255_packets++;
-        } else if (packet_size <= 64) {
-            stats->rx_1_to_64_packets++;
-        } else {
-            stats->rx_65_to_127_packets++;
-        }
-    } else {
-        if (packet_size >= 1523) {
-            stats->rx_1523_to_max_packets++;
-        } else if (packet_size >= 1024) {
-            stats->rx_1024_to_1522_packets++;
-        } else if (packet_size < 512) {
-            stats->rx_256_to_511_packets++;
-        } else {
-            stats->rx_512_to_1023_packets++;
-        }
-    }
-}
-
-static inline void
-netdev_dpdk_vhost_update_rx_counters(struct netdev_dpdk *dev,
-                                     struct dp_packet **packets, int count,
-                                     int qos_drops)
-{
-    struct netdev_stats *stats = &dev->stats;
-    struct dp_packet *packet;
-    unsigned int packet_size;
-    int i;
-
-    stats->rx_packets += count;
-    stats->rx_dropped += qos_drops;
-    for (i = 0; i < count; i++) {
-        packet = packets[i];
-        packet_size = dp_packet_size(packet);
-
-        if (OVS_UNLIKELY(packet_size < ETH_HEADER_LEN)) {
-            /* This only protects the following multicast counting from
-             * too short packets, but it does not stop the packet from
-             * further processing. */
-            stats->rx_errors++;
-            stats->rx_length_errors++;
-            continue;
-        }
-
-        netdev_dpdk_vhost_update_rx_size_counters(stats, packet_size);
-
-        struct eth_header *eh = (struct eth_header *) dp_packet_data(packet);
-        if (OVS_UNLIKELY(eth_addr_is_multicast(eh->eth_dst))) {
-            stats->multicast++;
-        }
-
-        stats->rx_bytes += packet_size;
-    }
-
-    if (OVS_UNLIKELY(qos_drops)) {
-        dev->sw_stats->rx_qos_drops += qos_drops;
-    }
-}
-
 /*
  * The receive path for the vhost port is the TX path out from guest.
  */
@@ -2467,10 +2922,12 @@ netdev_dpdk_vhost_rxq_recv(struct netdev_rxq *rxq,
         qos_drops -= nb_rx;
     }
 
-    rte_spinlock_lock(&dev->stats_lock);
-    netdev_dpdk_vhost_update_rx_counters(dev, batch->packets,
-                                         nb_rx, qos_drops);
-    rte_spinlock_unlock(&dev->stats_lock);
+    if (OVS_UNLIKELY(qos_drops)) {
+        rte_spinlock_lock(&dev->stats_lock);
+        dev->stats.rx_dropped += qos_drops;
+        dev->sw_stats->rx_qos_drops += qos_drops;
+        rte_spinlock_unlock(&dev->stats_lock);
+    }
 
     batch->count = nb_rx;
     dp_packet_batch_init_packet_fields(batch);
@@ -2560,7 +3017,8 @@ netdev_dpdk_filter_packet_len(struct netdev_dpdk *dev, struct rte_mbuf **pkts,
     int cnt = 0;
     struct rte_mbuf *pkt;
 
-    /* Filter oversized packets, unless are marked for TSO. */
+    /* Filter oversized packets. The TSO packets are filtered out
+     * during the offloading preparation for performance reasons. */
     for (i = 0; i < pkt_cnt; i++) {
         pkt = pkts[i];
         if (OVS_UNLIKELY((pkt->pkt_len > dev->max_packet_len)
@@ -2579,38 +3037,6 @@ netdev_dpdk_filter_packet_len(struct netdev_dpdk *dev, struct rte_mbuf **pkts,
     }
 
     return cnt;
-}
-
-static inline void
-netdev_dpdk_vhost_update_tx_counters(struct netdev_dpdk *dev,
-                                     struct dp_packet **packets,
-                                     int attempted,
-                                     struct netdev_dpdk_sw_stats *sw_stats_add)
-{
-    int dropped = sw_stats_add->tx_mtu_exceeded_drops +
-                  sw_stats_add->tx_qos_drops +
-                  sw_stats_add->tx_failure_drops +
-                  sw_stats_add->tx_invalid_hwol_drops;
-    struct netdev_stats *stats = &dev->stats;
-    int sent = attempted - dropped;
-    int i;
-
-    stats->tx_packets += sent;
-    stats->tx_dropped += dropped;
-
-    for (i = 0; i < sent; i++) {
-        stats->tx_bytes += dp_packet_size(packets[i]);
-    }
-
-    if (OVS_UNLIKELY(dropped || sw_stats_add->tx_retries)) {
-        struct netdev_dpdk_sw_stats *sw_stats = dev->sw_stats;
-
-        sw_stats->tx_retries            += sw_stats_add->tx_retries;
-        sw_stats->tx_failure_drops      += sw_stats_add->tx_failure_drops;
-        sw_stats->tx_mtu_exceeded_drops += sw_stats_add->tx_mtu_exceeded_drops;
-        sw_stats->tx_qos_drops          += sw_stats_add->tx_qos_drops;
-        sw_stats->tx_invalid_hwol_drops += sw_stats_add->tx_invalid_hwol_drops;
-    }
 }
 
 static void
@@ -2703,15 +3129,24 @@ dpdk_copy_dp_packet_to_mbuf(struct rte_mempool *mp, struct dp_packet *pkt_orig)
     mbuf_dest->packet_type = pkt_orig->mbuf.packet_type;
     mbuf_dest->ol_flags |= (pkt_orig->mbuf.ol_flags &
                             ~(RTE_MBUF_F_EXTERNAL | RTE_MBUF_F_INDIRECT));
+    mbuf_dest->tso_segsz = pkt_orig->mbuf.tso_segsz;
 
     memcpy(&pkt_dest->l2_pad_size, &pkt_orig->l2_pad_size,
            sizeof(struct dp_packet) - offsetof(struct dp_packet, l2_pad_size));
 
-    if (mbuf_dest->ol_flags & RTE_MBUF_F_TX_L4_MASK) {
-        mbuf_dest->l2_len = (char *)dp_packet_l3(pkt_dest)
-                                - (char *)dp_packet_eth(pkt_dest);
-        mbuf_dest->l3_len = (char *)dp_packet_l4(pkt_dest)
+    if (dp_packet_l3(pkt_dest)) {
+        if (dp_packet_eth(pkt_dest)) {
+            mbuf_dest->l2_len = (char *) dp_packet_l3(pkt_dest)
+                                - (char *) dp_packet_eth(pkt_dest);
+        } else {
+            mbuf_dest->l2_len = 0;
+        }
+        if (dp_packet_l4(pkt_dest)) {
+            mbuf_dest->l3_len = (char *) dp_packet_l4(pkt_dest)
                                 - (char *) dp_packet_l3(pkt_dest);
+        } else {
+            mbuf_dest->l3_len = 0;
+        }
     }
 
     return pkt_dest;
@@ -2753,11 +3188,20 @@ netdev_dpdk_common_send(struct netdev *netdev, struct dp_packet_batch *batch,
     struct rte_mbuf **pkts = (struct rte_mbuf **) batch->packets;
     struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
     size_t cnt, pkt_cnt = dp_packet_batch_size(batch);
+    struct dp_packet *packet;
+    bool need_copy = false;
 
     memset(stats, 0, sizeof *stats);
 
+    DP_PACKET_BATCH_FOR_EACH (i, packet, batch) {
+        if (packet->source != DPBUF_DPDK) {
+            need_copy = true;
+            break;
+        }
+    }
+
     /* Copy dp-packets to mbufs. */
-    if (OVS_UNLIKELY(batch->packets[0]->source != DPBUF_DPDK)) {
+    if (OVS_UNLIKELY(need_copy)) {
         cnt = dpdk_copy_batch_to_mbuf(netdev, batch);
         stats->tx_failure_drops += pkt_cnt - cnt;
         pkt_cnt = cnt;
@@ -2769,11 +3213,9 @@ netdev_dpdk_common_send(struct netdev *netdev, struct dp_packet_batch *batch,
     pkt_cnt = cnt;
 
     /* Prepare each mbuf for hardware offloading. */
-    if (userspace_tso_enabled()) {
-        cnt = netdev_dpdk_prep_hwol_batch(dev, pkts, pkt_cnt);
-        stats->tx_invalid_hwol_drops += pkt_cnt - cnt;
-        pkt_cnt = cnt;
-    }
+    cnt = netdev_dpdk_prep_hwol_batch(dev, pkts, pkt_cnt);
+    stats->tx_invalid_hwol_drops += pkt_cnt - cnt;
+    pkt_cnt = cnt;
 
     /* Apply Quality of Service policy. */
     cnt = netdev_dpdk_qos_run(dev, pkts, pkt_cnt, true);
@@ -2793,6 +3235,7 @@ netdev_dpdk_vhost_send(struct netdev *netdev, int qid,
     int vid = netdev_dpdk_get_vid(dev);
     struct netdev_dpdk_sw_stats stats;
     struct rte_mbuf **pkts;
+    int dropped;
     int retries;
 
     batch_cnt = cnt = dp_packet_batch_size(batch);
@@ -2812,6 +3255,7 @@ netdev_dpdk_vhost_send(struct netdev *netdev, int qid,
     }
 
     cnt = netdev_dpdk_common_send(netdev, batch, &stats);
+    dropped = batch_cnt - cnt;
 
     pkts = (struct rte_mbuf **) batch->packets;
     vhost_batch_cnt = cnt;
@@ -2842,17 +3286,24 @@ netdev_dpdk_vhost_send(struct netdev *netdev, int qid,
     rte_spinlock_unlock(&dev->tx_q[qid].tx_lock);
 
     stats.tx_failure_drops += cnt;
+    dropped += cnt;
     stats.tx_retries = MIN(retries, max_retries);
 
-    rte_spinlock_lock(&dev->stats_lock);
-    netdev_dpdk_vhost_update_tx_counters(dev, batch->packets, batch_cnt,
-                                         &stats);
-    rte_spinlock_unlock(&dev->stats_lock);
+    if (OVS_UNLIKELY(dropped || stats.tx_retries)) {
+        struct netdev_dpdk_sw_stats *sw_stats = dev->sw_stats;
+
+        rte_spinlock_lock(&dev->stats_lock);
+        dev->stats.tx_dropped += dropped;
+        sw_stats->tx_retries += stats.tx_retries;
+        sw_stats->tx_failure_drops += stats.tx_failure_drops;
+        sw_stats->tx_mtu_exceeded_drops += stats.tx_mtu_exceeded_drops;
+        sw_stats->tx_qos_drops += stats.tx_qos_drops;
+        sw_stats->tx_invalid_hwol_drops += stats.tx_invalid_hwol_drops;
+        rte_spinlock_unlock(&dev->stats_lock);
+    }
 
     pkts = (struct rte_mbuf **) batch->packets;
-    for (int i = 0; i < vhost_batch_cnt; i++) {
-        rte_pktmbuf_free(pkts[i]);
-    }
+    rte_pktmbuf_free_bulk(pkts, vhost_batch_cnt);
 
     return 0;
 }
@@ -2882,9 +3333,9 @@ netdev_dpdk_eth_send(struct netdev *netdev, int qid,
 
     cnt = netdev_dpdk_common_send(netdev, batch, &stats);
 
-    dropped = batch_cnt - cnt;
-
-    dropped += netdev_dpdk_eth_tx_burst(dev, qid, pkts, cnt);
+    dropped = netdev_dpdk_eth_tx_burst(dev, qid, pkts, cnt);
+    stats.tx_failure_drops += dropped;
+    dropped += batch_cnt - cnt;
     if (OVS_UNLIKELY(dropped)) {
         struct netdev_dpdk_sw_stats *sw_stats = dev->sw_stats;
 
@@ -3002,39 +3453,303 @@ netdev_dpdk_set_mtu(struct netdev *netdev, int mtu)
 }
 
 static int
-netdev_dpdk_get_carrier(const struct netdev *netdev, bool *carrier);
-
-static int
 netdev_dpdk_vhost_get_stats(const struct netdev *netdev,
                             struct netdev_stats *stats)
 {
+    struct rte_vhost_stat_name *vhost_stats_names = NULL;
     struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    struct rte_vhost_stat *vhost_stats = NULL;
+    int vhost_stats_count;
+    int err;
+    int qid;
+    int vid;
 
     ovs_mutex_lock(&dev->mutex);
 
+    if (!is_vhost_running(dev)) {
+        err = EPROTO;
+        goto out;
+    }
+
+    vid = netdev_dpdk_get_vid(dev);
+
+    /* We expect all rxqs have the same number of stats, only query rxq0. */
+    qid = 0 * VIRTIO_QNUM + VIRTIO_TXQ;
+    err = rte_vhost_vring_stats_get_names(vid, qid, NULL, 0);
+    if (err < 0) {
+        err = EPROTO;
+        goto out;
+    }
+
+    vhost_stats_count = err;
+    vhost_stats_names = xcalloc(vhost_stats_count, sizeof *vhost_stats_names);
+    vhost_stats = xcalloc(vhost_stats_count, sizeof *vhost_stats);
+
+    err = rte_vhost_vring_stats_get_names(vid, qid, vhost_stats_names,
+                                          vhost_stats_count);
+    if (err != vhost_stats_count) {
+        err = EPROTO;
+        goto out;
+    }
+
+#define VHOST_RXQ_STATS                                               \
+    VHOST_RXQ_STAT(rx_packets,              "good_packets")           \
+    VHOST_RXQ_STAT(rx_bytes,                "good_bytes")             \
+    VHOST_RXQ_STAT(rx_broadcast_packets,    "broadcast_packets")      \
+    VHOST_RXQ_STAT(multicast,               "multicast_packets")      \
+    VHOST_RXQ_STAT(rx_undersized_errors,    "undersize_packets")      \
+    VHOST_RXQ_STAT(rx_1_to_64_packets,      "size_64_packets")        \
+    VHOST_RXQ_STAT(rx_65_to_127_packets,    "size_65_127_packets")    \
+    VHOST_RXQ_STAT(rx_128_to_255_packets,   "size_128_255_packets")   \
+    VHOST_RXQ_STAT(rx_256_to_511_packets,   "size_256_511_packets")   \
+    VHOST_RXQ_STAT(rx_512_to_1023_packets,  "size_512_1023_packets")  \
+    VHOST_RXQ_STAT(rx_1024_to_1522_packets, "size_1024_1518_packets") \
+    VHOST_RXQ_STAT(rx_1523_to_max_packets,  "size_1519_max_packets")
+
+#define VHOST_RXQ_STAT(MEMBER, NAME) dev->stats.MEMBER = 0;
+    VHOST_RXQ_STATS;
+#undef VHOST_RXQ_STAT
+
+    for (int q = 0; q < dev->up.n_rxq; q++) {
+        qid = q * VIRTIO_QNUM + VIRTIO_TXQ;
+
+        err = rte_vhost_vring_stats_get(vid, qid, vhost_stats,
+                                        vhost_stats_count);
+        if (err != vhost_stats_count) {
+            err = EPROTO;
+            goto out;
+        }
+
+        for (int i = 0; i < vhost_stats_count; i++) {
+#define VHOST_RXQ_STAT(MEMBER, NAME)                                 \
+            if (string_ends_with(vhost_stats_names[i].name, NAME)) { \
+                dev->stats.MEMBER += vhost_stats[i].value;           \
+                continue;                                            \
+            }
+            VHOST_RXQ_STATS;
+#undef VHOST_RXQ_STAT
+        }
+    }
+
+    /* OVS reports 64 bytes and smaller packets into "rx_1_to_64_packets".
+     * Since vhost only reports good packets and has no error counter,
+     * rx_undersized_errors is highjacked (see above) to retrieve
+     * "undersize_packets". */
+    dev->stats.rx_1_to_64_packets += dev->stats.rx_undersized_errors;
+    memset(&dev->stats.rx_undersized_errors, 0xff,
+           sizeof dev->stats.rx_undersized_errors);
+
+#define VHOST_RXQ_STAT(MEMBER, NAME) stats->MEMBER = dev->stats.MEMBER;
+    VHOST_RXQ_STATS;
+#undef VHOST_RXQ_STAT
+
+    free(vhost_stats_names);
+    vhost_stats_names = NULL;
+    free(vhost_stats);
+    vhost_stats = NULL;
+
+    /* We expect all txqs have the same number of stats, only query txq0. */
+    qid = 0 * VIRTIO_QNUM;
+    err = rte_vhost_vring_stats_get_names(vid, qid, NULL, 0);
+    if (err < 0) {
+        err = EPROTO;
+        goto out;
+    }
+
+    vhost_stats_count = err;
+    vhost_stats_names = xcalloc(vhost_stats_count, sizeof *vhost_stats_names);
+    vhost_stats = xcalloc(vhost_stats_count, sizeof *vhost_stats);
+
+    err = rte_vhost_vring_stats_get_names(vid, qid, vhost_stats_names,
+                                          vhost_stats_count);
+    if (err != vhost_stats_count) {
+        err = EPROTO;
+        goto out;
+    }
+
+#define VHOST_TXQ_STATS                                               \
+    VHOST_TXQ_STAT(tx_packets,              "good_packets")           \
+    VHOST_TXQ_STAT(tx_bytes,                "good_bytes")             \
+    VHOST_TXQ_STAT(tx_broadcast_packets,    "broadcast_packets")      \
+    VHOST_TXQ_STAT(tx_multicast_packets,    "multicast_packets")      \
+    VHOST_TXQ_STAT(rx_undersized_errors,    "undersize_packets")      \
+    VHOST_TXQ_STAT(tx_1_to_64_packets,      "size_64_packets")        \
+    VHOST_TXQ_STAT(tx_65_to_127_packets,    "size_65_127_packets")    \
+    VHOST_TXQ_STAT(tx_128_to_255_packets,   "size_128_255_packets")   \
+    VHOST_TXQ_STAT(tx_256_to_511_packets,   "size_256_511_packets")   \
+    VHOST_TXQ_STAT(tx_512_to_1023_packets,  "size_512_1023_packets")  \
+    VHOST_TXQ_STAT(tx_1024_to_1522_packets, "size_1024_1518_packets") \
+    VHOST_TXQ_STAT(tx_1523_to_max_packets,  "size_1519_max_packets")
+
+#define VHOST_TXQ_STAT(MEMBER, NAME) dev->stats.MEMBER = 0;
+    VHOST_TXQ_STATS;
+#undef VHOST_TXQ_STAT
+
+    for (int q = 0; q < dev->up.n_txq; q++) {
+        qid = q * VIRTIO_QNUM;
+
+        err = rte_vhost_vring_stats_get(vid, qid, vhost_stats,
+                                        vhost_stats_count);
+        if (err != vhost_stats_count) {
+            err = EPROTO;
+            goto out;
+        }
+
+        for (int i = 0; i < vhost_stats_count; i++) {
+#define VHOST_TXQ_STAT(MEMBER, NAME)                                 \
+            if (string_ends_with(vhost_stats_names[i].name, NAME)) { \
+                dev->stats.MEMBER += vhost_stats[i].value;           \
+                continue;                                            \
+            }
+            VHOST_TXQ_STATS;
+#undef VHOST_TXQ_STAT
+        }
+    }
+
+    /* OVS reports 64 bytes and smaller packets into "tx_1_to_64_packets".
+     * Same as for rx, rx_undersized_errors is highjacked. */
+    dev->stats.tx_1_to_64_packets += dev->stats.rx_undersized_errors;
+    memset(&dev->stats.rx_undersized_errors, 0xff,
+           sizeof dev->stats.rx_undersized_errors);
+
+#define VHOST_TXQ_STAT(MEMBER, NAME) stats->MEMBER = dev->stats.MEMBER;
+    VHOST_TXQ_STATS;
+#undef VHOST_TXQ_STAT
+
     rte_spinlock_lock(&dev->stats_lock);
-    /* Supported Stats */
-    stats->rx_packets = dev->stats.rx_packets;
-    stats->tx_packets = dev->stats.tx_packets;
     stats->rx_dropped = dev->stats.rx_dropped;
     stats->tx_dropped = dev->stats.tx_dropped;
-    stats->multicast = dev->stats.multicast;
-    stats->rx_bytes = dev->stats.rx_bytes;
-    stats->tx_bytes = dev->stats.tx_bytes;
-    stats->rx_errors = dev->stats.rx_errors;
-    stats->rx_length_errors = dev->stats.rx_length_errors;
-
-    stats->rx_1_to_64_packets = dev->stats.rx_1_to_64_packets;
-    stats->rx_65_to_127_packets = dev->stats.rx_65_to_127_packets;
-    stats->rx_128_to_255_packets = dev->stats.rx_128_to_255_packets;
-    stats->rx_256_to_511_packets = dev->stats.rx_256_to_511_packets;
-    stats->rx_512_to_1023_packets = dev->stats.rx_512_to_1023_packets;
-    stats->rx_1024_to_1522_packets = dev->stats.rx_1024_to_1522_packets;
-    stats->rx_1523_to_max_packets = dev->stats.rx_1523_to_max_packets;
-
     rte_spinlock_unlock(&dev->stats_lock);
 
+    err = 0;
+out:
+
     ovs_mutex_unlock(&dev->mutex);
+
+    free(vhost_stats);
+    free(vhost_stats_names);
+
+    return err;
+}
+
+static int
+netdev_dpdk_vhost_get_custom_stats(const struct netdev *netdev,
+                                   struct netdev_custom_stats *custom_stats)
+{
+    struct rte_vhost_stat_name *vhost_stats_names = NULL;
+    struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    struct rte_vhost_stat *vhost_stats = NULL;
+    int vhost_rxq_stats_count;
+    int vhost_txq_stats_count;
+    int stat_offset;
+    int err;
+    int qid;
+    int vid;
+
+    netdev_dpdk_get_sw_custom_stats(netdev, custom_stats);
+    stat_offset = custom_stats->size;
+
+    ovs_mutex_lock(&dev->mutex);
+
+    if (!is_vhost_running(dev)) {
+        goto out;
+    }
+
+    vid = netdev_dpdk_get_vid(dev);
+
+    qid = 0 * VIRTIO_QNUM + VIRTIO_TXQ;
+    err = rte_vhost_vring_stats_get_names(vid, qid, NULL, 0);
+    if (err < 0) {
+        goto out;
+    }
+    vhost_rxq_stats_count = err;
+
+    qid = 0 * VIRTIO_QNUM;
+    err = rte_vhost_vring_stats_get_names(vid, qid, NULL, 0);
+    if (err < 0) {
+        goto out;
+    }
+    vhost_txq_stats_count = err;
+
+    stat_offset += dev->up.n_rxq * vhost_rxq_stats_count;
+    stat_offset += dev->up.n_txq * vhost_txq_stats_count;
+    custom_stats->counters = xrealloc(custom_stats->counters,
+                                      stat_offset *
+                                      sizeof *custom_stats->counters);
+    stat_offset = custom_stats->size;
+
+    vhost_stats_names = xcalloc(vhost_rxq_stats_count,
+                                sizeof *vhost_stats_names);
+    vhost_stats = xcalloc(vhost_rxq_stats_count, sizeof *vhost_stats);
+
+    for (int q = 0; q < dev->up.n_rxq; q++) {
+        qid = q * VIRTIO_QNUM + VIRTIO_TXQ;
+
+        err = rte_vhost_vring_stats_get_names(vid, qid, vhost_stats_names,
+                                              vhost_rxq_stats_count);
+        if (err != vhost_rxq_stats_count) {
+            goto out;
+        }
+
+        err = rte_vhost_vring_stats_get(vid, qid, vhost_stats,
+                                        vhost_rxq_stats_count);
+        if (err != vhost_rxq_stats_count) {
+            goto out;
+        }
+
+        for (int i = 0; i < vhost_rxq_stats_count; i++) {
+            ovs_strlcpy(custom_stats->counters[stat_offset + i].name,
+                        vhost_stats_names[i].name,
+                        NETDEV_CUSTOM_STATS_NAME_SIZE);
+            custom_stats->counters[stat_offset + i].value =
+                 vhost_stats[i].value;
+        }
+        stat_offset += vhost_rxq_stats_count;
+    }
+
+    free(vhost_stats_names);
+    vhost_stats_names = NULL;
+    free(vhost_stats);
+    vhost_stats = NULL;
+
+    vhost_stats_names = xcalloc(vhost_txq_stats_count,
+                                sizeof *vhost_stats_names);
+    vhost_stats = xcalloc(vhost_txq_stats_count, sizeof *vhost_stats);
+
+    for (int q = 0; q < dev->up.n_txq; q++) {
+        qid = q * VIRTIO_QNUM;
+
+        err = rte_vhost_vring_stats_get_names(vid, qid, vhost_stats_names,
+                                              vhost_txq_stats_count);
+        if (err != vhost_txq_stats_count) {
+            goto out;
+        }
+
+        err = rte_vhost_vring_stats_get(vid, qid, vhost_stats,
+                                        vhost_txq_stats_count);
+        if (err != vhost_txq_stats_count) {
+            goto out;
+        }
+
+        for (int i = 0; i < vhost_txq_stats_count; i++) {
+            ovs_strlcpy(custom_stats->counters[stat_offset + i].name,
+                        vhost_stats_names[i].name,
+                        NETDEV_CUSTOM_STATS_NAME_SIZE);
+            custom_stats->counters[stat_offset + i].value =
+                 vhost_stats[i].value;
+        }
+        stat_offset += vhost_txq_stats_count;
+    }
+
+    free(vhost_stats_names);
+    vhost_stats_names = NULL;
+    free(vhost_stats);
+    vhost_stats = NULL;
+
+out:
+    ovs_mutex_unlock(&dev->mutex);
+
+    custom_stats->size = stat_offset;
 
     return 0;
 }
@@ -3081,6 +3796,9 @@ netdev_dpdk_convert_xstats(struct netdev_stats *stats,
     }
 #undef DPDK_XSTATS
 }
+
+static int
+netdev_dpdk_get_carrier(const struct netdev *netdev, bool *carrier);
 
 static int
 netdev_dpdk_get_stats(const struct netdev *netdev, struct netdev_stats *stats)
@@ -3326,6 +4044,57 @@ netdev_dpdk_get_features(const struct netdev *netdev,
     return 0;
 }
 
+static int
+netdev_dpdk_get_speed(const struct netdev *netdev, uint32_t *current,
+                      uint32_t *max)
+{
+    struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    struct rte_eth_dev_info dev_info;
+    struct rte_eth_link link;
+
+    ovs_mutex_lock(&dev->mutex);
+    link = dev->link;
+    rte_eth_dev_info_get(dev->port_id, &dev_info);
+    ovs_mutex_unlock(&dev->mutex);
+
+    *current = link.link_speed != RTE_ETH_SPEED_NUM_UNKNOWN
+               ? link.link_speed : 0;
+
+    if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_200G) {
+        *max = RTE_ETH_SPEED_NUM_200G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_100G) {
+        *max = RTE_ETH_SPEED_NUM_100G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_56G) {
+        *max = RTE_ETH_SPEED_NUM_56G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_50G) {
+        *max = RTE_ETH_SPEED_NUM_50G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_40G) {
+        *max = RTE_ETH_SPEED_NUM_40G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_25G) {
+        *max = RTE_ETH_SPEED_NUM_25G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_20G) {
+        *max = RTE_ETH_SPEED_NUM_20G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_10G) {
+        *max = RTE_ETH_SPEED_NUM_10G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_5G) {
+        *max = RTE_ETH_SPEED_NUM_5G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_2_5G) {
+        *max = RTE_ETH_SPEED_NUM_2_5G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_1G) {
+        *max = RTE_ETH_SPEED_NUM_1G;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_100M ||
+        dev_info.speed_capa & RTE_ETH_LINK_SPEED_100M_HD) {
+        *max = RTE_ETH_SPEED_NUM_100M;
+    } else if (dev_info.speed_capa & RTE_ETH_LINK_SPEED_10M ||
+        dev_info.speed_capa & RTE_ETH_LINK_SPEED_10M_HD) {
+        *max = RTE_ETH_SPEED_NUM_10M;
+    } else {
+        *max = 0;
+    }
+
+    return 0;
+}
+
 static struct ingress_policer *
 netdev_dpdk_policer_construct(uint32_t rate, uint32_t burst)
 {
@@ -3530,6 +4299,7 @@ netdev_dpdk_update_flags__(struct netdev_dpdk *dev,
             if (NETDEV_UP & on) {
                 rte_spinlock_lock(&dev->stats_lock);
                 memset(&dev->stats, 0, sizeof dev->stats);
+                memset(dev->sw_stats, 0, sizeof *dev->sw_stats);
                 rte_spinlock_unlock(&dev->stats_lock);
             }
         }
@@ -3606,6 +4376,15 @@ netdev_dpdk_vhost_user_get_status(const struct netdev *netdev,
                         xasprintf("%d", vring.size));
     }
 
+    if (userspace_tso_enabled()
+        && dev->virtio_features_state & OVS_VIRTIO_F_WORKAROUND) {
+
+        smap_add_format(args, "userspace-tso", "disabled");
+    }
+
+    smap_add_format(args, "n_rxq", "%d", netdev->n_rxq);
+    smap_add_format(args, "n_txq", "%d", netdev->n_txq);
+
     ovs_mutex_unlock(&dev->mutex);
     return 0;
 }
@@ -3639,8 +4418,12 @@ netdev_dpdk_get_status(const struct netdev *netdev, struct smap *args)
 {
     struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
     struct rte_eth_dev_info dev_info;
+    size_t rx_steer_flows_num;
+    uint64_t rx_steer_flags;
+    const char *bus_info;
     uint32_t link_speed;
     uint32_t dev_flags;
+    int n_rxq;
 
     if (!rte_eth_dev_is_valid_port(dev->port_id)) {
         return ENODEV;
@@ -3651,19 +4434,11 @@ netdev_dpdk_get_status(const struct netdev *netdev, struct smap *args)
     rte_eth_dev_info_get(dev->port_id, &dev_info);
     link_speed = dev->link.link_speed;
     dev_flags = *dev_info.dev_flags;
+    bus_info = rte_dev_bus_info(dev_info.device);
+    rx_steer_flags = dev->rx_steer_flags;
+    rx_steer_flows_num = dev->rx_steer_flows_num;
+    n_rxq = netdev->n_rxq;
     ovs_mutex_unlock(&dev->mutex);
-    const struct rte_bus *bus;
-    const struct rte_pci_device *pci_dev;
-    uint16_t vendor_id = RTE_PCI_ANY_ID;
-    uint16_t device_id = RTE_PCI_ANY_ID;
-    bus = rte_bus_find_by_device(dev_info.device);
-    if (bus && !strcmp(bus->name, "pci")) {
-        pci_dev = RTE_DEV_TO_PCI(dev_info.device);
-        if (pci_dev) {
-            vendor_id = pci_dev->id.vendor_id;
-            device_id = pci_dev->id.device_id;
-        }
-    }
     ovs_mutex_unlock(&dpdk_mutex);
 
     smap_add_format(args, "port_no", DPDK_PORT_ID_FMT, dev->port_id);
@@ -3680,6 +4455,13 @@ netdev_dpdk_get_status(const struct netdev *netdev, struct smap *args)
     smap_add_format(args, "max_vfs", "%u", dev_info.max_vfs);
     smap_add_format(args, "max_vmdq_pools", "%u", dev_info.max_vmdq_pools);
 
+    smap_add_format(args, "n_rxq", "%d", netdev->n_rxq);
+    smap_add_format(args, "n_txq", "%d", netdev->n_txq);
+
+    smap_add(args, "rx_csum_offload",
+             dev->hw_ol_features & NETDEV_RX_CHECKSUM_OFFLOAD
+             ? "true" : "false");
+
     /* Querying the DPDK library for iftype may be done in future, pending
      * support; cf. RFC 3635 Section 3.2.4. */
     enum { IF_TYPE_ETHERNETCSMACD = 6 };
@@ -3687,8 +4469,10 @@ netdev_dpdk_get_status(const struct netdev *netdev, struct smap *args)
     smap_add_format(args, "if_type", "%"PRIu32, IF_TYPE_ETHERNETCSMACD);
     smap_add_format(args, "if_descr", "%s %s", rte_version(),
                                                dev_info.driver_name);
-    smap_add_format(args, "pci-vendor_id", "0x%x", vendor_id);
-    smap_add_format(args, "pci-device_id", "0x%x", device_id);
+    smap_add_format(args, "bus_info", "bus_name=%s%s%s",
+                    rte_bus_name(rte_dev_bus(dev_info.device)),
+                    bus_info != NULL ? ", " : "",
+                    bus_info != NULL ? bus_info : "");
 
     /* Not all link speeds are defined in the OpenFlow specs e.g. 25 Gbps.
      * In that case the speed will not be reported as part of the usual
@@ -3701,6 +4485,24 @@ netdev_dpdk_get_status(const struct netdev *netdev, struct smap *args)
     if (dev_flags & RTE_ETH_DEV_REPRESENTOR) {
         smap_add_format(args, "dpdk-vf-mac", ETH_ADDR_FMT,
                         ETH_ADDR_ARGS(dev->hwaddr));
+    }
+
+    if (rx_steer_flags && !rx_steer_flows_num) {
+        smap_add(args, "rx-steering", "unsupported");
+    } else if (rx_steer_flags == DPDK_RX_STEER_LACP) {
+        smap_add(args, "rx-steering", "rss+lacp");
+    } else {
+        ovs_assert(!rx_steer_flags);
+        smap_add(args, "rx-steering", "rss");
+    }
+
+    if (rx_steer_flags && rx_steer_flows_num) {
+        smap_add_format(args, "rx_steering_queue", "%d", n_rxq - 1);
+        if (n_rxq > 2) {
+            smap_add_format(args, "rss_queues", "0-%d", n_rxq - 2);
+        } else {
+            smap_add(args, "rss_queues", "0");
+        }
     }
 
     return 0;
@@ -3964,6 +4766,7 @@ new_device(int vid)
         ovs_mutex_lock(&dev->mutex);
         if (nullable_string_is_equal(ifname, dev->vhost_id)) {
             uint32_t qp_num = rte_vhost_get_vring_num(vid) / VIRTIO_QNUM;
+            uint64_t features;
 
             /* Get NUMA information */
             newnode = rte_vhost_get_numa_node(vid);
@@ -3974,6 +4777,8 @@ new_device(int vid)
 #endif
                 newnode = dev->socket_id;
             }
+
+            dev->virtio_features_state |= OVS_VIRTIO_F_NEGOTIATED;
 
             if (dev->requested_n_txq < qp_num
                 || dev->requested_n_rxq < qp_num
@@ -3987,6 +4792,38 @@ new_device(int vid)
                 /* Reconfiguration not required. */
                 dev->vhost_reconfigured = true;
             }
+
+            if (rte_vhost_get_negotiated_features(vid, &features)) {
+                VLOG_INFO("Error checking guest features for "
+                          "vHost Device '%s'", dev->vhost_id);
+            } else {
+                if (features & (1ULL << VIRTIO_NET_F_GUEST_CSUM)) {
+                    dev->hw_ol_features |= NETDEV_TX_TCP_CKSUM_OFFLOAD;
+                    dev->hw_ol_features |= NETDEV_TX_UDP_CKSUM_OFFLOAD;
+                    dev->hw_ol_features |= NETDEV_TX_SCTP_CKSUM_OFFLOAD;
+                }
+
+                if (userspace_tso_enabled()
+                    && dev->virtio_features_state & OVS_VIRTIO_F_CLEAN) {
+
+                    if (features & (1ULL << VIRTIO_NET_F_GUEST_TSO4)
+                        && features & (1ULL << VIRTIO_NET_F_GUEST_TSO6)) {
+
+                        dev->hw_ol_features |= NETDEV_TX_TSO_OFFLOAD;
+                        VLOG_DBG("%s: TSO enabled on vhost port",
+                                 netdev_get_name(&dev->up));
+                    } else {
+                        VLOG_WARN("%s: Tx TSO offload is not supported.",
+                                  netdev_get_name(&dev->up));
+                    }
+                }
+            }
+
+            /* There is no support in virtio net to offload IPv4 csum,
+             * but the vhost library handles IPv4 csum offloading fine. */
+            dev->hw_ol_features |= NETDEV_TX_IPV4_CKSUM_OFFLOAD;
+
+            netdev_dpdk_update_netdev_flags(dev);
 
             ovsrcu_index_set(&dev->vid, vid);
             exists = true;
@@ -4051,6 +4888,10 @@ destroy_device(int vid)
                    dev->up.n_rxq * sizeof *dev->vhost_rxq_enabled);
             netdev_dpdk_txq_map_clear(dev);
 
+            /* Clear offload capabilities before next new_device. */
+            dev->hw_ol_features = 0;
+            netdev_dpdk_update_netdev_flags(dev);
+
             netdev_change_seq_changed(&dev->up);
             ovs_mutex_unlock(&dev->mutex);
             exists = true;
@@ -4077,30 +4918,38 @@ destroy_device(int vid)
     }
 }
 
-static int
-vring_state_changed(int vid, uint16_t queue_id, int enable)
+static struct mpsc_queue vhost_state_change_queue
+    = MPSC_QUEUE_INITIALIZER(&vhost_state_change_queue);
+static atomic_uint64_t vhost_state_change_queue_size;
+
+struct vhost_state_change {
+    struct mpsc_queue_node node;
+    char ifname[IF_NAME_SZ];
+    uint16_t queue_id;
+    int enable;
+};
+
+static void
+vring_state_changed__(struct vhost_state_change *sc)
 {
     struct netdev_dpdk *dev;
     bool exists = false;
-    int qid = queue_id / VIRTIO_QNUM;
-    bool is_rx = (queue_id % VIRTIO_QNUM) == VIRTIO_TXQ;
-    char ifname[IF_NAME_SZ];
-
-    rte_vhost_get_ifname(vid, ifname, sizeof ifname);
+    int qid = sc->queue_id / VIRTIO_QNUM;
+    bool is_rx = (sc->queue_id % VIRTIO_QNUM) == VIRTIO_TXQ;
 
     ovs_mutex_lock(&dpdk_mutex);
     LIST_FOR_EACH (dev, list_node, &dpdk_list) {
         ovs_mutex_lock(&dev->mutex);
-        if (nullable_string_is_equal(ifname, dev->vhost_id)) {
+        if (nullable_string_is_equal(sc->ifname, dev->vhost_id)) {
             if (is_rx) {
                 bool old_state = dev->vhost_rxq_enabled[qid];
 
-                dev->vhost_rxq_enabled[qid] = enable != 0;
+                dev->vhost_rxq_enabled[qid] = sc->enable != 0;
                 if (old_state != dev->vhost_rxq_enabled[qid]) {
                     netdev_change_seq_changed(&dev->up);
                 }
             } else {
-                if (enable) {
+                if (sc->enable) {
                     dev->tx_q[qid].map = qid;
                 } else {
                     dev->tx_q[qid].map = OVS_VHOST_QUEUE_DISABLED;
@@ -4117,11 +4966,69 @@ vring_state_changed(int vid, uint16_t queue_id, int enable)
 
     if (exists) {
         VLOG_INFO("State of queue %d ( %s_qid %d ) of vhost device '%s' "
-                  "changed to \'%s\'", queue_id, is_rx == true ? "rx" : "tx",
-                  qid, ifname, (enable == 1) ? "enabled" : "disabled");
+                  "changed to \'%s\'", sc->queue_id, is_rx ? "rx" : "tx",
+                  qid, sc->ifname, sc->enable == 1 ? "enabled" : "disabled");
     } else {
-        VLOG_INFO("vHost Device '%s' not found", ifname);
-        return -1;
+        VLOG_INFO("vHost Device '%s' not found", sc->ifname);
+    }
+}
+
+#define NETDEV_DPDK_VHOST_EVENTS_BACKOFF_MIN 1
+#define NETDEV_DPDK_VHOST_EVENTS_BACKOFF_MAX 64
+static void *
+netdev_dpdk_vhost_events_main(void *arg OVS_UNUSED)
+{
+    mpsc_queue_acquire(&vhost_state_change_queue);
+
+    for (;;) {
+        struct mpsc_queue_node *node;
+        uint64_t backoff;
+
+        backoff = NETDEV_DPDK_VHOST_EVENTS_BACKOFF_MIN;
+        while (mpsc_queue_tail(&vhost_state_change_queue) == NULL) {
+            xnanosleep(backoff * 1E6);
+            if (backoff < NETDEV_DPDK_VHOST_EVENTS_BACKOFF_MAX) {
+                backoff <<= 1;
+            }
+        }
+
+        MPSC_QUEUE_FOR_EACH_POP (node, &vhost_state_change_queue) {
+            struct vhost_state_change *sc;
+
+            sc = CONTAINER_OF(node, struct vhost_state_change, node);
+            vring_state_changed__(sc);
+            free(sc);
+            atomic_count_dec64(&vhost_state_change_queue_size);
+        }
+    }
+
+    OVS_NOT_REACHED();
+    mpsc_queue_release(&vhost_state_change_queue);
+
+    return NULL;
+}
+
+static int
+vring_state_changed(int vid, uint16_t queue_id, int enable)
+{
+    static struct vlog_rate_limit vhost_rl = VLOG_RATE_LIMIT_INIT(5, 5);
+    struct vhost_state_change *sc;
+
+    sc = xmalloc(sizeof *sc);
+    if (!rte_vhost_get_ifname(vid, sc->ifname, sizeof sc->ifname)) {
+        uint64_t queue_size;
+
+        sc->queue_id = queue_id;
+        sc->enable = enable;
+        mpsc_queue_insert(&vhost_state_change_queue, &sc->node);
+        queue_size = atomic_count_inc64(&vhost_state_change_queue_size);
+        if (queue_size >= 1000) {
+            VLOG_WARN_RL(&vhost_rl, "vring state change queue has %"PRIu64" "
+                         "entries. Last update was for socket %s.", queue_size,
+                         sc->ifname);
+        }
+    } else {
+        free(sc);
     }
 
     return 0;
@@ -4154,6 +5061,45 @@ destroy_connection(int vid)
                 dev->requested_n_txq = qp_num;
                 netdev_request_reconfigure(&dev->up);
             }
+
+            if (!(dev->virtio_features_state & OVS_VIRTIO_F_NEGOTIATED)) {
+                /* The socket disconnected before reaching new_device. It
+                 * likely means that the guest did not agree with the virtio
+                 * features. */
+                VLOG_WARN_RL(&rl, "Connection on socket '%s' closed during "
+                             "initialization.", dev->vhost_id);
+            }
+            if (!(dev->virtio_features_state & OVS_VIRTIO_F_RECONF_PENDING)) {
+                switch (dev->virtio_features_state) {
+                case OVS_VIRTIO_F_CLEAN:
+                    dev->virtio_features_state = OVS_VIRTIO_F_WORKAROUND;
+                    break;
+
+                case OVS_VIRTIO_F_WORKAROUND:
+                    dev->virtio_features_state = OVS_VIRTIO_F_CLEAN;
+                    break;
+
+                case OVS_VIRTIO_F_CLEAN_NEGOTIATED:
+                    /* The virtio features were clean and got accepted by the
+                     * guest. We expect it will be the case in the future and
+                     * change nothing. */
+                    break;
+
+                case OVS_VIRTIO_F_WORKAROUND_NEGOTIATED:
+                    /* Let's try to go with clean virtio features on a next
+                     * connection. */
+                    dev->virtio_features_state = OVS_VIRTIO_F_CLEAN;
+                    break;
+
+                default:
+                    OVS_NOT_REACHED();
+                }
+                if (!(dev->virtio_features_state & OVS_VIRTIO_F_NEGOTIATED)) {
+                    dev->virtio_features_state |= OVS_VIRTIO_F_RECONF_PENDING;
+                    netdev_request_reconfigure(&dev->up);
+                }
+            }
+
             ovs_mutex_unlock(&dev->mutex);
             exists = true;
             break;
@@ -4167,12 +5113,6 @@ destroy_connection(int vid)
     } else {
         VLOG_INFO("vHost Device '%s' not found", ifname);
     }
-}
-
-static
-void vhost_guest_notified(int vid OVS_UNUSED)
-{
-    COVERAGE_INC(vhost_notification);
 }
 
 /*
@@ -4192,12 +5132,6 @@ int
 netdev_dpdk_get_vid(const struct netdev_dpdk *dev)
 {
     return ovsrcu_index_get(&dev->vid);
-}
-
-struct ingress_policer *
-netdev_dpdk_get_ingress_policer(const struct netdev_dpdk *dev)
-{
-    return ovsrcu_get(struct ingress_policer *, &dev->ingress_policer);
 }
 
 static int
@@ -4223,6 +5157,8 @@ netdev_dpdk_class_init(void)
                                  "[netdev]", 0, 1,
                                  netdev_dpdk_get_mempool_info, NULL);
 
+        netdev_dpdk_reset_seq = seq_create();
+        netdev_dpdk_last_reset_seq = seq_read(netdev_dpdk_reset_seq);
         ret = rte_eth_dev_callback_register(RTE_ETH_ALL,
                                             RTE_ETH_EVENT_INTR_RESET,
                                             dpdk_eth_event_callback, NULL);
@@ -4237,7 +5173,26 @@ netdev_dpdk_class_init(void)
     return 0;
 }
 
+static int
+netdev_dpdk_vhost_class_init(void)
+{
+    static struct ovsthread_once once = OVSTHREAD_ONCE_INITIALIZER;
+
+    if (ovsthread_once_start(&once)) {
+        ovs_thread_create("ovs_vhost", netdev_dpdk_vhost_events_main, NULL);
+        ovsthread_once_done(&once);
+    }
+
+    return 0;
+}
+
 /* QoS Functions */
+
+struct ingress_policer *
+netdev_dpdk_get_ingress_policer(const struct netdev_dpdk *dev)
+{
+    return ovsrcu_get(struct ingress_policer *, &dev->ingress_policer);
+}
 
 /*
  * Initialize QoS configuration operations.
@@ -4934,31 +5889,237 @@ static const struct dpdk_qos_ops trtcm_policer_ops = {
 };
 
 static int
+dpdk_rx_steer_add_flow(struct netdev_dpdk *dev,
+                      const struct rte_flow_item items[],
+                      const char *desc)
+{
+    const struct rte_flow_attr attr = { .ingress = 1 };
+    const struct rte_flow_action actions[] = {
+        {
+            .type = RTE_FLOW_ACTION_TYPE_QUEUE,
+            .conf = &(const struct rte_flow_action_queue) {
+                .index = dev->up.n_rxq - 1,
+            },
+        },
+        { .type = RTE_FLOW_ACTION_TYPE_END },
+    };
+    struct rte_flow_error error;
+    struct rte_flow *flow;
+    size_t num;
+    int err;
+
+    set_error(&error, RTE_FLOW_ERROR_TYPE_NONE);
+    err = rte_flow_validate(dev->port_id, &attr, items, actions, &error);
+    if (err) {
+        VLOG_WARN("%s: rx-steering: device does not support %s flow: %s",
+                  netdev_get_name(&dev->up), desc,
+                  error.message ? error.message : "");
+        goto out;
+    }
+
+    set_error(&error, RTE_FLOW_ERROR_TYPE_NONE);
+    flow = rte_flow_create(dev->port_id, &attr, items, actions, &error);
+    if (flow == NULL) {
+        VLOG_WARN("%s: rx-steering: failed to add %s flow: %s",
+                  netdev_get_name(&dev->up), desc,
+                  error.message ? error.message : "");
+        err = rte_errno;
+        goto out;
+    }
+
+    num = dev->rx_steer_flows_num + 1;
+    dev->rx_steer_flows = xrealloc(dev->rx_steer_flows, num * sizeof flow);
+    dev->rx_steer_flows[dev->rx_steer_flows_num] = flow;
+    dev->rx_steer_flows_num = num;
+
+    VLOG_INFO("%s: rx-steering: redirected %s traffic to rx queue %d",
+              netdev_get_name(&dev->up), desc, dev->up.n_rxq - 1);
+out:
+    return err;
+}
+
+#define RETA_CONF_SIZE (RTE_ETH_RSS_RETA_SIZE_512 / RTE_ETH_RETA_GROUP_SIZE)
+
+static int
+dpdk_rx_steer_rss_configure(struct netdev_dpdk *dev, int rss_n_rxq)
+{
+    struct rte_eth_rss_reta_entry64 reta_conf[RETA_CONF_SIZE];
+    struct rte_eth_dev_info info;
+    int err;
+
+    rte_eth_dev_info_get(dev->port_id, &info);
+
+    if (info.reta_size % rss_n_rxq != 0 &&
+        info.reta_size < RTE_ETH_RSS_RETA_SIZE_128) {
+        /*
+         * Some drivers set reta_size equal to the total number of rxqs that
+         * are configured when it is a power of two. Since we are actually
+         * reconfiguring the redirection table to exclude the last rxq, we may
+         * end up with an imbalanced redirection table. For example, such
+         * configuration:
+         *
+         *   options:n_rxq=3 options:rx-steering=rss+lacp
+         *
+         * Will actually configure 4 rxqs on the NIC, and the default reta to:
+         *
+         *   [0, 1, 2, 3]
+         *
+         * And dpdk_rx_steer_rss_configure() will reconfigure reta to:
+         *
+         *   [0, 1, 2, 0]
+         *
+         * Causing queue 0 to receive twice as much traffic as queues 1 and 2.
+         *
+         * Work around that corner case by forcing a bigger redirection table
+         * size to 128 entries when reta_size is not a multiple of rss_n_rxq
+         * and when reta_size is less than 128. This value seems to be
+         * supported by most of the drivers that also support rte_flow.
+         */
+        info.reta_size = RTE_ETH_RSS_RETA_SIZE_128;
+    }
+
+    memset(reta_conf, 0, sizeof reta_conf);
+    for (uint16_t i = 0; i < info.reta_size; i++) {
+        uint16_t idx = i / RTE_ETH_RETA_GROUP_SIZE;
+        uint16_t shift = i % RTE_ETH_RETA_GROUP_SIZE;
+
+        reta_conf[idx].mask |= 1ULL << shift;
+        reta_conf[idx].reta[shift] = i % rss_n_rxq;
+    }
+
+    err = rte_eth_dev_rss_reta_update(dev->port_id, reta_conf, info.reta_size);
+    if (err < 0) {
+        VLOG_WARN("%s: failed to configure RSS redirection table: err=%d",
+                  netdev_get_name(&dev->up), err);
+    }
+
+    return err;
+}
+
+static int
+dpdk_rx_steer_configure(struct netdev_dpdk *dev)
+{
+    int err = 0;
+
+    if (dev->up.n_rxq < 2) {
+        err = ENOTSUP;
+        VLOG_WARN("%s: rx-steering: not enough available rx queues",
+                  netdev_get_name(&dev->up));
+        goto out;
+    }
+
+    if (dev->requested_rx_steer_flags & DPDK_RX_STEER_LACP) {
+        const struct rte_flow_item items[] = {
+            {
+                .type = RTE_FLOW_ITEM_TYPE_ETH,
+                .spec = &(const struct rte_flow_item_eth){
+                    .type = htons(ETH_TYPE_LACP),
+                },
+                .mask = &(const struct rte_flow_item_eth){
+                    .type = htons(0xffff),
+                },
+            },
+            { .type = RTE_FLOW_ITEM_TYPE_END },
+        };
+        err = dpdk_rx_steer_add_flow(dev, items, "lacp");
+        if (err) {
+            goto out;
+        }
+    }
+
+    if (dev->rx_steer_flows_num) {
+        /* Reconfigure RSS reta in all but the rx steering queue. */
+        err = dpdk_rx_steer_rss_configure(dev, dev->up.n_rxq - 1);
+        if (err) {
+            goto out;
+        }
+        if (dev->up.n_rxq == 2) {
+            VLOG_INFO("%s: rx-steering: redirected other traffic to "
+                      "rx queue 0", netdev_get_name(&dev->up));
+        } else {
+            VLOG_INFO("%s: rx-steering: applied rss on rx queues 0-%u",
+                      netdev_get_name(&dev->up), dev->up.n_rxq - 2);
+        }
+    }
+
+out:
+    return err;
+}
+
+static void
+dpdk_rx_steer_unconfigure(struct netdev_dpdk *dev)
+{
+    struct rte_flow_error error;
+
+    if (!dev->rx_steer_flows_num) {
+        return;
+    }
+
+    VLOG_DBG("%s: rx-steering: reset flows", netdev_get_name(&dev->up));
+
+    for (int i = 0; i < dev->rx_steer_flows_num; i++) {
+        set_error(&error, RTE_FLOW_ERROR_TYPE_NONE);
+        if (rte_flow_destroy(dev->port_id, dev->rx_steer_flows[i], &error)) {
+            VLOG_WARN("%s: rx-steering: failed to destroy flow: %s",
+                      netdev_get_name(&dev->up),
+                      error.message ? error.message : "");
+        }
+    }
+    free(dev->rx_steer_flows);
+    dev->rx_steer_flows_num = 0;
+    dev->rx_steer_flows = NULL;
+    /*
+     * Most DPDK drivers seem to reset their RSS redirection table in
+     * rte_eth_dev_configure() or rte_eth_dev_start(), both of which are
+     * called in dpdk_eth_dev_init(). No need to explicitly reset it.
+     */
+}
+
+static int
 netdev_dpdk_reconfigure(struct netdev *netdev)
 {
     struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    bool pending_reset;
+    bool try_rx_steer;
     int err = 0;
 
     ovs_mutex_lock(&dev->mutex);
 
+    try_rx_steer = dev->requested_rx_steer_flags != 0;
+    dev->requested_n_rxq = dev->user_n_rxq;
+    if (try_rx_steer) {
+        dev->requested_n_rxq += 1;
+    }
+
+    atomic_read_relaxed(&netdev_dpdk_pending_reset[dev->port_id],
+                        &pending_reset);
+
     if (netdev->n_txq == dev->requested_n_txq
         && netdev->n_rxq == dev->requested_n_rxq
+        && dev->rx_steer_flags == dev->requested_rx_steer_flags
         && dev->mtu == dev->requested_mtu
         && dev->lsc_interrupt_mode == dev->requested_lsc_interrupt_mode
         && dev->rxq_size == dev->requested_rxq_size
         && dev->txq_size == dev->requested_txq_size
         && eth_addr_equals(dev->hwaddr, dev->requested_hwaddr)
         && dev->socket_id == dev->requested_socket_id
-        && dev->started && !dev->reset_needed) {
+        && dev->started && !pending_reset) {
         /* Reconfiguration is unnecessary */
 
         goto out;
     }
 
-    if (dev->reset_needed) {
+retry:
+    dpdk_rx_steer_unconfigure(dev);
+
+    if (pending_reset) {
+        /*
+         * Set false before reset to avoid missing a new reset interrupt event
+         * in a race with event callback.
+         */
+        atomic_store_relaxed(&netdev_dpdk_pending_reset[dev->port_id], false);
         rte_eth_dev_reset(dev->port_id);
         if_notifier_manual_report();
-        dev->reset_needed = false;
     } else {
         rte_eth_dev_stop(dev->port_id);
     }
@@ -4979,6 +6140,7 @@ netdev_dpdk_reconfigure(struct netdev *netdev)
     dev->txq_size = dev->requested_txq_size;
 
     rte_free(dev->tx_q);
+    dev->tx_q = NULL;
 
     if (!eth_addr_equals(dev->hwaddr, dev->requested_hwaddr)) {
         err = netdev_dpdk_set_etheraddr__(dev, dev->requested_hwaddr);
@@ -4988,15 +6150,7 @@ netdev_dpdk_reconfigure(struct netdev *netdev)
     }
 
     err = dpdk_eth_dev_init(dev);
-    if (dev->hw_ol_features & NETDEV_TX_TSO_OFFLOAD) {
-        netdev->ol_flags |= NETDEV_TX_OFFLOAD_TCP_TSO;
-        netdev->ol_flags |= NETDEV_TX_OFFLOAD_TCP_CKSUM;
-        netdev->ol_flags |= NETDEV_TX_OFFLOAD_UDP_CKSUM;
-        netdev->ol_flags |= NETDEV_TX_OFFLOAD_IPV4_CKSUM;
-        if (dev->hw_ol_features & NETDEV_TX_SCTP_CHECKSUM_OFFLOAD) {
-            netdev->ol_flags |= NETDEV_TX_OFFLOAD_SCTP_CKSUM;
-        }
-    }
+    netdev_dpdk_update_netdev_flags(dev);
 
     /* If both requested and actual hwaddr were previously
      * unset (initialized to 0), then first device init above
@@ -5009,6 +6163,23 @@ netdev_dpdk_reconfigure(struct netdev *netdev)
      * will have succeeded to get to this point.
      */
     dev->requested_hwaddr = dev->hwaddr;
+
+    if (try_rx_steer) {
+        err = dpdk_rx_steer_configure(dev);
+        if (err) {
+            /* No hw support, disable & recover gracefully. */
+            try_rx_steer = false;
+            /*
+             * The extra queue must be explicitly removed here to ensure that
+             * it is unconfigured immediately.
+             */
+            dev->requested_n_rxq = dev->user_n_rxq;
+            goto retry;
+        }
+    } else {
+        VLOG_INFO("%s: rx-steering: default rss", netdev_get_name(&dev->up));
+    }
+    dev->rx_steer_flags = dev->requested_rx_steer_flags;
 
     dev->tx_q = netdev_dpdk_alloc_txq(netdev->n_txq);
     if (!dev->tx_q) {
@@ -5038,10 +6209,10 @@ dpdk_vhost_reconfigure_helper(struct netdev_dpdk *dev)
         dev->tx_q[0].map = 0;
     }
 
-    if (userspace_tso_enabled()) {
-        dev->hw_ol_features |= NETDEV_TX_TSO_OFFLOAD;
-        VLOG_DBG("%s: TSO enabled on vhost port", netdev_get_name(&dev->up));
-    }
+    rte_spinlock_lock(&dev->stats_lock);
+    memset(&dev->stats, 0, sizeof dev->stats);
+    memset(dev->sw_stats, 0, sizeof *dev->sw_stats);
+    rte_spinlock_unlock(&dev->stats_lock);
 
     netdev_dpdk_remap_txqs(dev);
 
@@ -5063,6 +6234,8 @@ dpdk_vhost_reconfigure_helper(struct netdev_dpdk *dev)
         }
     }
 
+    netdev_dpdk_update_netdev_flags(dev);
+
     return 0;
 }
 
@@ -5083,9 +6256,28 @@ static int
 netdev_dpdk_vhost_client_reconfigure(struct netdev *netdev)
 {
     struct netdev_dpdk *dev = netdev_dpdk_cast(netdev);
+    bool unregister = false;
+    char *vhost_id;
     int err;
-    uint64_t vhost_flags = 0;
-    uint64_t vhost_unsup_flags;
+
+    ovs_mutex_lock(&dev->mutex);
+
+    if (dev->vhost_driver_flags & RTE_VHOST_USER_CLIENT && dev->vhost_id
+        && dev->virtio_features_state & OVS_VIRTIO_F_RECONF_PENDING) {
+
+        /* This vhost-user port was registered to the vhost library already,
+         * but a socket disconnection happened and configuration must be
+         * re-evaluated wrt dev->virtio_features_state. */
+        dev->vhost_driver_flags &= ~RTE_VHOST_USER_CLIENT;
+        vhost_id = dev->vhost_id;
+        unregister = true;
+    }
+
+    ovs_mutex_unlock(&dev->mutex);
+
+    if (unregister) {
+        dpdk_vhost_driver_unregister(dev, vhost_id);
+    }
 
     ovs_mutex_lock(&dev->mutex);
 
@@ -5095,24 +6287,35 @@ netdev_dpdk_vhost_client_reconfigure(struct netdev *netdev)
      *  2. A path has been specified.
      */
     if (!(dev->vhost_driver_flags & RTE_VHOST_USER_CLIENT) && dev->vhost_id) {
+        uint64_t virtio_unsup_features = 0;
+        uint64_t vhost_flags = 0;
+        bool enable_tso;
+
+        enable_tso = userspace_tso_enabled()
+                     && dev->virtio_features_state & OVS_VIRTIO_F_CLEAN;
+        dev->virtio_features_state &= ~OVS_VIRTIO_F_RECONF_PENDING;
+
         /* Register client-mode device. */
         vhost_flags |= RTE_VHOST_USER_CLIENT;
+
+        /* Extended per vq statistics. */
+        vhost_flags |= RTE_VHOST_USER_NET_STATS_ENABLE;
 
         /* There is no support for multi-segments buffers. */
         vhost_flags |= RTE_VHOST_USER_LINEARBUF_SUPPORT;
 
         /* Enable IOMMU support, if explicitly requested. */
-        if (dpdk_vhost_iommu_enabled()) {
+        if (vhost_iommu_enabled) {
             vhost_flags |= RTE_VHOST_USER_IOMMU_SUPPORT;
         }
 
         /* Enable POSTCOPY support, if explicitly requested. */
-        if (dpdk_vhost_postcopy_enabled()) {
+        if (vhost_postcopy_enabled) {
             vhost_flags |= RTE_VHOST_USER_POSTCOPY_SUPPORT;
         }
 
         /* Enable External Buffers if TCP Segmentation Offload is enabled. */
-        if (userspace_tso_enabled()) {
+        if (enable_tso) {
             vhost_flags |= RTE_VHOST_USER_EXTBUF_SUPPORT;
         }
 
@@ -5137,23 +6340,23 @@ netdev_dpdk_vhost_client_reconfigure(struct netdev *netdev)
             goto unlock;
         }
 
-        if (userspace_tso_enabled()) {
-            netdev->ol_flags |= NETDEV_TX_OFFLOAD_TCP_TSO;
-            netdev->ol_flags |= NETDEV_TX_OFFLOAD_TCP_CKSUM;
-            netdev->ol_flags |= NETDEV_TX_OFFLOAD_UDP_CKSUM;
-            netdev->ol_flags |= NETDEV_TX_OFFLOAD_SCTP_CKSUM;
-            netdev->ol_flags |= NETDEV_TX_OFFLOAD_IPV4_CKSUM;
-            vhost_unsup_flags = 1ULL << VIRTIO_NET_F_HOST_ECN
-                                | 1ULL << VIRTIO_NET_F_HOST_UFO;
+        if (enable_tso) {
+            virtio_unsup_features = 1ULL << VIRTIO_NET_F_HOST_ECN
+                                    | 1ULL << VIRTIO_NET_F_HOST_UFO;
+            VLOG_DBG("%s: TSO enabled on vhost port",
+                     netdev_get_name(&dev->up));
         } else {
-            /* This disables checksum offloading and all the features
-             * that depends on it (TSO, UFO, ECN) according to virtio
-             * specification. */
-            vhost_unsup_flags = 1ULL << VIRTIO_NET_F_CSUM;
+            /* Advertise checksum offloading to the guest, but explicitly
+             * disable TSO and friends.
+             * NOTE: we can't disable HOST_ECN which may have been wrongly
+             * negotiated by a running guest. */
+            virtio_unsup_features = 1ULL << VIRTIO_NET_F_HOST_TSO4
+                                    | 1ULL << VIRTIO_NET_F_HOST_TSO6
+                                    | 1ULL << VIRTIO_NET_F_HOST_UFO;
         }
 
         err = rte_vhost_driver_disable_features(dev->vhost_id,
-                                                vhost_unsup_flags);
+                                                virtio_unsup_features);
         if (err) {
             VLOG_ERR("rte_vhost_driver_disable_features failed for "
                      "vhost user client port: %s\n", dev->up.name);
@@ -5214,6 +6417,13 @@ netdev_dpdk_flow_api_supported(struct netdev *netdev)
     dev = netdev_dpdk_cast(netdev);
     ovs_mutex_lock(&dev->mutex);
     if (dev->type == DPDK_DEV_ETH) {
+        if (dev->requested_rx_steer_flags) {
+            VLOG_WARN("%s: rx-steering is mutually exclusive with hw-offload,"
+                      " falling back to default rss mode",
+                      netdev_get_name(netdev));
+            dev->requested_rx_steer_flags = 0;
+            netdev_request_reconfigure(netdev);
+        }
         /* TODO: Check if we able to offload some minimal flow. */
         ret = true;
     }
@@ -5389,8 +6599,18 @@ netdev_dpdk_rte_flow_tunnel_item_release(struct netdev *netdev,
 #endif /* ALLOW_EXPERIMENTAL_API */
 
 static void
-parse_user_mempools_list(const char *mtus)
+parse_mempool_config(const struct smap *ovs_other_config)
 {
+    per_port_memory = smap_get_bool(ovs_other_config,
+                                    "per-port-memory", false);
+    VLOG_INFO("Per port memory for DPDK devices %s.",
+              per_port_memory ? "enabled" : "disabled");
+}
+
+static void
+parse_user_mempools_list(const struct smap *ovs_other_config)
+{
+    const char *mtus = smap_get(ovs_other_config, "shared-mempool-config");
     char *list, *copy, *key, *value;
     int error = 0;
 
@@ -5438,11 +6658,79 @@ parse_user_mempools_list(const char *mtus)
     free(copy);
 }
 
+static int
+process_vhost_flags(char *flag, const char *default_val, int size,
+                    const struct smap *ovs_other_config,
+                    char **new_val)
+{
+    const char *val;
+    int changed = 0;
+
+    val = smap_get(ovs_other_config, flag);
+
+    /* Process the vhost-sock-dir flag if it is provided, otherwise resort to
+     * default value.
+     */
+    if (val && (strlen(val) <= size)) {
+        changed = 1;
+        *new_val = xstrdup(val);
+        VLOG_INFO("User-provided %s in use: %s", flag, *new_val);
+    } else {
+        VLOG_INFO("No %s provided - defaulting to %s", flag, default_val);
+        *new_val = xstrdup(default_val);
+    }
+
+    return changed;
+}
+
+static void
+parse_vhost_config(const struct smap *ovs_other_config)
+{
+    char *sock_dir_subcomponent;
+
+    if (process_vhost_flags("vhost-sock-dir", ovs_rundir(),
+                            NAME_MAX, ovs_other_config,
+                            &sock_dir_subcomponent)) {
+        struct stat s;
+
+        if (!strstr(sock_dir_subcomponent, "..")) {
+            vhost_sock_dir = xasprintf("%s/%s", ovs_rundir(),
+                                       sock_dir_subcomponent);
+
+            if (stat(vhost_sock_dir, &s)) {
+                VLOG_ERR("vhost-user sock directory '%s' does not exist.",
+                         vhost_sock_dir);
+            }
+        } else {
+            vhost_sock_dir = xstrdup(ovs_rundir());
+            VLOG_ERR("vhost-user sock directory request '%s/%s' has invalid"
+                     "characters '..' - using %s instead.",
+                     ovs_rundir(), sock_dir_subcomponent, ovs_rundir());
+        }
+        free(sock_dir_subcomponent);
+    } else {
+        vhost_sock_dir = sock_dir_subcomponent;
+    }
+
+    vhost_iommu_enabled = smap_get_bool(ovs_other_config,
+                                        "vhost-iommu-support", false);
+    VLOG_INFO("IOMMU support for vhost-user-client %s.",
+               vhost_iommu_enabled ? "enabled" : "disabled");
+
+    vhost_postcopy_enabled = smap_get_bool(ovs_other_config,
+                                           "vhost-postcopy-support", false);
+    if (vhost_postcopy_enabled && memory_all_locked()) {
+        VLOG_WARN("vhost-postcopy-support and mlockall are not compatible.");
+        vhost_postcopy_enabled = false;
+    }
+    VLOG_INFO("POSTCOPY support for vhost-user-client %s.",
+              vhost_postcopy_enabled ? "enabled" : "disabled");
+}
+
 #define NETDEV_DPDK_CLASS_COMMON                            \
     .is_pmd = true,                                         \
     .alloc = netdev_dpdk_alloc,                             \
     .dealloc = netdev_dpdk_dealloc,                         \
-    .get_config = netdev_dpdk_get_config,                   \
     .get_numa_id = netdev_dpdk_get_numa_id,                 \
     .set_etheraddr = netdev_dpdk_set_etheraddr,             \
     .get_etheraddr = netdev_dpdk_get_etheraddr,             \
@@ -5471,12 +6759,15 @@ parse_user_mempools_list(const char *mtus)
 #define NETDEV_DPDK_CLASS_BASE                          \
     NETDEV_DPDK_CLASS_COMMON,                           \
     .init = netdev_dpdk_class_init,                     \
+    .run = netdev_dpdk_run,                             \
+    .wait = netdev_dpdk_wait,                           \
     .destruct = netdev_dpdk_destruct,                   \
     .set_tx_multiq = netdev_dpdk_set_tx_multiq,         \
     .get_carrier = netdev_dpdk_get_carrier,             \
     .get_stats = netdev_dpdk_get_stats,                 \
     .get_custom_stats = netdev_dpdk_get_custom_stats,   \
     .get_features = netdev_dpdk_get_features,           \
+    .get_speed = netdev_dpdk_get_speed,                 \
     .get_status = netdev_dpdk_get_status,               \
     .reconfigure = netdev_dpdk_reconfigure,             \
     .rxq_recv = netdev_dpdk_rxq_recv
@@ -5485,6 +6776,7 @@ static const struct netdev_class dpdk_class = {
     .type = "dpdk",
     NETDEV_DPDK_CLASS_BASE,
     .construct = netdev_dpdk_construct,
+    .get_config = netdev_dpdk_get_config,
     .set_config = netdev_dpdk_set_config,
     .send = netdev_dpdk_eth_send,
 };
@@ -5492,12 +6784,13 @@ static const struct netdev_class dpdk_class = {
 static const struct netdev_class dpdk_vhost_class = {
     .type = "dpdkvhostuser",
     NETDEV_DPDK_CLASS_COMMON,
+    .init = netdev_dpdk_vhost_class_init,
     .construct = netdev_dpdk_vhost_construct,
     .destruct = netdev_dpdk_vhost_destruct,
     .send = netdev_dpdk_vhost_send,
     .get_carrier = netdev_dpdk_vhost_get_carrier,
     .get_stats = netdev_dpdk_vhost_get_stats,
-    .get_custom_stats = netdev_dpdk_get_sw_custom_stats,
+    .get_custom_stats = netdev_dpdk_vhost_get_custom_stats,
     .get_status = netdev_dpdk_vhost_user_get_status,
     .reconfigure = netdev_dpdk_vhost_reconfigure,
     .rxq_recv = netdev_dpdk_vhost_rxq_recv,
@@ -5507,13 +6800,15 @@ static const struct netdev_class dpdk_vhost_class = {
 static const struct netdev_class dpdk_vhost_client_class = {
     .type = "dpdkvhostuserclient",
     NETDEV_DPDK_CLASS_COMMON,
+    .init = netdev_dpdk_vhost_class_init,
     .construct = netdev_dpdk_vhost_client_construct,
     .destruct = netdev_dpdk_vhost_destruct,
+    .get_config = netdev_dpdk_vhost_client_get_config,
     .set_config = netdev_dpdk_vhost_client_set_config,
     .send = netdev_dpdk_vhost_send,
     .get_carrier = netdev_dpdk_vhost_get_carrier,
     .get_stats = netdev_dpdk_vhost_get_stats,
-    .get_custom_stats = netdev_dpdk_get_sw_custom_stats,
+    .get_custom_stats = netdev_dpdk_vhost_get_custom_stats,
     .get_status = netdev_dpdk_vhost_user_get_status,
     .reconfigure = netdev_dpdk_vhost_client_reconfigure,
     .rxq_recv = netdev_dpdk_vhost_rxq_recv,
@@ -5523,10 +6818,10 @@ static const struct netdev_class dpdk_vhost_client_class = {
 void
 netdev_dpdk_register(const struct smap *ovs_other_config)
 {
-    const char *mempoolcfg = smap_get(ovs_other_config,
-                                      "shared-mempool-config");
+    parse_mempool_config(ovs_other_config);
+    parse_user_mempools_list(ovs_other_config);
+    parse_vhost_config(ovs_other_config);
 
-    parse_user_mempools_list(mempoolcfg);
     netdev_register_provider(&dpdk_class);
     netdev_register_provider(&dpdk_vhost_class);
     netdev_register_provider(&dpdk_vhost_client_class);

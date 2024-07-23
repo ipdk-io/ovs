@@ -91,10 +91,9 @@
  * Life Cycle
  * ==========
  *
- * To initialize an atomic variable at its point of definition, use
- * ATOMIC_VAR_INIT:
+ * To initialize an atomic variable at its point of definition, use:
  *
- *     static atomic_int ai = ATOMIC_VAR_INIT(123);
+ *     static atomic_int ai = 123;
  *
  * To initialize an atomic variable in code, use atomic_init():
  *
@@ -329,7 +328,7 @@
     #if __CHECKER__
         /* sparse doesn't understand some GCC extensions we use. */
         #include "ovs-atomic-pthreads.h"
-    #elif __has_extension(c_atomic)
+    #elif __clang__ &&  __has_extension(c_atomic)
         #include "ovs-atomic-clang.h"
     #elif HAVE_ATOMIC && __cplusplus >= 201103L
         #include "ovs-atomic-c++.h"

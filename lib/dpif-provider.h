@@ -79,6 +79,7 @@ dpif_flow_dump_thread_init(struct dpif_flow_dump_thread *thread,
 
 struct ct_dpif_dump_state;
 struct ct_dpif_entry;
+struct ct_dpif_exp;
 struct ct_dpif_tuple;
 struct ct_dpif_timeout_policy;
 enum ct_features;
@@ -126,6 +127,14 @@ struct dpif_class {
      * This is used by the vswitch at exit, so that it can clean any
      * datapaths that can not exist without it (e.g. netdev datapath).  */
     bool cleanup_required;
+
+    /* If 'true' the specific dpif implementation synchronizes the various
+     * datapath implementation layers, i.e., the dpif's layer in combination
+     * with the underlying netdev offload layers. For example, dpif-netlink
+     * does not sync its kernel flows with the tc ones, i.e., only one gets
+     * installed. On the other hand, dpif-netdev installs both flows,
+     * internally keeps track of both, and represents them as one. */
+    bool synced_dp_layers;
 
     /* Called when the dpif provider is registered, typically at program
      * startup.  Returning an error from this function will prevent any
@@ -463,6 +472,16 @@ struct dpif_class {
                         struct ct_dpif_entry *entry);
     int (*ct_dump_done)(struct dpif *, struct ct_dpif_dump_state *state);
 
+    /* Starts the dump initializing the structures involved and the zone
+     * filter. */
+    int (*ct_exp_dump_start)(struct dpif *, struct ct_dpif_dump_state **state,
+                             const uint16_t *zone);
+    /* Fill the expectation 'entry' with the related information. */
+    int (*ct_exp_dump_next)(struct dpif *, struct ct_dpif_dump_state *state,
+                            struct ct_dpif_exp *entry);
+    /* Ends the dump cleaning up any potential pending state, if any. */
+    int (*ct_exp_dump_done)(struct dpif *, struct ct_dpif_dump_state *state);
+
     /* Flushes the connection tracking tables.  The arguments have the
      * following behavior:
      *
@@ -485,6 +504,10 @@ struct dpif_class {
     int (*ct_set_tcp_seq_chk)(struct dpif *, bool enabled);
     /* Get the TCP sequence checking configuration. */
     int (*ct_get_tcp_seq_chk)(struct dpif *, bool *enabled);
+    /* Updates the sweep interval for the CT sweeper. */
+    int (*ct_set_sweep_interval)(struct dpif *, uint32_t ms);
+    /* Get the current value of the sweep interval for the CT sweeper. */
+    int (*ct_get_sweep_interval)(struct dpif *, uint32_t *ms);
 
 
     /* Connection tracking per zone limit */
@@ -497,19 +520,17 @@ struct dpif_class {
 
     /* Sets the max connections allowed per zone according to 'zone_limits',
      * a list of 'struct ct_dpif_zone_limit' entries (the 'count' member
-     * is not used when setting limits).  If 'default_limit' is not NULL,
-     * modifies the default limit to '*default_limit'. */
-    int (*ct_set_limits)(struct dpif *, const uint32_t *default_limit,
-                         const struct ovs_list *zone_limits);
+     * is not used when setting limits). */
+    int (*ct_set_limits)(struct dpif *, const struct ovs_list *zone_limits);
 
-    /* Looks up the default per zone limit and stores that in
-     * 'default_limit'.  Look up the per zone limits for all zones in
-     * the 'zone_limits_in' list of 'struct ct_dpif_zone_limit' entries
-     * (the 'limit' and 'count' members are not used), and stores the
-     * reply that includes the zone, the per zone limit, and the number
-     * of connections in the zone into 'zone_limits_out' list. */
-    int (*ct_get_limits)(struct dpif *, uint32_t *default_limit,
-                         const struct ovs_list *zone_limits_in,
+    /* Looks up the per zone limits for all zones in the 'zone_limits_in' list
+     * of 'struct ct_dpif_zone_limit' entries (the 'limit' and 'count' members
+     * are not used), and stores the reply that includes the zone, the per
+     * zone limit, and the number of connections in the zone into
+     * 'zone_limits_out' list.  If the 'zone_limits_in' list is empty the
+     * report will contain all previously set zone limits and the default
+     * limit.  Note: The default zone limit "count" is not used. */
+    int (*ct_get_limits)(struct dpif *, const struct ovs_list *zone_limits_in,
                          struct ovs_list *zone_limits_out);
 
     /* Deletes per zone limit of all zones specified in 'zone_limits', a

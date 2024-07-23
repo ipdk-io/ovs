@@ -88,11 +88,10 @@ Q: What Linux kernel versions does each Open vSwitch release work with?
     RHEL and CentOS 7 3.10 based kernels since they have diverged from the
     Linux kernel.org 3.10 kernels.
 
-    Starting with Open vSwitch 2.15, building the Linux kernel module from
-    the Open vSwitch source tree is deprecated.  It will not be updated to
-    support Linux versions later than 5.8.  We will remove the kernel module
-    source code from the Open vSwitch source tree for the Open vSwitch 3.0
-    release.
+    Building the Linux kernel module from the Open vSwitch source tree was
+    deprecated starting with Open vSwitch 2.15.  And the kernel module
+    source code was completely removed from the Open vSwitch source tree in
+    3.0 release.
 
 Q: Are all features available with all datapaths?
 
@@ -111,7 +110,7 @@ Q: Are all features available with all datapaths?
     Linux OVS tree
       The datapath implemented by the Linux kernel module distributed with
       the OVS source tree. This datapath is deprecated starting with OVS
-      2.15.x and support capped at Linux kernel version 5.8. As of OVS 3.0.x
+      2.15 and support capped at Linux kernel version 5.8.  As of OVS 3.0
       the Linux OVS tree is no longer supported.
 
     Userspace
@@ -141,6 +140,7 @@ Q: Are all features available with all datapaths?
     Conntrack Zone Limit            4.18           2.10         2.13     YES
     Conntrack NAT                   4.6            2.6          2.8      YES
     Conntrack NAT6                  4.6            2.6          2.8      3.0
+    Conntrack Helper Persist.       YES            YES          3.3      NO
     Tunnel - LISP                   NO             2.11         NO       NO
     Tunnel - STT                    NO             2.4          NO       YES
     Tunnel - GRE                    3.11           1.0          2.4      YES
@@ -152,6 +152,7 @@ Q: Are all features available with all datapaths?
     Tunnel - ERSPAN                 4.18           2.10         2.10     NO
     Tunnel - ERSPAN-IPv6            4.18           2.10         2.10     NO
     Tunnel - GTP-U                  NO             NO           2.14     NO
+    Tunnel - SRv6                   NO             NO           3.2      NO
     Tunnel - Bareudp                5.7            NO           NO       NO
     QoS - Policing                  YES            1.1          2.6      NO
     QoS - Shaping                   YES            1.1          NO       NO
@@ -215,8 +216,12 @@ Q: What DPDK version does each Open vSwitch release work with?
     2.14.x       19.11.13
     2.15.x       20.11.6
     2.16.x       20.11.6
-    2.17.x       21.11.2
-    3.0.x        21.11.2
+    2.17.x       21.11.7
+    3.0.x        21.11.7
+    3.1.x        22.11.5
+    3.2.x        22.11.5
+    3.3.x        23.11.1
+    3.4.x        23.11.1
     ============ ========
 
 Q: Are all the DPDK releases that OVS versions work with maintained?
@@ -233,7 +238,7 @@ Q: Are all the DPDK releases that OVS versions work with maintained?
     The latest information about DPDK stable and LTS releases can be found
     at `DPDK stable`_.
 
-.. _DPDK stable: http://doc.dpdk.org/guides-21.11/contributing/stable.html
+.. _DPDK stable: http://doc.dpdk.org/guides-23.11/contributing/stable.html
 
 Q: I get an error like this when I configure Open vSwitch:
 
@@ -252,8 +257,11 @@ Q: I get an error like this when I configure Open vSwitch:
       that one, because it may support the kernel that you are building
       against.  (To find out, consult the table in the previous FAQ.)
 
-    - The Open vSwitch "master" branch may support the kernel that you are
-      using, so consider building the kernel module from "master".
+    - For Open vSwitch releases prior to 3.0, the corresponding Open
+      vSwitch branch may support the kernel that you are using, so consider
+      building the kernel module from that branch.  For Open vSwitch 2.17,
+      the only non EOL release to which this applies, the branch is
+      "branch-2.17".
 
     All versions of Open vSwitch userspace are compatible with all versions of
     the Open vSwitch kernel module, so you do not have to use the kernel module
@@ -272,6 +280,9 @@ ships as part of the upstream Linux kernel?
     performance. If the ovs-vswitchd log file indicates that a feature is not
     supported, consider upgrading to a newer upstream Linux release or using
     the kernel module paired with the userspace distribution.
+
+    Please note that as of Open vSwitch 3.0 the kernel module is no longer
+    part of the Open vSwitch distribution.
 
 Q: Why do tunnels not work when using a kernel module other than the one
 packaged with Open vSwitch?
@@ -299,6 +310,9 @@ packaged with Open vSwitch?
     doing this, check to make sure that the module that is loaded is the one
     you expect.
 
+    Please note that as of Open vSwitch 3.0 the kernel module is no longer
+    part of the Open vSwitch distribution.
+
 Q: Why are UDP tunnel checksums not computed for VXLAN or Geneve?
 
     A: Generating outer UDP checksums requires kernel support that was not part
@@ -306,6 +320,9 @@ Q: Why are UDP tunnel checksums not computed for VXLAN or Geneve?
     Linux Open vSwitch module, you must use kernel 4.0 or newer. The
     out-of-tree modules from Open vSwitch release 2.4 and later support UDP
     checksums.
+
+    Please note that as of Open vSwitch 3.0 the kernel module is no longer
+    part of the Open vSwitch distribution.
 
 Q: What features are not available when using the userspace datapath?
 

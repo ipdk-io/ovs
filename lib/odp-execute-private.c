@@ -60,6 +60,20 @@ action_avx512_isa_probe(void)
 
 #endif
 
+#if ACTION_IMPL_AVX512_CHECK && HAVE_AVX512VBMI
+bool
+action_avx512vbmi_isa_probe(void)
+{
+    return cpu_has_isa(OVS_CPU_ISA_X86_AVX512VBMI);
+}
+#else
+bool
+action_avx512vbmi_isa_probe(void)
+{
+    return false;
+}
+#endif
+
 static struct odp_execute_action_impl action_impls[] = {
     [ACTION_IMPL_AUTOVALIDATOR] = {
         .available = false,
@@ -227,6 +241,18 @@ action_autoval_generic(struct dp_packet_batch *batch, const struct nlattr *a)
 
                     failed = true;
                 }
+            }
+
+            /* Compare packet metadata. */
+            if (memcmp(&good_pkt->md, &test_pkt->md, sizeof good_pkt->md)) {
+                ds_put_format(&log_msg, "Autovalidation metadata failed\n");
+                ds_put_format(&log_msg, "Good packet metadata:\n");
+                ds_put_sparse_hex_dump(&log_msg, &good_pkt->md,
+                                       sizeof good_pkt->md, 0, false);
+                ds_put_format(&log_msg, "Test packet metadata:\n");
+                ds_put_sparse_hex_dump(&log_msg, &test_pkt->md,
+                                       sizeof test_pkt->md, 0, false);
+                failed = true;
             }
 
             if (failed) {

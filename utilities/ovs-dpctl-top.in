@@ -351,7 +351,7 @@ def args_get():
     # None is a special value indicating to read flows from stdin.
     # This handles the case
     #   ovs-dpctl dump-flows | ovs-dpctl-flows.py
-    parser.add_argument("-v", "--version", version="@VERSION@",
+    parser.add_argument("-v", "--version", version="@VERSION@@VERSION_SUFFIX@",
                         action="version", help="show version")
     parser.add_argument("-f", "--flow-file", dest="flowFiles", default=None,
                         action="append",
@@ -1236,11 +1236,7 @@ def flows_script(args):
 
     if (args.flowFiles is None):
         logging.info("reading flows from stdin")
-        ihdl = os.fdopen(sys.stdin.fileno(), 'r', 0)
-        try:
-            flow_db = flows_read(ihdl, flow_db)
-        finally:
-            ihdl.close()
+        flow_db = flows_read(sys.stdin, flow_db)
     else:
         for flowFile in args.flowFiles:
             logging.info("reading flows from %s", flowFile)

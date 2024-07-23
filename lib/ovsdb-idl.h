@@ -66,6 +66,8 @@ struct ovsdb_idl *ovsdb_idl_create_unconnected(
     const struct ovsdb_idl_class *, bool monitor_everything_by_default);
 void ovsdb_idl_set_remote(struct ovsdb_idl *, const char *remote, bool retry);
 void ovsdb_idl_set_shuffle_remotes(struct ovsdb_idl *, bool shuffle);
+void ovsdb_idl_set_db_change_aware(struct ovsdb_idl *,
+                                   bool set_db_change_aware);
 void ovsdb_idl_reset_min_index(struct ovsdb_idl *);
 void ovsdb_idl_destroy(struct ovsdb_idl *);
 
@@ -375,6 +377,9 @@ void ovsdb_idl_txn_delete(const struct ovsdb_idl_row *);
 const struct ovsdb_idl_row *ovsdb_idl_txn_insert(
     struct ovsdb_idl_txn *, const struct ovsdb_idl_table_class *,
     const struct uuid *);
+const struct ovsdb_idl_row *ovsdb_idl_txn_insert_persist_uuid(
+    struct ovsdb_idl_txn *txn, const struct ovsdb_idl_table_class *class,
+    const struct uuid *uuid);
 
 struct ovsdb_idl *ovsdb_idl_txn_get_idl (struct ovsdb_idl_txn *);
 void ovsdb_idl_get_initial_snapshot(struct ovsdb_idl *);

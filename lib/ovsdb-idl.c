@@ -177,6 +177,7 @@ static void ovsdb_idl_row_mark_backrefs_for_reparsing(struct ovsdb_idl_row *);
 static void ovsdb_idl_row_track_change(struct ovsdb_idl_row *,
                                        enum ovsdb_idl_change);
 static void ovsdb_idl_row_untrack_change(struct ovsdb_idl_row *);
+static void ovsdb_idl_row_clear_changeseqno(struct ovsdb_idl_row *);
 
 static void ovsdb_idl_txn_abort_all(struct ovsdb_idl *);
 static bool ovsdb_idl_txn_extract_mutations(struct ovsdb_idl_row *,
@@ -319,6 +320,14 @@ void
 ovsdb_idl_set_shuffle_remotes(struct ovsdb_idl *idl, bool shuffle)
 {
     ovsdb_cs_set_shuffle_remotes(idl->cs, shuffle);
+}
+
+/* Passes 'set_db_change_aware' to ovsdb_cs_set_db_change_aware().  See that
+ * function for documentation. */
+void
+ovsdb_idl_set_db_change_aware(struct ovsdb_idl *idl, bool set_db_change_aware)
+{
+    ovsdb_cs_set_db_change_aware(idl->cs, set_db_change_aware);
 }
 
 /* Reset min_index to 0. This prevents a situation where the client
@@ -1366,6 +1375,7 @@ ovsdb_idl_track_clear__(struct ovsdb_idl *idl, bool flush_all)
                     row->updated = NULL;
                 }
                 ovsdb_idl_row_untrack_change(row);
+                ovsdb_idl_row_clear_changeseqno(row);
 
                 if (ovsdb_idl_row_is_orphan(row)) {
                     ovsdb_idl_row_unparse(row);
@@ -1624,6 +1634,7 @@ ovsdb_idl_process_update(struct ovsdb_idl_table *table,
                                  ru->columns);
         } else if (ovsdb_idl_row_is_orphan(row)) {
             ovsdb_idl_row_untrack_change(row);
+            ovsdb_idl_row_clear_changeseqno(row);
             ovsdb_idl_insert_row(row, ru->columns);
         } else {
             VLOG_ERR_RL(&semantic_rl, "cannot add existing row "UUID_FMT" to "
@@ -2275,11 +2286,15 @@ ovsdb_idl_row_untrack_change(struct ovsdb_idl_row *row)
         return;
     }
 
+    ovs_list_remove(&row->track_node);
+    ovs_list_init(&row->track_node);
+}
+
+static void ovsdb_idl_row_clear_changeseqno(struct ovsdb_idl_row *row)
+{
     row->change_seqno[OVSDB_IDL_CHANGE_INSERT] =
         row->change_seqno[OVSDB_IDL_CHANGE_MODIFY] =
         row->change_seqno[OVSDB_IDL_CHANGE_DELETE] = 0;
-    ovs_list_remove(&row->track_node);
-    ovs_list_init(&row->track_node);
 }
 
 static struct ovsdb_idl_row *
@@ -2855,11 +2870,14 @@ substitute_uuids(struct json *json, const struct ovsdb_idl_txn *txn)
 
             row = ovsdb_idl_txn_get_row(txn, &uuid);
             if (row && !row->old_datum && row->new_datum) {
-                json_destroy(json);
-
-                return json_array_create_2(
-                    json_string_create("named-uuid"),
-                    json_string_create_nocopy(ovsdb_data_row_name(&uuid)));
+                if (row->persist_uuid) {
+                    return json;
+                } else {
+                    json_destroy(json);
+                    return json_array_create_2(
+                        json_string_create("named-uuid"),
+                        json_string_create_nocopy(ovsdb_data_row_name(&uuid)));
+                }
             }
         }
 
@@ -3284,9 +3302,19 @@ ovsdb_idl_txn_commit(struct ovsdb_idl_txn *txn)
 
                 any_updates = true;
 
-                json_object_put(op, "uuid-name",
-                                json_string_create_nocopy(
-                                    ovsdb_data_row_name(&row->uuid)));
+                char *uuid_json;
+                struct json *value;
+                if (row->persist_uuid) {
+                    uuid_json = "uuid";
+                    value = json_string_create_nocopy(
+                        xasprintf(UUID_FMT, UUID_ARGS(&row->uuid)));
+                } else {
+                    uuid_json = "uuid-name";
+                    value = json_string_create_nocopy(
+                                ovsdb_data_row_name(&row->uuid));
+                }
+
+                json_object_put(op, uuid_json, value);
 
                 insert = xmalloc(sizeof *insert);
                 insert->dummy = row->uuid;
@@ -3770,6 +3798,31 @@ ovsdb_idl_txn_delete(const struct ovsdb_idl_row *row_)
     row->new_datum = NULL;
 }
 
+static const struct ovsdb_idl_row *
+ovsdb_idl_txn_insert__(struct ovsdb_idl_txn *txn,
+                       const struct ovsdb_idl_table_class *class,
+                       const struct uuid *uuid,
+                       bool persist_uuid)
+{
+    struct ovsdb_idl_row *row = ovsdb_idl_row_create__(class);
+
+    ovs_assert(uuid || !persist_uuid);
+    if (uuid) {
+        ovs_assert(!ovsdb_idl_txn_get_row(txn, uuid));
+        row->uuid = *uuid;
+    } else {
+        uuid_generate(&row->uuid);
+    }
+    row->persist_uuid = persist_uuid;
+    row->table = ovsdb_idl_table_from_class(txn->idl, class);
+    row->new_datum = xmalloc(class->n_columns * sizeof *row->new_datum);
+    hmap_insert(&row->table->rows, &row->hmap_node, uuid_hash(&row->uuid));
+    hmap_insert(&txn->txn_rows, &row->txn_node, uuid_hash(&row->uuid));
+    ovsdb_idl_add_to_indexes(row);
+
+    return row;
+}
+
 /* Inserts and returns a new row in the table with the specified 'class' in the
  * database with open transaction 'txn'.
  *
@@ -3787,22 +3840,23 @@ ovsdb_idl_txn_insert(struct ovsdb_idl_txn *txn,
                      const struct ovsdb_idl_table_class *class,
                      const struct uuid *uuid)
 {
-    struct ovsdb_idl_row *row = ovsdb_idl_row_create__(class);
+    return ovsdb_idl_txn_insert__(txn, class, uuid, false);
+}
 
-    if (uuid) {
-        ovs_assert(!ovsdb_idl_txn_get_row(txn, uuid));
-        row->uuid = *uuid;
-    } else {
-        uuid_generate(&row->uuid);
-    }
-
-    row->table = ovsdb_idl_table_from_class(txn->idl, class);
-    row->new_datum = xmalloc(class->n_columns * sizeof *row->new_datum);
-    hmap_insert(&row->table->rows, &row->hmap_node, uuid_hash(&row->uuid));
-    hmap_insert(&txn->txn_rows, &row->txn_node, uuid_hash(&row->uuid));
-    ovsdb_idl_add_to_indexes(row);
-
-    return row;
+/* Inserts and returns a new row in the table with the specified 'class' in the
+ * database with open transaction 'txn'.
+ *
+ * The new row is assigned the specified UUID (which cannot be null).
+ *
+ * Usually this function is used indirectly through one of the
+ * "insert_persist_uuid" functions generated by ovsdb-idlc. */
+const struct ovsdb_idl_row *
+ovsdb_idl_txn_insert_persist_uuid(struct ovsdb_idl_txn *txn,
+                                  const struct ovsdb_idl_table_class *class,
+                                  const struct uuid *uuid)
+{
+    ovs_assert(uuid);
+    return ovsdb_idl_txn_insert__(txn, class, uuid, true);
 }
 
 static void

@@ -9,6 +9,8 @@
 AUTOMAKE_OPTIONS = foreign subdir-objects
 ACLOCAL_AMFLAGS = -I m4
 
+AM_DISTCHECK_CONFIGURE_FLAGS = --with-version-suffix="$(VERSION_SUFFIX)"
+
 AM_CPPFLAGS = $(SSL_CFLAGS)
 AM_LDFLAGS = $(SSL_LDFLAGS)
 AM_LDFLAGS += $(OVS_LDFLAGS)
@@ -76,13 +78,18 @@ EXTRA_DIST = \
 	MAINTAINERS.rst \
 	README.rst \
 	NOTICE \
+	.ci/dpdk-build.sh \
+	.ci/dpdk-prepare.sh \
 	.ci/linux-build.sh \
 	.ci/linux-prepare.sh \
 	.ci/osx-build.sh \
 	.ci/osx-prepare.sh \
+	.ci/windows-build.sh \
+	.ci/windows-prepare.sh \
 	.cirrus.yml \
+	.editorconfig \
 	.github/workflows/build-and-test.yml \
-	.travis.yml \
+	.readthedocs.yaml \
 	appveyor.yml \
 	boot.sh \
 	poc/builders/Vagrantfile \
@@ -121,6 +128,7 @@ OVSIDL_BUILT =
 pkgdata_DATA =
 sbin_SCRIPTS =
 scripts_SCRIPTS =
+usdt_SCRIPTS =
 completion_SCRIPTS =
 scripts_DATA =
 SUFFIXES =
@@ -134,6 +142,7 @@ C ?= 1
 endif
 
 scriptsdir = $(pkgdatadir)/scripts
+usdtdir = $(pkgdatadir)/scripts/usdt
 completiondir = $(sysconfdir)/bash_completion.d
 pkgconfigdir = $(libdir)/pkgconfig
 
@@ -157,6 +166,7 @@ SUFFIXES += .in
 	    -e 's,[@]PYTHON3[@],$(PYTHON3),g' \
 	    -e 's,[@]RUNDIR[@],$(RUNDIR),g' \
 	    -e 's,[@]VERSION[@],$(VERSION),g' \
+	    -e 's,[@]VERSION_SUFFIX[@],$(VERSION_SUFFIX),g' \
 	    -e 's,[@]localstatedir[@],$(localstatedir),g' \
 	    -e 's,[@]pkgdatadir[@],$(pkgdatadir),g' \
 	    -e 's,[@]sysconfdir[@],$(sysconfdir),g' \
@@ -366,7 +376,7 @@ ALL_LOCAL += manpage-check
 manpage-check: $(man_MANS) $(dist_man_MANS) $(noinst_man_MANS)
 	@error=false; \
 	for manpage in $?; do \
-	  LANG=en_US.UTF-8 groff -w mac -w delim -w escape -w input -w missing -w tab -T utf8 -man -p -z $$manpage >$@.tmp 2>&1; \
+	  LANG=en_US.UTF-8 groff -t -w mac -w delim -w escape -w input -w missing -w tab -T utf8 -man -p -z $$manpage >$@.tmp 2>&1; \
 	  if grep warning: $@.tmp; then error=:; fi; \
 	  rm -f $@.tmp; \
 	done; \
@@ -397,23 +407,17 @@ ALL_LOCAL += flake8-check
 #   F811 redefinition of unused <name> from line <N> (only from flake8 v2.0)
 # D*** -- warnings from flake8-docstrings plugin
 # H*** -- warnings from flake8 hacking plugin (custom style checks beyond PEP8)
-#   H231 Python 3.x incompatible 'except x,y:' construct
-#   H232 Python 3.x incompatible octal 077 should be written as 0o77
-#   H233 Python 3.x incompatible use of print operator
-#   H238 old style class declaration, use new style (inherit from `object`)
-FLAKE8_SELECT = H231,H232,H233,H238
 FLAKE8_IGNORE = E121,E123,E125,E126,E127,E128,E129,E131,E203,E722,W503,W504,F811,D,H,I
 flake8-check: $(FLAKE8_PYFILES)
 	$(FLAKE8_WERROR)$(AM_V_GEN) \
 	  src='$^' && \
-	  flake8 $$src --select=$(FLAKE8_SELECT) $(FLAKE8_FLAGS) && \
 	  flake8 $$src --ignore=$(FLAKE8_IGNORE) $(FLAKE8_FLAGS) && \
 	  touch $@
 endif
 CLEANFILES += flake8-check
 
 -include manpages.mk
-manpages.mk: $(MAN_ROOTS) build-aux/sodepends.py python/build/soutil.py
+manpages.mk: $(MAN_ROOTS) build-aux/sodepends.py python/ovs_build_helpers/soutil.py
 	@PYTHONPATH=$$PYTHONPATH$(psep)$(srcdir)/python $(PYTHON3) $(srcdir)/build-aux/sodepends.py -I. -I$(srcdir) $(MAN_ROOTS) >$(@F).tmp
 	@if cmp -s $(@F).tmp $@; then \
 	  touch $@; \

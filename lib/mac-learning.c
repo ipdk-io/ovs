@@ -182,12 +182,18 @@ get_lru(struct mac_learning *ml, struct mac_entry **e)
     OVS_REQ_RDLOCK(ml->rwlock)
 {
     if (!ovs_list_is_empty(&ml->lrus)) {
-        *e = mac_entry_from_lru_node(ml->lrus.next);
-        return true;
-    } else {
-        *e = NULL;
-        return false;
+        struct mac_entry *entry;
+
+        LIST_FOR_EACH (entry, lru_node, &ml->lrus) {
+            if (entry->expires != MAC_ENTRY_AGE_STATIC_ENTRY) {
+                *e = entry;
+                return true;
+            }
+        }
     }
+
+    *e = NULL;
+    return false;
 }
 
 static unsigned int
@@ -456,11 +462,14 @@ bool
 is_mac_learning_update_needed(const struct mac_learning *ml,
                               struct eth_addr src, int vlan,
                               bool is_gratuitous_arp, bool is_bond,
-                              void *in_port)
+                              const void *in_port, bool *is_static_move)
     OVS_REQ_RDLOCK(ml->rwlock)
 {
     struct mac_entry *mac;
+    bool is_port_move;
     int age;
+
+    *is_static_move = false;
 
     if (!mac_learning_may_learn(ml, src, vlan)) {
         return false;
@@ -472,14 +481,13 @@ is_mac_learning_update_needed(const struct mac_learning *ml,
         return true;
     }
 
+    /* Check whether address is on a different port. */
+    is_port_move = mac_entry_get_port(ml, mac) != in_port;
+
     age = mac_entry_age(ml, mac);
     /* If mac is a static entry, then there is no need to update. */
     if (age == MAC_ENTRY_AGE_STATIC_ENTRY) {
-        /* Coverage counter to increment when a packet with same
-         * static-mac appears on a different port. */
-        if (mac_entry_get_port(ml, mac) != in_port) {
-            COVERAGE_INC(mac_learning_static_none_move);
-        }
+        *is_static_move = is_port_move;
         return false;
     }
 
@@ -500,7 +508,7 @@ is_mac_learning_update_needed(const struct mac_learning *ml,
         }
     }
 
-    return mac_entry_get_port(ml, mac) != in_port /* ofbundle */;
+    return is_port_move;
 }
 
 /* Updates MAC learning table 'ml' given that a packet matching 'src' was
@@ -568,7 +576,8 @@ mac_learning_update(struct mac_learning *ml, struct eth_addr src,
                     void *in_port)
     OVS_EXCLUDED(ml->rwlock)
 {
-    bool need_update;
+    bool is_static_move = false;
+    bool need_update = false;
     bool updated = false;
 
     /* Don't learn the OFPP_NONE port. */
@@ -576,8 +585,14 @@ mac_learning_update(struct mac_learning *ml, struct eth_addr src,
         /* First try the common case: no change to MAC learning table. */
         ovs_rwlock_rdlock(&ml->rwlock);
         need_update = is_mac_learning_update_needed(ml, src, vlan,
-                                                    is_gratuitous_arp, is_bond,
-                                                    in_port);
+                                                    is_gratuitous_arp,
+                                                    is_bond, in_port,
+                                                    &is_static_move);
+        if (is_static_move) {
+            /* Coverage counter to increment when a packet with same
+             * static-mac appears on a different port. */
+            COVERAGE_INC(mac_learning_static_none_move);
+        }
         ovs_rwlock_unlock(&ml->rwlock);
 
         if (need_update) {
@@ -644,25 +659,10 @@ mac_learning_expire(struct mac_learning *ml, struct mac_entry *e)
 void
 mac_learning_flush(struct mac_learning *ml)
 {
-    struct mac_entry *e, *first_static_mac = NULL;
+    struct mac_entry *e;
 
-    while (get_lru(ml, &e) && (e != first_static_mac)) {
-
-        /* Static mac should not be evicted. */
-        if (MAC_ENTRY_AGE_STATIC_ENTRY == e->expires) {
-
-            /* Make note of first static-mac encountered, so that this while
-             * loop will break on visting this mac again via get_lru(). */
-            if (!first_static_mac) {
-                first_static_mac = e;
-            }
-
-            /* Remove from lru head and append it to tail. */
-            ovs_list_remove(&e->lru_node);
-            ovs_list_push_back(&ml->lrus, &e->lru_node);
-        } else {
-            mac_learning_expire(ml, e);
-        }
+    while (get_lru(ml, &e)) {
+        mac_learning_expire(ml, e);
     }
     hmap_shrink(&ml->table);
 }
