@@ -81,6 +81,17 @@
 #include "ovsp4rt/ovs-p4rt.h"
 #endif
 
+#if defined(P4OVS)
+#include <linux/if_vlan.h>
+#include <linux/sockios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
+#include "lib/netdev.h"
+#include "lib/p4ovs.h"
+#include "ovsp4rt/ovs-p4rt.h"
+#endif
+
 COVERAGE_DEFINE(xlate_actions);
 COVERAGE_DEFINE(xlate_actions_oversize);
 COVERAGE_DEFINE(xlate_actions_too_many_output);
