@@ -3293,11 +3293,12 @@ xlate_normal(struct xlate_ctx *ctx)
 #if defined(P4OVS)
         bool is_static_move = false;
         need_update = is_mac_learning_update_needed(ctx->xbridge->ml,
-                                                    flow->dl_src, vlan,
-                                                    is_grat_arp,
+                                                    flow->dl_src,
+                                                    vlan, is_grat_arp,
                                                     in_xbundle->bond != NULL,
                                                     in_xbundle->ofbundle,
                                                     &is_static_move);
+        /* ignore is_static_move */
 #endif
         // The function below calls mac_learning_insert
         update_learning_table(ctx, in_xbundle, flow->dl_src, vlan,
