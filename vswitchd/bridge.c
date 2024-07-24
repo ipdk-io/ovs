@@ -2143,18 +2143,22 @@ get_tunnel_data(struct netdev *netdev, struct tunnel_info *tnl_info)
      if (underlay_tnl->ipv6_src.__in6_u.__u6_addr32[0]) {
          /* IPv6 tunnel configuration */
          tnl_info->local_ip.family = AF_INET6;
-         tnl_info->local_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_src;
+         tnl_info->local_ip.ip.v6addr =
+           (struct in6_addr) underlay_tnl->ipv6_src;
 
          tnl_info->remote_ip.family = AF_INET6;
-         tnl_info->remote_ip.ip.v6addr = (struct in6_addr) underlay_tnl->ipv6_dst;
+         tnl_info->remote_ip.ip.v6addr =
+           (struct in6_addr) underlay_tnl->ipv6_dst;
 
      } else {
          /* IPv4 tunnel configuration */
          tnl_info->local_ip.family = AF_INET;
-         tnl_info->local_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
+         tnl_info->local_ip.ip.v4addr.s_addr =
+           underlay_tnl->ipv6_src.__in6_u.__u6_addr32[3];
 
          tnl_info->remote_ip.family = AF_INET;
-         tnl_info->remote_ip.ip.v4addr.s_addr = underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
+         tnl_info->remote_ip.ip.v4addr.s_addr =
+           underlay_tnl->ipv6_dst.__in6_u.__u6_addr32[3];
      }
 
      tnl_info->dst_port = underlay_tnl->dst_port;
