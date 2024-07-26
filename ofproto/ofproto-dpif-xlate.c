@@ -3198,17 +3198,20 @@ update_ip_mac_map_info(const struct flow *flow,
         return -1;
     }
 
-    memcpy(ip_mac_map_info->src_mac_addr, flow->dl_src.ea, sizeof(ip_mac_map_info->src_mac_addr));
-    memcpy(ip_mac_map_info->dst_mac_addr, flow->dl_dst.ea, sizeof(ip_mac_map_info->dst_mac_addr));
+    memcpy(ip_mac_map_info->src_mac_addr, flow->dl_src.ea,
+           sizeof(ip_mac_map_info->src_mac_addr));
+    memcpy(ip_mac_map_info->dst_mac_addr, flow->dl_dst.ea,
+           sizeof(ip_mac_map_info->dst_mac_addr));
 
-    //Program the entiry only for an ARP response where we have valid IP's and MAC for both src and dst
+    // Program the entry only for an ARP response where we have valid IPs
+    // and MAC for both src and dst.
     if (valid_ip_addr(flow->nw_src) && !eth_addr_is_broadcast(flow->dl_src) &&
-       valid_ip_addr(flow->nw_dst) && !eth_addr_is_broadcast(flow->dl_dst)) {
-       ip_mac_map_info->src_ip_addr.family = AF_INET;
-       ip_mac_map_info->src_ip_addr.ip.v4addr.s_addr = flow->nw_src;
+        valid_ip_addr(flow->nw_dst) && !eth_addr_is_broadcast(flow->dl_dst)) {
+        ip_mac_map_info->src_ip_addr.family = AF_INET;
+        ip_mac_map_info->src_ip_addr.ip.v4addr.s_addr = flow->nw_src;
 
-       ip_mac_map_info->dst_ip_addr.family = AF_INET;
-       ip_mac_map_info->dst_ip_addr.ip.v4addr.s_addr = flow->nw_dst;
+        ip_mac_map_info->dst_ip_addr.family = AF_INET;
+        ip_mac_map_info->dst_ip_addr.ip.v4addr.s_addr = flow->nw_dst;
     }
 
     return -1;
@@ -3221,10 +3224,10 @@ xlate_normal(struct xlate_ctx *ctx)
 {
     struct flow_wildcards *wc = ctx->wc;
     struct flow *flow = &ctx->xin->flow;
-#if defined(P4OVS)
-    bool is_mac_learn_required = false;
-#endif
     struct xbundle *in_xbundle;
+#if defined(P4OVS)
+    bool need_update = false;
+#endif
     struct xport *in_port;
     struct mac_entry *mac;
     void *mac_port;
@@ -3288,18 +3291,22 @@ xlate_normal(struct xlate_ctx *ctx)
         && in_port && in_port->pt_mode != NETDEV_PT_LEGACY_L3
     ) {
 #if defined(P4OVS)
-        is_mac_learn_required = is_mac_learning_update_needed(ctx->xbridge->ml,
-                                flow->dl_src, vlan,is_grat_arp,
-                                in_xbundle->bond != NULL,
-                                in_xbundle->ofbundle);
+        bool is_static_move = false;
+        need_update = is_mac_learning_update_needed(ctx->xbridge->ml,
+                                                    flow->dl_src,
+                                                    vlan, is_grat_arp,
+                                                    in_xbundle->bond != NULL,
+                                                    in_xbundle->ofbundle,
+                                                    &is_static_move);
+        /* ignore is_static_move */
 #endif
-        //The function below calls mac_learning_insert
+        // The function below calls mac_learning_insert
         update_learning_table(ctx, in_xbundle, flow->dl_src, vlan,
                               is_grat_arp);
     }
 
 #if defined(P4OVS)
-    if (is_mac_learn_required) {
+    if (need_update) {
        /* Dynamic MAC is learnt, program P4 forwarding table */
        struct xport *ovs_port = get_ofp_port(in_xbundle->xbridge,
                                              flow->in_port.ofp_port);
