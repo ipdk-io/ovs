@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef JSON_H
-#define JSON_H 1
+#ifndef OPENVSWITCH_JSON_H
+#define OPENVSWITCH_JSON_H 1
 
 /* This is an implementation of JavaScript Object Notation (JSON) as specified
  * by RFC 4627.  It is intended to fully comply with RFC 4627, with the
@@ -91,6 +91,7 @@ struct json *json_array_create(struct json **, size_t n);
 struct json *json_array_create_1(struct json *);
 struct json *json_array_create_2(struct json *, struct json *);
 struct json *json_array_create_3(struct json *, struct json *, struct json *);
+bool json_array_contains_string(const struct json *, const char *);
 
 struct json *json_object_create(void);
 void json_object_put(struct json *, const char *name, struct json *value);
@@ -158,14 +159,14 @@ json_clone(const struct json *json_)
     return json;
 }
 
-void json_destroy__(struct json *json);
+void json_destroy__(struct json *json, bool);
 
 /* Frees 'json' and everything it points to, recursively. */
 static inline void
 json_destroy(struct json *json)
 {
     if (json && !--json->count) {
-        json_destroy__(json);
+        json_destroy__(json, false);
     }
 }
 
@@ -173,4 +174,4 @@ json_destroy(struct json *json)
 }
 #endif
 
-#endif /* json.h */
+#endif /* OPENVSWITCH_JSON_H */

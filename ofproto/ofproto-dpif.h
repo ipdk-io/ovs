@@ -51,6 +51,7 @@
 #include "hmapx.h"
 #include "odp-util.h"
 #include "id-pool.h"
+#include "ovs-atomic.h"
 #include "ovs-thread.h"
 #include "ofproto-provider.h"
 #include "util.h"
@@ -103,7 +104,8 @@ struct rule_dpif *rule_dpif_lookup_from_table(struct ofproto_dpif *,
                                               ofp_port_t in_port,
                                               bool may_packet_in,
                                               bool honor_table_miss,
-                                              struct xlate_cache *);
+                                              struct xlate_cache *,
+                                              struct hmapx *conj_flows);
 
 void rule_dpif_credit_stats(struct rule_dpif *,
                             const struct dpif_flow_stats *, bool);
@@ -201,7 +203,8 @@ struct group_dpif *group_dpif_lookup(struct ofproto_dpif *,
     DPIF_SUPPORT_FIELD(bool, ct_timeout, "Conntrack timeout policy")        \
                                                                             \
     /* True if the datapath supports explicit drop action. */               \
-    DPIF_SUPPORT_FIELD(bool, explicit_drop_action, "Explicit Drop action")  \
+    DPIF_SUPPORT_FIELD(atomic_bool, explicit_drop_action,                   \
+                       "Explicit Drop action")                              \
                                                                             \
     /* True if the datapath supports balance_tcp optimization */            \
     DPIF_SUPPORT_FIELD(bool, lb_output_action, "Optimized Balance TCP mode")\
@@ -210,7 +213,10 @@ struct group_dpif *group_dpif_lookup(struct ofproto_dpif *,
     DPIF_SUPPORT_FIELD(bool, ct_zero_snat, "Conntrack all-zero IP SNAT")    \
                                                                             \
     /* True if the datapath supports add_mpls action. */                    \
-    DPIF_SUPPORT_FIELD(bool, add_mpls, "MPLS Label add")
+    DPIF_SUPPORT_FIELD(bool, add_mpls, "MPLS Label add")                    \
+                                                                            \
+    /* True if the datapath supports psample action. */                     \
+    DPIF_SUPPORT_FIELD(bool, psample, "psample action")
 
 
 /* Stores the various features which the corresponding backer supports. */
@@ -284,6 +290,11 @@ struct dpif_backer {
                                                 feature than 'bt_support'. */
 
     struct atomic_count tnl_count;
+
+    struct ovs_list ct_zone_limits_to_add;  /* CT zone limits queued for
+                                             * addition into datapath. */
+    struct ovs_list ct_zone_limits_to_del;  /* CT zone limits queued for
+                                             * deletion from datapath. */
 };
 
 /* All existing ofproto_backer instances, indexed by ofproto->up.type. */
@@ -320,6 +331,7 @@ struct ofproto_dpif {
     struct netflow *netflow;
     struct dpif_sflow *sflow;
     struct dpif_ipfix *ipfix;
+    struct dpif_lsample *lsample;
     struct hmap bundles;        /* Contains "struct ofbundle"s. */
     struct mac_learning *ml;
     struct mcast_snooping *ms;
@@ -353,6 +365,8 @@ struct ofproto_dpif {
 
     bool is_controller_connected; /* True if any controller admitted this
                                    * switch connection. */
+    bool explicit_sampled_drops;  /* If explicit drop actions must added after
+                                   * trailing sample actions. */
 };
 
 struct ofproto_dpif *ofproto_dpif_lookup_by_name(const char *name);
@@ -403,5 +417,6 @@ bool ofproto_dpif_ct_zone_timeout_policy_get_name(
     uint8_t nw_proto, char **tp_name, bool *unwildcard);
 
 bool ovs_explicit_drop_action_supported(struct ofproto_dpif *);
+bool ovs_psample_supported(struct ofproto_dpif *);
 
 #endif /* ofproto-dpif.h */

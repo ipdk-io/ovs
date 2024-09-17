@@ -304,7 +304,7 @@ do_create_cluster(struct ovs_cmdl_context *ctx)
 
         struct ovsdb *ovsdb = ovsdb_file_read(src_file_name, false);
         char *comment = xasprintf("created from %s", src_file_name);
-        data = ovsdb_to_txn_json(ovsdb, comment);
+        data = ovsdb_to_txn_json(ovsdb, comment, true);
         free(comment);
         schema = ovsdb_schema_clone(ovsdb->schema);
         ovsdb_destroy(ovsdb);
@@ -359,7 +359,8 @@ write_standalone_db(const char *file_name, const char *comment,
 
     error = ovsdb_log_write_and_free(log, ovsdb_schema_to_json(db->schema));
     if (!error) {
-        error = ovsdb_log_write_and_free(log, ovsdb_to_txn_json(db, comment));
+        error = ovsdb_log_write_and_free(log,
+                                         ovsdb_to_txn_json(db, comment, true));
     }
     ovsdb_log_close(log);
 
@@ -1005,7 +1006,8 @@ raft_header_to_standalone_log(const struct raft_header *h,
 }
 
 static void
-raft_record_to_standalone_log(const struct raft_record *r,
+raft_record_to_standalone_log(const char *db_file_name,
+                              const struct raft_record *r,
                               struct ovsdb_log *db_log_data)
 {
     if (r->type == RAFT_REC_ENTRY) {
@@ -1017,7 +1019,40 @@ raft_record_to_standalone_log(const struct raft_record *r,
         if (pa->n != 2) {
             ovs_fatal(0, "Incorrect raft record array length");
         }
+
+        struct json *schema_json = pa->elems[0];
         struct json *data_json = pa->elems[1];
+
+        if (schema_json->type != JSON_NULL) {
+            /* This is a database conversion record.  Reset the log and
+             * write the new schema. */
+            struct ovsdb_schema *schema;
+
+            check_ovsdb_error(ovsdb_schema_from_json(schema_json, &schema));
+
+            if (data_json->type == JSON_NULL) {
+                /* We have a conversion request with no data.  There is no
+                 * other way as to read back what we have and convert. */
+                struct ovsdb *old_db, *new_db;
+
+                check_ovsdb_error(ovsdb_log_commit_block(db_log_data));
+
+                old_db = ovsdb_file_read(db_file_name, false);
+                check_ovsdb_error(ovsdb_convert(old_db, schema, &new_db));
+                ovsdb_destroy(old_db);
+
+                pa->elems[1] = ovsdb_to_txn_json(
+                                    new_db, "converted by ovsdb-tool", true);
+                ovsdb_destroy(new_db);
+
+                json_destroy(data_json);
+                data_json = pa->elems[1];
+            }
+
+            ovsdb_schema_destroy(schema);
+            check_ovsdb_error(ovsdb_log_reset(db_log_data));
+            check_ovsdb_error(ovsdb_log_write(db_log_data, schema_json));
+        }
         if (data_json->type != JSON_NULL) {
             check_ovsdb_error(ovsdb_log_write(db_log_data, data_json));
         }
@@ -1059,6 +1094,7 @@ do_show_log_cluster(struct ovsdb_log *log)
             free(s);
         }
 
+        json_destroy(json);
         putchar('\n');
     }
 
@@ -1635,7 +1671,8 @@ do_compare_versions(struct ovs_cmdl_context *ctx)
 }
 
 static void
-do_convert_to_standalone(struct ovsdb_log *log, struct ovsdb_log *db_log_data)
+do_convert_to_standalone(const char *db_file_name,
+                         struct ovsdb_log *log, struct ovsdb_log *db_log_data)
 {
     for (unsigned int i = 0; ; i++) {
         struct json *json;
@@ -1652,7 +1689,7 @@ do_convert_to_standalone(struct ovsdb_log *log, struct ovsdb_log *db_log_data)
         } else {
             struct raft_record r;
             check_ovsdb_error(raft_record_from_json(&r, json));
-            raft_record_to_standalone_log(&r, db_log_data);
+            raft_record_to_standalone_log(db_file_name, &r, db_log_data);
             raft_record_uninit(&r);
         }
         json_destroy(json);
@@ -1675,7 +1712,7 @@ do_cluster_standalone(struct ovs_cmdl_context *ctx)
     if (strcmp(ovsdb_log_get_magic(log), RAFT_MAGIC) != 0) {
         ovs_fatal(0, "Database is not clustered db.\n");
     }
-    do_convert_to_standalone(log, db_log_data);
+    do_convert_to_standalone(db_file_name, log, db_log_data);
     check_ovsdb_error(ovsdb_log_commit_block(db_log_data));
     ovsdb_log_close(db_log_data);
     ovsdb_log_close(log);

@@ -114,7 +114,8 @@ void ovsdb_row_columns_to_string(const struct ovsdb_row *,
 struct ovsdb_error *ovsdb_row_from_json(struct ovsdb_row *,
                                         const struct json *,
                                         struct ovsdb_symbol_table *,
-                                        struct ovsdb_column_set *included)
+                                        struct ovsdb_column_set *included,
+                                        bool is_diff)
     OVS_WARN_UNUSED_RESULT;
 struct json *ovsdb_row_to_json(const struct ovsdb_row *,
                                const struct ovsdb_column_set *include);
@@ -129,6 +130,7 @@ ovsdb_row_get_uuid(const struct ovsdb_row *row)
 static inline struct uuid *
 ovsdb_row_get_uuid_rw(struct ovsdb_row *row)
 {
+    ovsdb_datum_unshare(&row->fields[OVSDB_COL_UUID], &ovsdb_type_uuid);
     return &row->fields[OVSDB_COL_UUID].keys[0].uuid;
 }
 
@@ -141,6 +143,7 @@ ovsdb_row_get_version(const struct ovsdb_row *row)
 static inline struct uuid *
 ovsdb_row_get_version_rw(struct ovsdb_row *row)
 {
+    ovsdb_datum_unshare(&row->fields[OVSDB_COL_VERSION], &ovsdb_type_uuid);
     return &row->fields[OVSDB_COL_VERSION].keys[0].uuid;
 }
 

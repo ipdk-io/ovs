@@ -50,6 +50,7 @@ struct netdev_rxq_linux {
 };
 
 int netdev_linux_construct(struct netdev *);
+int netdev_linux_get_status(const struct netdev *, struct smap *);
 void netdev_linux_run(const struct netdev_class *);
 
 int get_stats_via_netlink(const struct netdev *netdev_,
@@ -92,6 +93,7 @@ struct netdev_linux {
     enum netdev_features current;    /* Cached from ETHTOOL_GSET. */
     enum netdev_features advertised; /* Cached from ETHTOOL_GSET. */
     enum netdev_features supported;  /* Cached from ETHTOOL_GSET. */
+    uint32_t current_speed;          /* Cached from ETHTOOL_GSET. */
 
     struct ethtool_drvinfo drvinfo;  /* Cached from ETHTOOL_GDRVINFO. */
     struct tc *tc;
@@ -103,7 +105,7 @@ struct netdev_linux {
     uint64_t rx_dropped;        /* Packets dropped while recv from kernel. */
 
     /* LAG information. */
-    bool is_lag_master;         /* True if the netdev is a LAG master. */
+    bool is_lag_primary;        /* True if the netdev is a LAG primary. */
 
     int numa_id;                /* NUMA node id. */
 

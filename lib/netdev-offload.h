@@ -20,6 +20,7 @@
 
 #include "openvswitch/netdev.h"
 #include "openvswitch/types.h"
+#include "ovs-atomic.h"
 #include "ovs-rcu.h"
 #include "ovs-thread.h"
 #include "openvswitch/ofp-meter.h"
@@ -46,6 +47,7 @@ struct ovs_action_push_tnl;
 /* Offload-capable (HW) netdev information */
 struct netdev_hw_info {
     bool oor;		/* Out of Offload Resources ? */
+    atomic_bool miss_api_supported;  /* hw_miss_packet_recover() supported.*/
     int offload_count;  /* Pending (non-offloaded) flow count */
     int pending_count;  /* Offloaded flow count */
     OVSRCU_TYPE(void *) offload_data; /* Offload metadata. */
@@ -70,7 +72,7 @@ struct offload_info {
                                      * sync with datapath recirc ids. */
 
     /*
-     * The flow mark id assigened to the flow. If any pkts hit the flow,
+     * The flow mark id assigned to the flow. If any pkts hit the flow,
      * it will be in the pkt meta data.
      */
     uint32_t flow_mark;

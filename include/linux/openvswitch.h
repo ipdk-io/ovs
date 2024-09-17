@@ -254,6 +254,7 @@ enum ovs_vport_type {
 	OVS_VPORT_TYPE_IP6GRE = 109,
 	OVS_VPORT_TYPE_GTPU = 110,
 	OVS_VPORT_TYPE_BAREUDP = 111,  /* Bareudp tunnel. */
+	OVS_VPORT_TYPE_SRV6 = 112,  /* SRv6 tunnel. */
 	__OVS_VPORT_TYPE_MAX
 };
 
@@ -301,10 +302,24 @@ enum ovs_vport_attr {
 	OVS_VPORT_ATTR_PAD,
 	OVS_VPORT_ATTR_IFINDEX,
 	OVS_VPORT_ATTR_NETNSID,
+	OVS_VPORT_ATTR_UPCALL_STATS,
 	__OVS_VPORT_ATTR_MAX
 };
 
 #define OVS_VPORT_ATTR_MAX (__OVS_VPORT_ATTR_MAX - 1)
+
+/**
+ * enum ovs_vport_upcall_attr - attributes for %OVS_VPORT_UPCALL* commands
+ * @OVS_VPORT_UPCALL_ATTR_SUCCESS: 64-bit upcall success packets.
+ * @OVS_VPORT_UPCALL_ATTR_FAIL: 64-bit upcall fail packets.
+ */
+enum ovs_vport_upcall_attr {
+	OVS_VPORT_UPCALL_ATTR_SUCCESS,
+	OVS_VPORT_UPCALL_ATTR_FAIL,
+	__OVS_VPORT_UPCALL_ATTR_MAX,
+};
+
+#define OVS_VPORT_UPCALL_ATTR_MAX (__OVS_VPORT_UPCALL_ATTR_MAX - 1)
 
 enum {
 	OVS_VXLAN_EXT_UNSPEC,
@@ -977,6 +992,31 @@ struct check_pkt_len_arg {
 };
 #endif
 
+#define OVS_PSAMPLE_COOKIE_MAX_SIZE 16
+/**
+ * enum ovs_pample_attr - Attributes for %OVS_ACTION_ATTR_PSAMPLE
+ * action.
+ *
+ * @OVS_PSAMPLE_ATTR_GROUP: 32-bit number to identify the source of the
+ * sample.
+ * @OVS_PSAMPLE_ATTR_COOKIE: An optional variable-length binary cookie that
+ * contains user-defined metadata. The maximum length is
+ * OVS_PSAMPLE_COOKIE_MAX_SIZE bytes.
+ *
+ * Sends the packet to the psample multicast group with the specified group and
+ * cookie. It is possible to combine this action with the
+ * %OVS_ACTION_ATTR_TRUNC action to limit the size of the sample.
+ */
+enum ovs_psample_attr {
+        OVS_PSAMPLE_ATTR_GROUP = 1,    /* u32 number. */
+        OVS_PSAMPLE_ATTR_COOKIE,       /* Optional, user specified cookie. */
+
+        /* private: */
+        __OVS_PSAMPLE_ATTR_MAX
+};
+
+#define OVS_PSAMPLE_ATTR_MAX (__OVS_PSAMPLE_ATTR_MAX - 1)
+
 /**
  * enum ovs_action_attr - Action types.
  *
@@ -1041,6 +1081,8 @@ struct check_pkt_len_arg {
  * of l3 tunnel flag in the tun_flags field of OVS_ACTION_ATTR_ADD_MPLS
  * argument.
  * @OVS_ACTION_ATTR_DROP: Explicit drop action.
+ * @OVS_ACTION_ATTR_PSAMPLE: Send a sample of the packet to external observers
+ * via psample.
  */
 
 enum ovs_action_attr {
@@ -1070,11 +1112,13 @@ enum ovs_action_attr {
 	OVS_ACTION_ATTR_CLONE,        /* Nested OVS_CLONE_ATTR_*.  */
 	OVS_ACTION_ATTR_CHECK_PKT_LEN, /* Nested OVS_CHECK_PKT_LEN_ATTR_*. */
 	OVS_ACTION_ATTR_ADD_MPLS,     /* struct ovs_action_add_mpls. */
+	OVS_ACTION_ATTR_DEC_TTL,      /* Nested OVS_DEC_TTL_ATTR_*. */
+	OVS_ACTION_ATTR_DROP,         /* u32 xlate_error. */
+	OVS_ACTION_ATTR_PSAMPLE,      /* Nested OVS_PSAMPLE_ATTR_*. */
 
 #ifndef __KERNEL__
 	OVS_ACTION_ATTR_TUNNEL_PUSH,   /* struct ovs_action_push_tnl*/
 	OVS_ACTION_ATTR_TUNNEL_POP,    /* u32 port number. */
-	OVS_ACTION_ATTR_DROP,          /* u32 xlate_error. */
 	OVS_ACTION_ATTR_LB_OUTPUT,     /* u32 bond-id. */
 #endif
 	__OVS_ACTION_ATTR_MAX,	      /* Nothing past this will be accepted
@@ -1167,6 +1211,14 @@ struct ovs_zone_limit {
 	__u32 limit;
 	__u32 count;
 };
+
+enum ovs_dec_ttl_attr {
+	OVS_DEC_TTL_ATTR_UNSPEC,
+	OVS_DEC_TTL_ATTR_ACTION,	/* Nested struct nlattr */
+	__OVS_DEC_TTL_ATTR_MAX
+};
+
+#define OVS_DEC_TTL_ATTR_MAX (__OVS_DEC_TTL_ATTR_MAX - 1)
 
 #define OVS_CLONE_ATTR_EXEC      0   /* Specify an u32 value. When nonzero,
 				      * actions in clone will not change flow

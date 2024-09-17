@@ -97,7 +97,7 @@ typedef struct _SFLReceiver {
     struct _SFLReceiver *nxt;
     /* MIB fields */
     char *sFlowRcvrOwner;
-    time_t sFlowRcvrTimeout;
+    u_int32_t sFlowRcvrTimeout;
     u_int32_t sFlowRcvrMaximumDatagramSize;
     SFLAddress sFlowRcvrAddress;
     u_int32_t sFlowRcvrPort;
@@ -148,7 +148,7 @@ typedef struct _SFLPoller {
     /* MIB fields */
     SFLDataSource_instance dsi;
     u_int32_t sFlowCpReceiver;
-    time_t sFlowCpInterval;
+    u_int32_t sFlowCpInterval;
     /* public fields */
     struct _SFLAgent *agent; /* pointer to my agent */
     void *magic;             /* ptr to pass back in getCountersFn() */
@@ -156,7 +156,7 @@ typedef struct _SFLPoller {
     u_int32_t bridgePort; /* port number local to bridge */
     /* private fields */
     SFLReceiver *myReceiver;
-    time_t countersCountdown;
+    u_int32_t countersCountdown;
     u_int32_t countersSampleSeqNo;
 } SFLPoller;
 
@@ -251,8 +251,8 @@ SFLSampler *sfl_agent_getSamplerByIfIndex(SFLAgent *agent, u_int32_t ifIndex);
 /* receiver */
 char *      sfl_receiver_get_sFlowRcvrOwner(SFLReceiver *receiver);
 void        sfl_receiver_set_sFlowRcvrOwner(SFLReceiver *receiver, char *sFlowRcvrOwner);
-time_t      sfl_receiver_get_sFlowRcvrTimeout(SFLReceiver *receiver);
-void        sfl_receiver_set_sFlowRcvrTimeout(SFLReceiver *receiver, time_t sFlowRcvrTimeout);
+u_int32_t   sfl_receiver_get_sFlowRcvrTimeout(SFLReceiver *receiver);
+void        sfl_receiver_set_sFlowRcvrTimeout(SFLReceiver *receiver, u_int32_t sFlowRcvrTimeout);
 u_int32_t   sfl_receiver_get_sFlowRcvrMaximumDatagramSize(SFLReceiver *receiver);
 void        sfl_receiver_set_sFlowRcvrMaximumDatagramSize(SFLReceiver *receiver, u_int32_t sFlowRcvrMaximumDatagramSize);
 SFLAddress *sfl_receiver_get_sFlowRcvrAddress(SFLReceiver *receiver);
@@ -337,7 +337,7 @@ void sfl_agent_sysError(SFLAgent *agent, char *modName, char *msg);
 
 u_int32_t sfl_receiver_samplePacketsSent(SFLReceiver *receiver);
 
-#define SFL_ALLOC malloc
+#define SFL_ALLOC xzalloc
 #define SFL_FREE free
 
 #endif /* SFLOW_API_H */

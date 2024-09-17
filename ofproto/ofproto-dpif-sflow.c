@@ -306,6 +306,7 @@ sflow_agent_get_counters(void *ds_, SFLPoller *poller,
     struct netdev_stats stats;
     enum netdev_flags flags;
     struct lacp_member_stats lacp_stats;
+    uint32_t curr_speed;
     const char *ifName;
 
     dsp = dpif_sflow_find_port(ds, u32_to_odp(poller->bridgePort));
@@ -320,13 +321,19 @@ sflow_agent_get_counters(void *ds_, SFLPoller *poller,
     if (!netdev_get_features(dsp->ofport->netdev, &current, NULL, NULL, NULL)) {
         /* The values of ifDirection come from MAU MIB (RFC 2668): 0 = unknown,
            1 = full-duplex, 2 = half-duplex, 3 = in, 4=out */
-        counters->ifSpeed = netdev_features_to_bps(current, 0);
         counters->ifDirection = (netdev_features_is_full_duplex(current)
                                  ? 1 : 2);
     } else {
-        counters->ifSpeed = 100000000;
         counters->ifDirection = 0;
     }
+
+    netdev_get_speed(dsp->ofport->netdev, &curr_speed, NULL);
+    if (curr_speed) {
+        counters->ifSpeed = curr_speed * 1000000;
+    } else {
+        counters->ifSpeed = 100000000;
+    }
+
     if (!netdev_get_flags(dsp->ofport->netdev, &flags) && flags & NETDEV_UP) {
         counters->ifStatus = 1; /* ifAdminStatus up. */
         if (netdev_get_carrier(dsp->ofport->netdev)) {
@@ -801,7 +808,7 @@ dpif_sflow_set_options(struct dpif_sflow *ds,
 
     receiver = sfl_agent_addReceiver(ds->sflow_agent);
     sfl_receiver_set_sFlowRcvrOwner(receiver, "Open vSwitch sFlow");
-    sfl_receiver_set_sFlowRcvrTimeout(receiver, 0xffffffff);
+    sfl_receiver_set_sFlowRcvrTimeout(receiver, UINT32_MAX);
 
     /* Set the sampling_rate down in the datapath. */
     ds->probability = MAX(1, UINT32_MAX / ds->options->sampling_rate);
@@ -1229,6 +1236,8 @@ dpif_sflow_read_actions(const struct flow *flow,
         case OVS_ACTION_ATTR_CHECK_PKT_LEN:
         case OVS_ACTION_ATTR_DROP:
         case OVS_ACTION_ATTR_ADD_MPLS:
+        case OVS_ACTION_ATTR_DEC_TTL:
+        case OVS_ACTION_ATTR_PSAMPLE:
         case __OVS_ACTION_ATTR_MAX:
         default:
             break;

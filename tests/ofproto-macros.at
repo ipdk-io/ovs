@@ -9,7 +9,9 @@ s/ duration=[0-9.]*s,//
 s/ cookie=0x0,//
 s/ table=0,//
 s/ n_packets=0,//
+s/ n_offload_packets=0,//
 s/ n_bytes=0,//
+s/ n_offload_bytes=0,//
 s/ idle_age=[0-9]*,//
 s/ hard_age=[0-9]*,//
 s/dp_hash=0x[0-9a-f]*\//dp_hash=0x0\//
@@ -17,6 +19,11 @@ s/recirc_id=0x[0-9a-f]*,/recirc_id=0x0,/
 s/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z|//
 s/dir\/[0-9]*\/br0.mgmt/dir\/XXXX\/br0.mgmt/
 '
+}
+
+# Strips out byte counters from ovs-ofctl output
+ofctl_strip_bytes () {
+    sed 's/ n_bytes=[0-9]*,//'
 }
 
 # Filter (multiline) vconn debug messages from ovs-vswitchd.log.
@@ -125,7 +132,7 @@ strip_used () {
 
 # Removes all 'duration=...' to make output easier to compare.
 strip_duration () {
-    sed 's/duration=[[0-9]]*\.[[0-9]]*s,//'
+    sed 's/duration=[[0-9.]]*s,//'
 }
 
 # Strips 'ufid:...' from output, to make it easier to compare.
@@ -135,10 +142,29 @@ strip_ufid () {
     s/ufid:[[-0-9a-f]]* //'
 }
 
+parse_ufid () {
+    grep -o 'ufid:[[-0-9a-f]]*'
+}
+
 # Strips packets: and bytes: from output
 strip_stats () {
     sed 's/packets:[[0-9]]*/packets:0/
     s/bytes:[[0-9]]*/bytes:0/'
+}
+
+# Strips key32 field from output.
+strip_key32 () {
+    sed 's/key32([[0-9 \/]]*),//'
+}
+
+# Strips packet-type from output.
+strip_ptype () {
+    sed 's/packet_type(ns=[[0-9]]*,id=[[0-9]]*),//'
+}
+
+# Strips bare eth from output.
+strip_eth () {
+    sed 's/eth(),//'
 }
 
 # Changes all 'recirc(...)' and 'recirc=...' to say 'recirc(<recirc_id>)' and
@@ -149,6 +175,12 @@ strip_recirc() {
         s/recirc_id=[[x0-9]]*/recirc_id=<recirc>/
         s/recirc([[x0-9]]*)/recirc(<recirc>)/'
 }
+
+# Strips dp_hash from output.
+strip_dp_hash() {
+    sed 's/dp_hash([[0-9a-fx/]]*),//'
+}
+
 m4_divert_pop([PREPARE_TESTS])
 
 m4_define([TESTABLE_LOG], [-vPATTERN:ANY:'%c|%p|%m'])
@@ -249,6 +281,9 @@ check_logs () {
     # we ignore the messages that were rate-limited, we can end up failing just
     # because of the announcement that rate-limiting happened (and in a racy,
     # timing-dependent way, too).
+    #
+    # We also ignore the "Spent an unreasonably long XXms dumping flows" as
+    # they can appear when large time/warps are used during tests.
     sed -n "$1
 /reset by peer/d
 /Broken pipe/d
@@ -260,9 +295,18 @@ check_logs () {
 /ovs_rcu.*blocked [[0-9]]* ms waiting for .* to quiesce/d
 /Dropped [[0-9]]* log messages/d
 /setting extended ack support failed/d
+/ETHTOOL_GSSET_INFO/d
+/Spent an unreasonably long .*ms dumping flows/d
 /|WARN|/p
 /|ERR|/p
 /|EMER|/p" ${logs}
+}
+
+# Gets the last line number in ovs-vswitchd.log +1. This can be used to
+# help ensure that an output in the log is newly written as the result of
+# a test command and it is not just matching an earlier log line.
+get_log_next_line_num () {
+    LINENUM=$(($(cat ovs-vswitchd.log | wc -l | tr -d [[:blank:]])+1))
 }
 
 # add_of_br BRNUM [ARG...]

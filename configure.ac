@@ -14,7 +14,7 @@
 # limitations under the License.
 
 AC_PREREQ(2.63)
-AC_INIT(openvswitch, 3.0.90, bugs@openvswitch.org)
+AC_INIT(openvswitch, 3.4.90, bugs@openvswitch.org)
 AC_CONFIG_SRCDIR([vswitchd/ovs-vswitchd.c])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([build-aux])
@@ -22,7 +22,11 @@ AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_TESTDIR([tests])
 AM_INIT_AUTOMAKE([tar-pax])
 
-AC_PROG_CC_C99
+# AC_PROG_CC doesn't try enabling C99 in autoconf 2.69 and below, but
+# AC_PROG_CC_C99 is deprecated in newer ones.  In autoconf 2.70+ both
+# will try enabling features up to C11.
+m4_version_prereq([2.70], [AC_PROG_CC], [AC_PROG_CC_C99])
+
 AM_PROG_CC_C_O
 AC_PROG_CXX
 AC_PROG_CPP
@@ -199,7 +203,9 @@ OVS_CHECK_LINUX_SCTP_CT
 OVS_CHECK_LINUX_VIRTIO_TYPES
 OVS_CHECK_DPDK
 OVS_CHECK_PRAGMA_MESSAGE
+OVS_CHECK_VERSION_SUFFIX
 OVS_CHECK_OVSP4RT
+
 AC_SUBST([CFLAGS])
 AC_SUBST([OVS_CFLAGS])
 AC_SUBST([OVS_LDFLAGS])

@@ -1,0 +1,51 @@
+# See https://editorconfig.org/ for syntax reference.
+
+root = true
+
+# No wildcard sections [*] and [**] because properties cannot be
+# applied safely to any filetype in general.
+
+# Property trim_trailing_whitespace should not be defined at all
+# because it is interpreted differently by editors.
+
+[*.{c,h}]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+max_line_length = 79
+
+[include/linux/**.h]
+indent_style = tab
+indent_size = tab
+tab_width = 8
+
+[include/sparse/rte_*.h]
+indent_style = tab
+tab_width = 8
+
+[include/windows/getopt.h]
+indent_style = tab
+indent_size = tab
+tab_width = 8
+
+[include/windows/netinet/{icmp6,ip6}.h]
+indent_style = tab
+indent_size = tab
+tab_width = 8
+
+[lib/getopt_long.c]
+indent_style = tab
+indent_size = tab
+tab_width = 8
+
+[lib/sflow*.{c,h}]
+indent_style = tab
+indent_size = tab
+tab_width = 8
+
+[lib/strsep.c]
+indent_style = tab
+indent_size = tab
+tab_width = 8

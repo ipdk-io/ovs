@@ -853,6 +853,32 @@ trie_ctx_init(struct trie_ctx *ctx, const struct cls_trie *trie)
     ctx->lookup_done = false;
 }
 
+static void
+insert_conj_flows(struct hmapx *conj_flows, uint32_t id, int priority,
+                  struct cls_conjunction_set **soft, size_t n_soft)
+{
+    struct cls_conjunction_set *conj_set;
+
+    if (!conj_flows) {
+        return;
+    }
+
+    for (size_t i = 0; i < n_soft; i++) {
+        conj_set = soft[i];
+
+        if (conj_set->priority != priority) {
+            continue;
+        }
+
+        for (size_t j = 0; j < conj_set->n; j++) {
+            if (conj_set->conj[j].id == id) {
+                hmapx_add(conj_flows, (void *) (conj_set->match->cls_rule));
+                break;
+            }
+        }
+    }
+}
+
 struct conjunctive_match {
     struct hmap_node hmap_node;
     uint32_t id;
@@ -933,11 +959,15 @@ free_conjunctive_matches(struct hmap *matches,
  * recursion within this function itself.
  *
  * 'flow' is non-const to allow for temporary modifications during the lookup.
- * Any changes are restored before returning. */
+ * Any changes are restored before returning.
+ *
+ * 'conj_flows' is an optional parameter.  If it is non-null, the matching
+ * conjunctive flows are inserted. */
 static const struct cls_rule *
 classifier_lookup__(const struct classifier *cls, ovs_version_t version,
                     struct flow *flow, struct flow_wildcards *wc,
-                    bool allow_conjunctive_matches)
+                    bool allow_conjunctive_matches,
+                    struct hmapx *conj_flows)
 {
     struct trie_ctx trie_ctx[CLS_MAX_TRIES];
     const struct cls_match *match;
@@ -1097,10 +1127,15 @@ classifier_lookup__(const struct classifier *cls, ovs_version_t version,
                 const struct cls_rule *rule;
 
                 flow->conj_id = id;
-                rule = classifier_lookup__(cls, version, flow, wc, false);
+                rule = classifier_lookup__(cls, version, flow, wc, false,
+                                           NULL);
                 flow->conj_id = saved_conj_id;
 
                 if (rule) {
+                    if (allow_conjunctive_matches) {
+                        insert_conj_flows(conj_flows, id, soft_pri, soft,
+                                          n_soft);
+                    }
                     free_conjunctive_matches(&matches,
                                              cm_stubs, ARRAY_SIZE(cm_stubs));
                     if (soft != soft_stub) {
@@ -1161,12 +1196,16 @@ classifier_lookup__(const struct classifier *cls, ovs_version_t version,
  * flow_wildcards_init_catchall()).
  *
  * 'flow' is non-const to allow for temporary modifications during the lookup.
- * Any changes are restored before returning. */
+ * Any changes are restored before returning.
+ *
+ * 'conj_flows' is an optional parameter.  If it is non-null, the matching
+ * conjunctive flows are inserted. */
 const struct cls_rule *
 classifier_lookup(const struct classifier *cls, ovs_version_t version,
-                  struct flow *flow, struct flow_wildcards *wc)
+                  struct flow *flow, struct flow_wildcards *wc,
+                  struct hmapx *conj_flows)
 {
-    return classifier_lookup__(cls, version, flow, wc, true);
+    return classifier_lookup__(cls, version, flow, wc, true, conj_flows);
 }
 
 /* Finds and returns a rule in 'cls' with exactly the same priority and
@@ -1695,6 +1734,8 @@ find_match_wc(const struct cls_subtable *subtable, ovs_version_t version,
     const struct cls_match *rule = NULL;
     struct flowmap stages_map = FLOWMAP_EMPTY_INITIALIZER;
     unsigned int mask_offset = 0;
+    bool adjust_ports_mask = false;
+    ovs_be32 ports_mask;
     int i;
 
     /* Try to finish early by checking fields in segments. */
@@ -1722,6 +1763,9 @@ find_match_wc(const struct cls_subtable *subtable, ovs_version_t version,
                     subtable->index_maps[i], flow, wc)) {
         goto no_match;
     }
+    /* Accumulate the map used so far. */
+    stages_map = flowmap_or(stages_map, subtable->index_maps[i]);
+
     hash = flow_hash_in_minimask_range(flow, &subtable->mask,
                                        subtable->index_maps[i],
                                        &mask_offset, &basis);
@@ -1731,14 +1775,16 @@ find_match_wc(const struct cls_subtable *subtable, ovs_version_t version,
          * unwildcarding all the ports bits, use the ports trie to figure out a
          * smaller set of bits to unwildcard. */
         unsigned int mbits;
-        ovs_be32 value, plens, mask;
+        ovs_be32 value, plens;
 
-        mask = miniflow_get_ports(&subtable->mask.masks);
-        value = ((OVS_FORCE ovs_be32 *)flow)[TP_PORTS_OFS32] & mask;
+        ports_mask = miniflow_get_ports(&subtable->mask.masks);
+        value = ((OVS_FORCE ovs_be32 *) flow)[TP_PORTS_OFS32] & ports_mask;
         mbits = trie_lookup_value(&subtable->ports_trie, &value, &plens, 32);
 
-        ((OVS_FORCE ovs_be32 *)&wc->masks)[TP_PORTS_OFS32] |=
-            mask & be32_prefix_mask(mbits);
+        ports_mask &= be32_prefix_mask(mbits);
+        ports_mask |= ((OVS_FORCE ovs_be32 *) &wc->masks)[TP_PORTS_OFS32];
+
+        adjust_ports_mask = true;
 
         goto no_match;
     }
@@ -1751,6 +1797,14 @@ no_match:
     /* Unwildcard the bits in stages so far, as they were used in determining
      * there is no match. */
     flow_wildcards_fold_minimask_in_map(wc, &subtable->mask, stages_map);
+    if (adjust_ports_mask) {
+        /* This has to be done after updating flow wildcards to overwrite
+         * the ports mask back.  We can't simply disable the corresponding bit
+         * in the stages map, because it has 64-bit resolution, i.e. one
+         * bit covers not only tp_src/dst, but also ct_tp_src/dst, which are
+         * not covered by the trie. */
+        ((OVS_FORCE ovs_be32 *) &wc->masks)[TP_PORTS_OFS32] = ports_mask;
+    }
     return NULL;
 }
 

@@ -114,6 +114,9 @@ struct ovsdb {
 
     size_t n_atoms;  /* Total number of ovsdb atoms in the database. */
 
+    bool read_only;  /* If 'true', JSON-RPC clients are not allowed to change
+                      * the data. */
+
     /* Relay mode. */
     bool is_relay;  /* True, if database is in relay mode. */
     /* List that holds transactions waiting to be forwarded to the server. */
@@ -125,8 +128,15 @@ struct ovsdb {
     struct ovsdb_compaction_state *snap_state;
 };
 
+/* Total number of 'weak reference' objects in all databases
+ * and transactions. */
+extern size_t n_weak_refs;
+
 struct ovsdb *ovsdb_create(struct ovsdb_schema *, struct ovsdb_storage *);
 void ovsdb_destroy(struct ovsdb *);
+
+void ovsdb_no_data_conversion_disable(void);
+bool ovsdb_conversion_with_no_data_supported(const struct ovsdb *);
 
 void ovsdb_get_memory_usage(const struct ovsdb *, struct simap *usage);
 

@@ -127,12 +127,13 @@ void flow_set_mpls_bos(struct flow *, int idx, uint8_t stack);
 void flow_set_mpls_lse(struct flow *, int idx, ovs_be32 lse);
 
 void flow_compose(struct dp_packet *, const struct flow *,
-                  const void *l7, size_t l7_len);
+                  const void *l7, size_t l7_len, bool bad_csum);
 void packet_expand(struct dp_packet *, const struct flow *, size_t size);
 
 bool parse_ipv6_ext_hdrs(const void **datap, size_t *sizep, uint8_t *nw_proto,
                          uint8_t *nw_frag,
-                         const struct ovs_16aligned_ip6_frag **frag_hdr);
+                         const struct ovs_16aligned_ip6_frag **frag_hdr,
+                         const struct ip6_rt_hdr **rt_hdr);
 bool parse_nsh(const void **datap, size_t *sizep, struct ovs_key_nsh *key);
 uint16_t parse_tcp_flags(struct dp_packet *packet, ovs_be16 *dl_type_p,
                          uint8_t *nw_frag_p, ovs_be16 *first_vlan_tci_p);
@@ -936,6 +937,15 @@ static inline void
 flow_union_with_miniflow(struct flow *dst, const struct miniflow *src)
 {
     flow_union_with_miniflow_subset(dst, src, src->map);
+}
+
+/* Perform a bitwise OR of minimask 'src' mask data with the equivalent
+ * fields in 'dst', storing the result in 'dst'. */
+static inline void
+flow_wildcards_union_with_minimask(struct flow_wildcards *dst,
+                                   const struct minimask *src)
+{
+    flow_union_with_miniflow_subset(&dst->masks, &src->masks, src->masks.map);
 }
 
 static inline bool is_ct_valid(const struct flow *flow,

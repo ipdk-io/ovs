@@ -12,6 +12,7 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
+import os
 import string
 import sys
 
@@ -48,7 +49,7 @@ master_doc = 'contents'
 
 # General information about the project.
 project = u'Open vSwitch'
-copyright = u'2016-2021, The Open vSwitch Development Community'
+copyright = u'2016-2024, The Open vSwitch Development Community'
 author = u'The Open vSwitch Development Community'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -108,6 +109,13 @@ html_logo = '_static/logo.png'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+# Define the canonical URL for our domain configured on Read the Docs.
+html_baseurl = os.environ.get("READTHEDOCS_CANONICAL_URL", "")
+
+# Tell Jinja2 templates the build is running on Read the Docs.
+html_context = {}
+if os.environ.get("READTHEDOCS", "") == "True":
+    html_context["READTHEDOCS"] = True
 
 # -- Options for manual page output ---------------------------------------
 

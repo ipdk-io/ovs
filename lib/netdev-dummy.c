@@ -39,11 +39,13 @@
 #include "pcap-file.h"
 #include "openvswitch/poll-loop.h"
 #include "openvswitch/shash.h"
+#include "ovs-router.h"
 #include "sset.h"
 #include "stream.h"
 #include "unaligned.h"
 #include "timeval.h"
 #include "unixctl.h"
+#include "userspace-tso.h"
 #include "reconnect.h"
 
 VLOG_DEFINE_THIS_MODULE(netdev_dummy);
@@ -136,8 +138,7 @@ struct netdev_dummy {
 
     struct pcap_file *tx_pcap, *rxq_pcap OVS_GUARDED;
 
-    struct in_addr address, netmask;
-    struct in6_addr ipv6, ipv6_mask;
+    struct ovs_list addrs OVS_GUARDED;
     struct ovs_list rxes OVS_GUARDED; /* List of child "netdev_rxq_dummy"s. */
 
     struct hmap offloaded_flows OVS_GUARDED;
@@ -148,6 +149,13 @@ struct netdev_dummy {
     int requested_n_txq OVS_GUARDED;
     int requested_n_rxq OVS_GUARDED;
     int requested_numa_id OVS_GUARDED;
+
+    /* Enable netdev IP csum offload. */
+    bool ol_ip_csum OVS_GUARDED;
+    /* Flag RX packet with good csum. */
+    bool ol_ip_csum_set_good OVS_GUARDED;
+    /* Set the segment size for netdev TSO support. */
+    int ol_tso_segsz OVS_GUARDED;
 };
 
 /* Max 'recv_queue_len' in struct netdev_dummy. */
@@ -161,6 +169,12 @@ struct netdev_rxq_dummy {
     struct seq *seq;            /* Reports newly queued packets. */
 };
 
+struct netdev_addr_dummy {
+    struct in6_addr address;
+    struct in6_addr netmask;
+    struct ovs_list node;       /* In netdev_dummy's "addrs" list. */
+};
+
 static unixctl_cb_func netdev_dummy_set_admin_state;
 static int netdev_dummy_construct(struct netdev *);
 static void netdev_dummy_queue_packet(struct netdev_dummy *,
@@ -169,6 +183,7 @@ static void netdev_dummy_queue_packet(struct netdev_dummy *,
 static void dummy_packet_stream_close(struct dummy_packet_stream *);
 
 static void pkt_list_delete(struct ovs_list *);
+static void addr_list_delete(struct ovs_list *);
 
 static bool
 is_dummy_class(const struct netdev_class *class)
@@ -204,7 +219,7 @@ dummy_packet_stream_create(struct stream *stream)
 {
     struct dummy_packet_stream *s;
 
-    s = xzalloc(sizeof *s);
+    s = xzalloc_cacheline(sizeof *s);
     dummy_packet_stream_init(s, stream);
 
     return s;
@@ -350,7 +365,7 @@ dummy_packet_conn_close(struct dummy_packet_conn *conn)
         pstream_close(pconn->pstream);
         for (i = 0; i < pconn->n_streams; i++) {
             dummy_packet_stream_close(pconn->streams[i]);
-            free(pconn->streams[i]);
+            free_cacheline(pconn->streams[i]);
         }
         free(pconn->streams);
         pconn->pstream = NULL;
@@ -359,7 +374,7 @@ dummy_packet_conn_close(struct dummy_packet_conn *conn)
 
     case ACTIVE:
         dummy_packet_stream_close(rconn->rstream);
-        free(rconn->rstream);
+        free_cacheline(rconn->rstream);
         rconn->rstream = NULL;
         reconnect_destroy(rconn->reconnect);
         rconn->reconnect = NULL;
@@ -469,7 +484,7 @@ dummy_pconn_run(struct netdev_dummy *dev)
         pconn->streams = xrealloc(pconn->streams,
                                 ((pconn->n_streams + 1)
                                  * sizeof s));
-        s = xmalloc(sizeof *s);
+        s = xmalloc_cacheline(sizeof *s);
         pconn->streams[pconn->n_streams++] = s;
         dummy_packet_stream_init(s, new_stream);
     } else if (error != EAGAIN) {
@@ -489,7 +504,7 @@ dummy_pconn_run(struct netdev_dummy *dev)
                      stream_get_name(s->stream),
                      ovs_retval_to_string(error));
             dummy_packet_stream_close(s);
-            free(s);
+            free_cacheline(s);
             pconn->streams[i] = pconn->streams[--pconn->n_streams];
         } else {
             i++;
@@ -720,6 +735,7 @@ netdev_dummy_construct(struct netdev *netdev_)
     dummy_packet_conn_init(&netdev->conn);
 
     ovs_list_init(&netdev->rxes);
+    ovs_list_init(&netdev->addrs);
     hmap_init(&netdev->offloaded_flows);
     ovs_mutex_unlock(&netdev->mutex);
 
@@ -756,6 +772,7 @@ netdev_dummy_destruct(struct netdev *netdev_)
         free(off_flow);
     }
     hmap_destroy(&netdev->offloaded_flows);
+    addr_list_delete(&netdev->addrs);
 
     ovs_mutex_unlock(&netdev->mutex);
     ovs_mutex_destroy(&netdev->mutex);
@@ -782,14 +799,29 @@ netdev_dummy_get_config(const struct netdev *dev, struct smap *args)
 
     dummy_packet_conn_get_config(&netdev->conn, args);
 
+    /* pcap, rxq_pcap and tx_pcap cannot be recovered because filenames have
+     * been discarded after opening file descriptors */
+
+    if (netdev->ol_ip_csum) {
+        smap_add_format(args, "ol_ip_csum", "%s", "true");
+    }
+
+    if (netdev->ol_ip_csum_set_good) {
+        smap_add_format(args, "ol_ip_csum_set_good", "%s", "true");
+    }
+
+    if (netdev->ol_tso_segsz && userspace_tso_enabled()) {
+        smap_add_format(args, "ol_tso_segsz", "%d", netdev->ol_tso_segsz);
+    }
+
     /* 'dummy-pmd' specific config. */
     if (!netdev_is_pmd(dev)) {
         goto exit;
     }
-    smap_add_format(args, "requested_rx_queues", "%d", netdev->requested_n_rxq);
-    smap_add_format(args, "configured_rx_queues", "%d", dev->n_rxq);
-    smap_add_format(args, "requested_tx_queues", "%d", netdev->requested_n_txq);
-    smap_add_format(args, "configured_tx_queues", "%d", dev->n_txq);
+
+    smap_add_format(args, "n_rxq", "%d", netdev->requested_n_rxq);
+    smap_add_format(args, "n_txq", "%d", netdev->requested_n_txq);
+    smap_add_format(args, "numa_id", "%d", netdev->requested_numa_id);
 
 exit:
     ovs_mutex_unlock(&netdev->mutex);
@@ -803,32 +835,24 @@ netdev_dummy_get_addr_list(const struct netdev *netdev_, struct in6_addr **paddr
     struct netdev_dummy *netdev = netdev_dummy_cast(netdev_);
     int cnt = 0, i = 0, err = 0;
     struct in6_addr *addr, *mask;
+    struct netdev_addr_dummy *addr_dummy;
 
     ovs_mutex_lock(&netdev->mutex);
-    if (netdev->address.s_addr != INADDR_ANY) {
-        cnt++;
-    }
 
-    if (ipv6_addr_is_set(&netdev->ipv6)) {
-        cnt++;
-    }
+    cnt = ovs_list_size(&netdev->addrs);
     if (!cnt) {
         err = EADDRNOTAVAIL;
         goto out;
     }
     addr = xmalloc(sizeof *addr * cnt);
     mask = xmalloc(sizeof *mask * cnt);
-    if (netdev->address.s_addr != INADDR_ANY) {
-        in6_addr_set_mapped_ipv4(&addr[i], netdev->address.s_addr);
-        in6_addr_set_mapped_ipv4(&mask[i], netdev->netmask.s_addr);
+
+    LIST_FOR_EACH (addr_dummy, node, &netdev->addrs) {
+        memcpy(&addr[i], &addr_dummy->address, sizeof *addr);
+        memcpy(&mask[i], &addr_dummy->netmask, sizeof *mask);
         i++;
     }
 
-    if (ipv6_addr_is_set(&netdev->ipv6)) {
-        memcpy(&addr[i], &netdev->ipv6, sizeof *addr);
-        memcpy(&mask[i], &netdev->ipv6_mask, sizeof *mask);
-        i++;
-    }
     if (paddr) {
         *paddr = addr;
         *pmask = mask;
@@ -844,14 +868,16 @@ out:
 }
 
 static int
-netdev_dummy_set_in4(struct netdev *netdev_, struct in_addr address,
+netdev_dummy_add_in4(struct netdev *netdev_, struct in_addr address,
                      struct in_addr netmask)
 {
     struct netdev_dummy *netdev = netdev_dummy_cast(netdev_);
+    struct netdev_addr_dummy *addr_dummy = xmalloc(sizeof *addr_dummy);
 
     ovs_mutex_lock(&netdev->mutex);
-    netdev->address = address;
-    netdev->netmask = netmask;
+    in6_addr_set_mapped_ipv4(&addr_dummy->address, address.s_addr);
+    in6_addr_set_mapped_ipv4(&addr_dummy->netmask, netmask.s_addr);
+    ovs_list_push_back(&netdev->addrs, &addr_dummy->node);
     netdev_change_seq_changed(netdev_);
     ovs_mutex_unlock(&netdev->mutex);
 
@@ -859,14 +885,16 @@ netdev_dummy_set_in4(struct netdev *netdev_, struct in_addr address,
 }
 
 static int
-netdev_dummy_set_in6(struct netdev *netdev_, struct in6_addr *in6,
+netdev_dummy_add_in6(struct netdev *netdev_, struct in6_addr *in6,
                      struct in6_addr *mask)
 {
     struct netdev_dummy *netdev = netdev_dummy_cast(netdev_);
+    struct netdev_addr_dummy *addr_dummy = xmalloc(sizeof *addr_dummy);
 
     ovs_mutex_lock(&netdev->mutex);
-    netdev->ipv6 = *in6;
-    netdev->ipv6_mask = *mask;
+    addr_dummy->address = *in6;
+    addr_dummy->netmask = *mask;
+    ovs_list_push_back(&netdev->addrs, &addr_dummy->node);
     netdev_change_seq_changed(netdev_);
     ovs_mutex_unlock(&netdev->mutex);
 
@@ -907,6 +935,21 @@ netdev_dummy_set_config(struct netdev *netdev_, const struct smap *args,
         }
         if (tx_pcap) {
             netdev->tx_pcap = ovs_pcap_open(tx_pcap, "ab");
+        }
+    }
+
+    netdev->ol_ip_csum_set_good = smap_get_bool(args, "ol_ip_csum_set_good",
+                                                false);
+    netdev->ol_ip_csum = smap_get_bool(args, "ol_ip_csum", false);
+    if (netdev->ol_ip_csum) {
+        netdev_->ol_flags |= NETDEV_TX_OFFLOAD_IPV4_CKSUM;
+    }
+
+    if (userspace_tso_enabled()) {
+        netdev->ol_tso_segsz = smap_get_int(args, "ol_tso_segsz", 0);
+        if (netdev->ol_tso_segsz) {
+            netdev_->ol_flags |= (NETDEV_TX_OFFLOAD_TCP_TSO
+                                  | NETDEV_TX_OFFLOAD_TCP_CKSUM);
         }
     }
 
@@ -1088,6 +1131,17 @@ netdev_dummy_rxq_recv(struct netdev_rxq *rxq_, struct dp_packet_batch *batch,
     netdev->rxq_stats[rxq_->queue_id].bytes += dp_packet_size(packet);
     netdev->custom_stats[0].value++;
     netdev->custom_stats[1].value++;
+    if (netdev->ol_ip_csum_set_good) {
+        /* The netdev hardware sets the flag when the packet has good csum. */
+        dp_packet_ol_set_ip_csum_good(packet);
+    }
+
+    if (userspace_tso_enabled() && netdev->ol_tso_segsz) {
+        dp_packet_set_tso_segsz(packet, netdev->ol_tso_segsz);
+        dp_packet_hwol_set_tcp_seg(packet);
+        dp_packet_hwol_set_csum_tcp(packet);
+    }
+
     ovs_mutex_unlock(&netdev->mutex);
 
     dp_packet_batch_init_packet(batch, packet);
@@ -1143,6 +1197,12 @@ netdev_dummy_send(struct netdev *netdev, int qid,
     DP_PACKET_BATCH_FOR_EACH(i, packet, batch) {
         const void *buffer = dp_packet_data(packet);
         size_t size = dp_packet_size(packet);
+        bool is_tso;
+
+        ovs_mutex_lock(&dev->mutex);
+        is_tso = userspace_tso_enabled() && dev->ol_tso_segsz &&
+                 dp_packet_hwol_is_tso(packet);
+        ovs_mutex_unlock(&dev->mutex);
 
         if (!dp_packet_is_eth(packet)) {
             error = EPFNOSUPPORT;
@@ -1163,10 +1223,16 @@ netdev_dummy_send(struct netdev *netdev, int qid,
             if (eth->eth_type == htons(ETH_TYPE_VLAN)) {
                 max_size += VLAN_HEADER_LEN;
             }
-            if (size > max_size) {
+            if (size > max_size && !is_tso) {
                 error = EMSGSIZE;
                 break;
             }
+        }
+
+        if (dp_packet_hwol_tx_ip_csum(packet) &&
+            !dp_packet_ip_checksum_good(packet)) {
+            dp_packet_ip_set_header_csum(packet, false);
+            dp_packet_ol_set_ip_csum_good(packet);
         }
 
         ovs_mutex_lock(&dev->mutex);
@@ -1178,7 +1244,10 @@ netdev_dummy_send(struct netdev *netdev, int qid,
         dummy_packet_conn_send(&dev->conn, buffer, size);
 
         /* Reply to ARP requests for 'dev''s assigned IP address. */
-        if (dev->address.s_addr) {
+        struct netdev_addr_dummy *addr_dummy;
+        LIST_FOR_EACH (addr_dummy, node, &dev->addrs) {
+            ovs_be32 address = in6_addr_get_mapped_ipv4(&addr_dummy->address);
+
             struct dp_packet dp;
             struct flow flow;
 
@@ -1186,11 +1255,12 @@ netdev_dummy_send(struct netdev *netdev, int qid,
             flow_extract(&dp, &flow);
             if (flow.dl_type == htons(ETH_TYPE_ARP)
                 && flow.nw_proto == ARP_OP_REQUEST
-                && flow.nw_dst == dev->address.s_addr) {
+                && flow.nw_dst == address) {
                 struct dp_packet *reply = dp_packet_new(0);
                 compose_arp(reply, ARP_OP_REPLY, dev->hwaddr, flow.dl_src,
                             false, flow.nw_dst, flow.nw_src);
                 netdev_dummy_queue_packet(dev, reply, NULL, 0);
+                break;
             }
         }
 
@@ -1677,6 +1747,16 @@ pkt_list_delete(struct ovs_list *l)
     }
 }
 
+static void
+addr_list_delete(struct ovs_list *l)
+{
+    struct netdev_addr_dummy *addr_dummy;
+
+    LIST_FOR_EACH_POP (addr_dummy, node, l) {
+        free(addr_dummy);
+    }
+}
+
 static struct dp_packet *
 eth_from_packet(const char *s)
 {
@@ -1718,7 +1798,7 @@ eth_from_flow_str(const char *s, size_t packet_size,
 
     packet = dp_packet_new(0);
     if (packet_size) {
-        flow_compose(packet, flow, NULL, 0);
+        flow_compose(packet, flow, NULL, 0, false);
         if (dp_packet_size(packet) < packet_size) {
             packet_expand(packet, flow, packet_size);
         } else if (dp_packet_size(packet) > packet_size){
@@ -1726,7 +1806,7 @@ eth_from_flow_str(const char *s, size_t packet_size,
             packet = NULL;
         }
     } else {
-        flow_compose(packet, flow, NULL, 64);
+        flow_compose(packet, flow, NULL, 64, false);
     }
 
     ofpbuf_uninit(&odp_key);
@@ -2005,11 +2085,20 @@ netdev_dummy_ip4addr(struct unixctl_conn *conn, int argc OVS_UNUSED,
 
     if (netdev && is_dummy_class(netdev->netdev_class)) {
         struct in_addr ip, mask;
+        struct in6_addr ip6;
+        uint32_t plen;
         char *error;
 
-        error = ip_parse_masked(argv[2], &ip.s_addr, &mask.s_addr);
+        error = ip_parse_cidr(argv[2], &ip.s_addr, &plen);
         if (!error) {
-            netdev_dummy_set_in4(netdev, ip, mask);
+            mask.s_addr = be32_prefix_mask(plen);
+            netdev_dummy_add_in4(netdev, ip, mask);
+
+            /* Insert local route entry for the new address. */
+            in6_addr_set_mapped_ipv4(&ip6, ip.s_addr);
+            ovs_router_force_insert(0, &ip6, plen + 96, true, argv[1],
+                                    &in6addr_any, &ip6);
+
             unixctl_command_reply(conn, "OK");
         } else {
             unixctl_command_reply_error(conn, error);
@@ -2038,7 +2127,12 @@ netdev_dummy_ip6addr(struct unixctl_conn *conn, int argc OVS_UNUSED,
             struct in6_addr mask;
 
             mask = ipv6_create_mask(plen);
-            netdev_dummy_set_in6(netdev, &ip6, &mask);
+            netdev_dummy_add_in6(netdev, &ip6, &mask);
+
+            /* Insert local route entry for the new address. */
+            ovs_router_force_insert(0, &ip6, plen, true, argv[1],
+                                    &in6addr_any, &ip6);
+
             unixctl_command_reply(conn, "OK");
         } else {
             unixctl_command_reply_error(conn, error);

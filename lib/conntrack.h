@@ -77,12 +77,18 @@ enum nat_action_e {
     NAT_ACTION_DST_PORT = 1 << 3,
 };
 
+enum nat_flags_e {
+    NAT_RANGE_RANDOM = 1 << 0,
+    NAT_PERSISTENT = 1 << 1,
+};
+
 struct nat_action_info_t {
     union ct_addr min_addr;
     union ct_addr max_addr;
     uint16_t min_port;
     uint16_t max_port;
     uint16_t nat_action;
+    uint16_t nat_flags;
 };
 
 struct conntrack *conntrack_init(void);
@@ -92,7 +98,7 @@ int conntrack_execute(struct conntrack *ct, struct dp_packet_batch *pkt_batch,
                       ovs_be16 dl_type, bool force, bool commit, uint16_t zone,
                       const uint32_t *setmark,
                       const struct ovs_key_ct_labels *setlabel,
-                      ovs_be16 tp_src, ovs_be16 tp_dst, const char *helper,
+                      const char *helper,
                       const struct nat_action_info_t *nat_action_info,
                       long long now, uint32_t tp_id);
 void conntrack_clear(struct dp_packet *packet);
@@ -100,9 +106,13 @@ void conntrack_clear(struct dp_packet *packet);
 struct conntrack_dump {
     struct conntrack *ct;
     unsigned bucket;
-    struct cmap_position cm_pos;
+    union {
+        struct hmap_position hmap_pos;
+        struct cmap_cursor cursor;
+    };
     bool filter_zone;
     uint16_t zone;
+    uint16_t current_zone;
 };
 
 struct conntrack_zone_limit {
@@ -119,10 +129,13 @@ struct timeout_policy {
 
 enum {
     INVALID_ZONE = -2,
-    DEFAULT_ZONE = -1, /* Default zone for zone limit management. */
+    DEFAULT_ZONE = OVS_ZONE_LIMIT_DEFAULT_ZONE, /* Default zone for zone
+                                                 * limit management. */
     MIN_ZONE = 0,
     MAX_ZONE = 0xFFFF,
 };
+
+BUILD_ASSERT_DECL(DEFAULT_ZONE > INVALID_ZONE && DEFAULT_ZONE < MIN_ZONE);
 
 struct ct_dpif_entry;
 struct ct_dpif_tuple;
@@ -132,6 +145,11 @@ int conntrack_dump_start(struct conntrack *, struct conntrack_dump *,
 int conntrack_dump_next(struct conntrack_dump *, struct ct_dpif_entry *);
 int conntrack_dump_done(struct conntrack_dump *);
 
+int conntrack_exp_dump_start(struct conntrack *, struct conntrack_dump *,
+                             const uint16_t *);
+int conntrack_exp_dump_next(struct conntrack_dump *, struct ct_dpif_exp *);
+int conntrack_exp_dump_done(struct conntrack_dump *);
+
 int conntrack_flush(struct conntrack *, const uint16_t *zone);
 int conntrack_flush_tuple(struct conntrack *, const struct ct_dpif_tuple *,
                           uint16_t zone);
@@ -139,11 +157,13 @@ int conntrack_set_maxconns(struct conntrack *ct, uint32_t maxconns);
 int conntrack_get_maxconns(struct conntrack *ct, uint32_t *maxconns);
 int conntrack_get_nconns(struct conntrack *ct, uint32_t *nconns);
 int conntrack_set_tcp_seq_chk(struct conntrack *ct, bool enabled);
+int conntrack_set_sweep_interval(struct conntrack *ct, uint32_t ms);
+uint32_t conntrack_get_sweep_interval(struct conntrack *ct);
 bool conntrack_get_tcp_seq_chk(struct conntrack *ct);
 struct ipf *conntrack_ipf_ctx(struct conntrack *ct);
 struct conntrack_zone_limit zone_limit_get(struct conntrack *ct,
                                            int32_t zone);
 int zone_limit_update(struct conntrack *ct, int32_t zone, uint32_t limit);
-int zone_limit_delete(struct conntrack *ct, uint16_t zone);
+int zone_limit_delete(struct conntrack *ct, int32_t zone);
 
 #endif /* conntrack.h */

@@ -147,6 +147,8 @@ odp_set_ipv4(struct dp_packet *packet, const struct ovs_key_ipv4 *key,
     uint8_t new_tos;
     uint8_t new_ttl;
 
+    ovs_assert(nh);
+
     if (mask->ipv4_src) {
         ip_src_nh = get_16aligned_be32(&nh->ip_src);
         new_ip_src = key->ipv4_src | (ip_src_nh & ~mask->ipv4_src);
@@ -169,9 +171,14 @@ odp_set_ipv4(struct dp_packet *packet, const struct ovs_key_ipv4 *key,
         new_tos = key->ipv4_tos | (nh->ip_tos & ~mask->ipv4_tos);
 
         if (nh->ip_tos != new_tos) {
-            nh->ip_csum = recalc_csum16(nh->ip_csum,
-                                        htons((uint16_t) nh->ip_tos),
-                                        htons((uint16_t) new_tos));
+            if (dp_packet_hwol_tx_ip_csum(packet)) {
+                dp_packet_ol_reset_ip_csum_good(packet);
+            } else {
+                nh->ip_csum = recalc_csum16(nh->ip_csum,
+                                            htons((uint16_t) nh->ip_tos),
+                                            htons((uint16_t) new_tos));
+            }
+
             nh->ip_tos = new_tos;
         }
     }
@@ -180,8 +187,14 @@ odp_set_ipv4(struct dp_packet *packet, const struct ovs_key_ipv4 *key,
         new_ttl = key->ipv4_ttl | (nh->ip_ttl & ~mask->ipv4_ttl);
 
         if (OVS_LIKELY(nh->ip_ttl != new_ttl)) {
-            nh->ip_csum = recalc_csum16(nh->ip_csum, htons(nh->ip_ttl << 8),
-                                        htons(new_ttl << 8));
+            if (dp_packet_hwol_tx_ip_csum(packet)) {
+                dp_packet_ol_reset_ip_csum_good(packet);
+            } else {
+                nh->ip_csum = recalc_csum16(nh->ip_csum,
+                                            htons(nh->ip_ttl << 8),
+                                            htons(new_ttl << 8));
+            }
+
             nh->ip_ttl = new_ttl;
         }
     }
@@ -275,6 +288,8 @@ set_arp(struct dp_packet *packet, const struct ovs_key_arp *key,
         const struct ovs_key_arp *mask)
 {
     struct arp_eth_header *arp = dp_packet_l3(packet);
+
+    ovs_assert(arp);
 
     if (!mask) {
         arp->ar_op = key->arp_op;
@@ -803,13 +818,13 @@ requires_datapath_assistance(const struct nlattr *a)
     case OVS_ACTION_ATTR_RECIRC:
     case OVS_ACTION_ATTR_CT:
     case OVS_ACTION_ATTR_METER:
+    case OVS_ACTION_ATTR_PSAMPLE:
         return true;
 
     case OVS_ACTION_ATTR_SET:
     case OVS_ACTION_ATTR_SET_MASKED:
     case OVS_ACTION_ATTR_PUSH_VLAN:
     case OVS_ACTION_ATTR_POP_VLAN:
-    case OVS_ACTION_ATTR_SAMPLE:
     case OVS_ACTION_ATTR_HASH:
     case OVS_ACTION_ATTR_PUSH_MPLS:
     case OVS_ACTION_ATTR_POP_MPLS:
@@ -822,8 +837,31 @@ requires_datapath_assistance(const struct nlattr *a)
     case OVS_ACTION_ATTR_CT_CLEAR:
     case OVS_ACTION_ATTR_CHECK_PKT_LEN:
     case OVS_ACTION_ATTR_ADD_MPLS:
+    case OVS_ACTION_ATTR_DEC_TTL:
     case OVS_ACTION_ATTR_DROP:
         return false;
+
+    case OVS_ACTION_ATTR_SAMPLE: {
+        /* Nested "psample" actions rely on the datapath executing the
+         * parent "sample", storing the probability and making it available
+         * when the nested "psample" is run. */
+        const struct nlattr *attr;
+        unsigned int left;
+
+        NL_NESTED_FOR_EACH (attr, left, a) {
+            if (nl_attr_type(attr) == OVS_SAMPLE_ATTR_ACTIONS) {
+                const struct nlattr *act;
+                unsigned int act_left;
+
+                NL_NESTED_FOR_EACH (act, act_left, attr) {
+                    if (nl_attr_type(act) == OVS_ACTION_ATTR_PSAMPLE) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
 
     case OVS_ACTION_ATTR_UNSPEC:
     case __OVS_ACTION_ATTR_MAX:
@@ -1212,6 +1250,8 @@ odp_execute_actions(void *dp, struct dp_packet_batch *batch, bool steal,
         case OVS_ACTION_ATTR_RECIRC:
         case OVS_ACTION_ATTR_CT:
         case OVS_ACTION_ATTR_UNSPEC:
+        case OVS_ACTION_ATTR_DEC_TTL:
+        case OVS_ACTION_ATTR_PSAMPLE:
         case __OVS_ACTION_ATTR_MAX:
         /* The following actions are handled by the scalar implementation. */
         case OVS_ACTION_ATTR_POP_VLAN:

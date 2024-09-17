@@ -221,19 +221,19 @@ jsonrpc_log_msg(const struct jsonrpc *rpc, const char *title,
         }
         if (msg->params) {
             ds_put_cstr(&s, ", params=");
-            json_to_ds(msg->params, 0, &s);
+            json_to_ds(msg->params, JSSF_SORT, &s);
         }
         if (msg->result) {
             ds_put_cstr(&s, ", result=");
-            json_to_ds(msg->result, 0, &s);
+            json_to_ds(msg->result, JSSF_SORT, &s);
         }
         if (msg->error) {
             ds_put_cstr(&s, ", error=");
-            json_to_ds(msg->error, 0, &s);
+            json_to_ds(msg->error, JSSF_SORT, &s);
         }
         if (msg->id) {
             ds_put_cstr(&s, ", id=");
-            json_to_ds(msg->id, 0, &s);
+            json_to_ds(msg->id, JSSF_SORT, &s);
         }
         VLOG_DBG("%s: %s %s%s", rpc->name, title,
                  jsonrpc_msg_type_to_string(msg->type), ds_cstr(&s));
@@ -1335,6 +1335,15 @@ jsonrpc_session_set_dscp(struct jsonrpc_session *s, uint8_t dscp)
         s->dscp = dscp;
         jsonrpc_session_force_reconnect(s);
     }
+}
+
+void
+jsonrpc_session_set_options(struct jsonrpc_session *s,
+                            const struct jsonrpc_session_options *options)
+{
+    jsonrpc_session_set_max_backoff(s, options->max_backoff);
+    jsonrpc_session_set_probe_interval(s, options->probe_interval);
+    jsonrpc_session_set_dscp(s, options->dscp);
 }
 
 /* Sets thresholds for send backlog.  If send backlog contains more than

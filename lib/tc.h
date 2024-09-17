@@ -49,6 +49,9 @@
 enum tc_flower_reserved_prio {
     TC_RESERVED_PRIORITY_NONE,
     TC_RESERVED_PRIORITY_POLICE,
+    TC_RESERVED_PRIORITY_IPV4,
+    TC_RESERVED_PRIORITY_IPV6,
+    TC_RESERVED_PRIORITY_VLAN,
     __TC_RESERVED_PRIORITY_MAX
 };
 #define TC_RESERVED_PRIORITY_MAX (__TC_RESERVED_PRIORITY_MAX -1)
@@ -101,6 +104,30 @@ int tc_add_del_qdisc(int ifindex, bool add, uint32_t block_id,
 struct tc_cookie {
     const void *data;
     size_t len;
+};
+
+struct tc_tunnel_gbp {
+    ovs_be16 id;
+    uint8_t flags;
+    bool id_present;
+};
+
+struct tc_flower_tunnel {
+    struct {
+        ovs_be32 ipv4_src;
+        ovs_be32 ipv4_dst;
+    } ipv4;
+    struct {
+        struct in6_addr ipv6_src;
+        struct in6_addr ipv6_dst;
+    } ipv6;
+    uint8_t tos;
+    uint8_t ttl;
+    ovs_be16 tp_src;
+    ovs_be16 tp_dst;
+    struct tc_tunnel_gbp gbp;
+    ovs_be64 id;
+    struct tun_metadata metadata;
 };
 
 struct tc_flower_key {
@@ -159,22 +186,7 @@ struct tc_flower_key {
         uint8_t rewrite_tclass;
     } ipv6;
 
-    struct {
-        struct {
-            ovs_be32 ipv4_src;
-            ovs_be32 ipv4_dst;
-        } ipv4;
-        struct {
-            struct in6_addr ipv6_src;
-            struct in6_addr ipv6_dst;
-        } ipv6;
-        uint8_t tos;
-        uint8_t ttl;
-        ovs_be16 tp_src;
-        ovs_be16 tp_dst;
-        ovs_be64 id;
-        struct tun_metadata metadata;
-    } tunnel;
+    struct tc_flower_tunnel tunnel;
 };
 
 enum tc_action_type {
@@ -197,6 +209,27 @@ enum nat_type {
     TC_NAT_SRC,
     TC_NAT_DST,
     TC_NAT_RESTORE,
+};
+
+struct tc_action_encap {
+    bool id_present;
+    ovs_be64 id;
+    /* ovs_be16 tp_src;  Could have been here, but there is no
+     * TCA_TUNNEL_KEY_ENC_ attribute for it in the kernel. */
+    ovs_be16 tp_dst;
+    uint8_t tos;
+    uint8_t ttl;
+    uint8_t no_csum;
+    struct {
+        ovs_be32 ipv4_src;
+        ovs_be32 ipv4_dst;
+    } ipv4;
+    struct {
+        struct in6_addr ipv6_src;
+        struct in6_addr ipv6_dst;
+    } ipv6;
+    struct tun_metadata data;
+    struct tc_tunnel_gbp gbp;
 };
 
 struct tc_action {
@@ -222,24 +255,7 @@ struct tc_action {
             uint8_t bos;
         } mpls;
 
-        struct {
-            bool id_present;
-            ovs_be64 id;
-            ovs_be16 tp_src;
-            ovs_be16 tp_dst;
-            uint8_t tos;
-            uint8_t ttl;
-            uint8_t no_csum;
-            struct {
-                ovs_be32 ipv4_src;
-                ovs_be32 ipv4_dst;
-            } ipv4;
-            struct {
-                struct in6_addr ipv6_src;
-                struct in6_addr ipv6_dst;
-            } ipv6;
-            struct tun_metadata data;
-        } encap;
+        struct tc_action_encap encap;
 
         struct {
             uint16_t zone;
@@ -342,7 +358,6 @@ is_tcf_id_eq(struct tcf_id *id1, struct tcf_id *id2)
 {
     return id1->prio == id2->prio
            && id1->handle == id2->handle
-           && id1->handle == id2->handle
            && id1->hook == id2->hook
            && id1->block_id == id2->block_id
            && id1->ifindex == id2->ifindex
@@ -382,7 +397,8 @@ struct tc_flower {
 };
 
 int tc_replace_flower(struct tcf_id *id, struct tc_flower *flower);
-int tc_del_filter(struct tcf_id *id);
+int tc_del_filter(struct tcf_id *id, const char *kind);
+int tc_del_flower_filter(struct tcf_id *id);
 int tc_get_flower(struct tcf_id *id, struct tc_flower *flower);
 int tc_dump_flower_start(struct tcf_id *id, struct nl_dump *dump, bool terse);
 int tc_dump_tc_chain_start(struct tcf_id *id, struct nl_dump *dump);
@@ -398,5 +414,7 @@ int tc_parse_action_stats(struct nlattr *action,
                           struct ovs_flow_stats *stats_dropped);
 int tc_dump_tc_action_start(char *name, struct nl_dump *dump);
 int parse_netlink_to_tc_policer(struct ofpbuf *reply, uint32_t police_idx[]);
+
+void nl_msg_put_act_tc_policy_flag(struct ofpbuf *request);
 
 #endif /* tc.h */

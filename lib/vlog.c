@@ -29,6 +29,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "async-append.h"
+#include "backtrace.h"
 #include "coverage.h"
 #include "dirs.h"
 #include "openvswitch/dynamic-string.h"
@@ -118,7 +119,7 @@ static struct ovs_list vlog_modules OVS_GUARDED_BY(log_file_mutex)
 static int syslog_fd OVS_GUARDED_BY(pattern_rwlock) = -1;
 
 /* Log facility configuration. */
-static atomic_int log_facility = ATOMIC_VAR_INIT(0);
+static atomic_int log_facility = 0;
 
 /* Facility name and its value. */
 struct vlog_facility {
@@ -410,10 +411,10 @@ vlog_set_log_file__(char *new_log_file_name)
 
     /* Close old log file, if any. */
     ovs_mutex_lock(&log_file_mutex);
+    async_append_destroy(log_writer);
     if (log_fd >= 0) {
         close(log_fd);
     }
-    async_append_destroy(log_writer);
     free(log_file_name);
 
     /* Install new log file. */
@@ -662,6 +663,13 @@ vlog_direct_write_to_log_file_unsafe(const char *s)
     if (log_fd >= 0) {
         ignore(write(log_fd, s, strlen(s)));
     }
+}
+
+int
+vlog_get_log_file_fd_unsafe(void)
+    OVS_NO_THREAD_SAFETY_ANALYSIS
+{
+    return log_fd;
 }
 
 /* Returns 'false' if 'facility' is not a valid string. If 'facility'
@@ -1267,8 +1275,9 @@ vlog_fatal(const struct vlog_module *module, const char *message, ...)
     va_end(args);
 }
 
-/* Logs 'message' to 'module' at maximum verbosity, then calls abort().  Always
- * writes the message to stderr, even if the console destination is disabled.
+/* Attempts to log a stack trace, logs 'message' to 'module' at maximum
+ * verbosity, then calls abort().  Always writes the message to stderr, even
+ * if the console destination is disabled.
  *
  * Choose this function instead of vlog_fatal_valist() if the daemon monitoring
  * facility should automatically restart the current daemon.  */
@@ -1282,6 +1291,10 @@ vlog_abort_valist(const struct vlog_module *module_,
      * message written by the later ovs_abort_valist(). */
     module->levels[VLF_CONSOLE] = VLL_OFF;
 
+    /* Printing the stack trace before the 'message', because the 'message'
+     * will flush the async log queue (VLL_EMER).  With a different order we
+     * would need to flush the queue manually again. */
+    log_backtrace();
     vlog_valist(module, VLL_EMER, message, args);
     ovs_abort_valist(0, message, args);
 }

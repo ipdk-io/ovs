@@ -60,6 +60,34 @@ m4_define([CHECK_PMD_THREADS_CREATED], [
     fi
 ])
 
+dnl CHECK_DP_SLEEP_MAX([max_sleep], [+line])
+dnl
+dnl Checks correct pmd load based sleep value for the datapath.
+dnl Checking starts from line number 'line' in ovs-vswithd.log .
+m4_define([CHECK_DP_SLEEP_MAX], [
+    SLEEP_TIME="Default PMD thread max sleep: *[$1] us."
+    line_st=$2
+    if [[ -z "$line_st" ]]
+    then
+        line_st="+0"
+    fi
+    OVS_WAIT_UNTIL([tail -n $line_st ovs-vswitchd.log | grep "$SLEEP_TIME"])
+])
+
+dnl CHECK_PMD_SLEEP_MAX([core_id], [numa_id], [max_sleep], [+line])
+dnl
+dnl Checks max sleep time of each pmd with core_id.
+dnl Checking starts from line number 'line' in ovs-vswithd.log .
+m4_define([CHECK_PMD_SLEEP_MAX], [
+    PATTERN="PMD thread on numa_id: *[$1], core id: *[$2], max sleep: *[$3] us."
+    line_st=$4
+    if [[ -z "$line_st" ]]
+    then
+        line_st="+0"
+    fi
+    OVS_WAIT_UNTIL([tail -n $line_st ovs-vswitchd.log | grep "$PATTERN"])
+])
+
 m4_define([SED_NUMA_CORE_PATTERN], ["s/\(numa_id \)[[0-9]]*\( core_id \)[[0-9]]*:/\1<cleared>\2<cleared>:/"])
 m4_define([DUMMY_NUMA], [--dummy-numa="0,0,0,0"])
 
@@ -70,17 +98,18 @@ CHECK_CPU_DISCOVERED()
 CHECK_PMD_THREADS_CREATED()
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed SED_NUMA_CORE_PATTERN], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id <cleared> core_id <cleared>:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
   overhead: NOT AVAIL
 ])
 
-AT_CHECK([ovs-appctl dpif/show | sed 's/\(tx_queues=\)[[0-9]]*/\1<cleared>/g'], [0], [dnl
+AT_CHECK([ovs-appctl dpif/show], [0], [dnl
 dummy@ovs-dummy: hit:0 missed:0
   br0:
     br0 65534/100: (dummy-internal)
-    p0 1/1: (dummy-pmd: configured_rx_queues=1, configured_tx_queues=<cleared>, requested_rx_queues=1, requested_tx_queues=<cleared>)
+    p0 1/1: (dummy-pmd: n_rxq=1, n_txq=1, numa_id=0)
 ])
 
 OVS_VSWITCHD_STOP
@@ -94,14 +123,15 @@ CHECK_PMD_THREADS_CREATED()
 
 AT_CHECK([ovs-vsctl set interface p0 options:n_rxq=8])
 
-AT_CHECK([ovs-appctl dpif/show | sed 's/\(tx_queues=\)[[0-9]]*/\1<cleared>/g'], [0], [dnl
+AT_CHECK([ovs-appctl dpif/show], [0], [dnl
 dummy@ovs-dummy: hit:0 missed:0
   br0:
     br0 65534/100: (dummy-internal)
-    p0 1/1: (dummy-pmd: configured_rx_queues=8, configured_tx_queues=<cleared>, requested_rx_queues=8, requested_tx_queues=<cleared>)
+    p0 1/1: (dummy-pmd: n_rxq=8, n_txq=1, numa_id=0)
 ])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed SED_NUMA_CORE_PATTERN], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id <cleared> core_id <cleared>:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -126,14 +156,15 @@ OVS_VSWITCHD_START([add-port br0 p0 -- set Interface p0 type=dummy-pmd options:n
 CHECK_CPU_DISCOVERED(2)
 CHECK_PMD_THREADS_CREATED()
 
-AT_CHECK([ovs-appctl dpif/show | sed 's/\(tx_queues=\)[[0-9]]*/\1<cleared>/g'], [0], [dnl
+AT_CHECK([ovs-appctl dpif/show], [0], [dnl
 dummy@ovs-dummy: hit:0 missed:0
   br0:
     br0 65534/100: (dummy-internal)
-    p0 1/1: (dummy-pmd: configured_rx_queues=8, configured_tx_queues=<cleared>, requested_rx_queues=8, requested_tx_queues=<cleared>)
+    p0 1/1: (dummy-pmd: n_rxq=8, n_txq=1, numa_id=0)
 ])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed SED_NUMA_CORE_PATTERN], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id <cleared> core_id <cleared>:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -183,6 +214,7 @@ AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-cpu-mask=0x1])
 CHECK_PMD_THREADS_CREATED([1], [], [+$TMP])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed SED_NUMA_CORE_PATTERN], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id <cleared> core_id <cleared>:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -207,14 +239,15 @@ TMP=$(($(cat ovs-vswitchd.log | wc -l | tr -d [[:blank:]])+1))
 CHECK_CPU_DISCOVERED(4)
 CHECK_PMD_THREADS_CREATED()
 
-AT_CHECK([ovs-appctl dpif/show | sed 's/\(tx_queues=\)[[0-9]]*/\1<cleared>/g'], [0], [dnl
+AT_CHECK([ovs-appctl dpif/show], [0], [dnl
 dummy@ovs-dummy: hit:0 missed:0
   br0:
     br0 65534/100: (dummy-internal)
-    p0 1/1: (dummy-pmd: configured_rx_queues=8, configured_tx_queues=<cleared>, requested_rx_queues=8, requested_tx_queues=<cleared>)
+    p0 1/1: (dummy-pmd: n_rxq=8, n_txq=1, numa_id=1)
 ])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | sed SED_NUMA_CORE_PATTERN], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id <cleared> core_id <cleared>:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -280,6 +313,7 @@ CHECK_PMD_THREADS_CREATED([1], [1], [+$TMP])
 OVS_WAIT_UNTIL([tail -n +$TMP ovs-vswitchd.log | grep "Performing pmd to rx queue assignment using group algorithm"])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id 1 core_id 1:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -302,6 +336,7 @@ AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-rxq-assign=roundrobin])
 OVS_WAIT_UNTIL([tail -n +$TMP ovs-vswitchd.log | grep "Performing pmd to rx queue assignment using roundrobin algorithm"])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id 1 core_id 1:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -322,6 +357,7 @@ AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-rxq-assign=cycles])
 OVS_WAIT_UNTIL([tail -n +$TMP ovs-vswitchd.log | grep "Performing pmd to rx queue assignment using cycles algorithm"])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id 1 core_id 1:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -343,6 +379,7 @@ AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-cpu-mask=0x1])
 CHECK_PMD_THREADS_CREATED([1], [1], [+$TMP])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show], [0], [dnl
+Displaying last 60 seconds pmd usage %
 pmd thread numa_id 1 core_id 0:
   isolated : false
   port: p0                queue-id:  0 (enabled)   pmd usage: NOT AVAIL
@@ -411,11 +448,11 @@ AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:smc-enable=true])
 
 sleep 1
 
-AT_CHECK([ovs-appctl dpif/show | sed 's/\(tx_queues=\)[[0-9]]*/\1<cleared>/g'], [0], [dnl
+AT_CHECK([ovs-appctl dpif/show], [0], [dnl
 dummy@ovs-dummy: hit:0 missed:0
   br0:
     br0 65534/100: (dummy-internal)
-    p0 7/1: (dummy-pmd: configured_rx_queues=4, configured_tx_queues=<cleared>, requested_rx_queues=4, requested_tx_queues=<cleared>)
+    p0 7/1: (dummy-pmd: n_rxq=4, n_txq=1, numa_id=0)
 ])
 
 AT_CHECK([ovs-appctl dpif-netdev/pmd-stats-show | sed SED_NUMA_CORE_PATTERN | sed '/cycles/d' | grep pmd -A 12], [0], [dnl
@@ -446,7 +483,7 @@ for i in `seq 0 19`;
 ovs-appctl time/warp 100
 
 AT_CHECK([grep -A 1 'miss upcall' ovs-vswitchd.log | tail -n 1], [0], [dnl
-skb_priority(0),skb_mark(0),ct_state(0),ct_zone(0),ct_mark(0),ct_label(0),recirc_id(0),dp_hash(0),in_port(1),packet_type(ns=0,id=0),eth(src=50:54:00:00:00:77,dst=50:54:00:00:01:78),eth_type(0x0800),ipv4(src=10.0.0.2,dst=10.0.0.1,proto=1,tos=0,ttl=64,frag=no),icmp(type=8,code=0)
+recirc_id(0),dp_hash(0),skb_priority(0),in_port(1),skb_mark(0),ct_state(0),ct_zone(0),ct_mark(0),ct_label(0),packet_type(ns=0,id=0),eth(src=50:54:00:00:00:77,dst=50:54:00:00:01:78),eth_type(0x0800),ipv4(src=10.0.0.2,dst=10.0.0.1,proto=1,tos=0,ttl=64,frag=no),icmp(type=8,code=0)
 ])
 AT_CHECK([cat ovs-vswitchd.log | filter_flow_install | strip_xout], [0], [dnl
 recirc_id(0),in_port(1),packet_type(ns=0,id=0),eth(src=50:54:00:00:00:77,dst=50:54:00:00:01:78),eth_type(0x0800),ipv4(frag=no), actions: <del>
@@ -466,6 +503,59 @@ pmd thread numa_id <cleared> core_id <cleared>:
   avg. subtable lookups per megaflow hit: 0.00
   miss with success upcall: 1
   miss with failed upcall: 0
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+AT_SETUP([PMD - pmd-rxq-show pmd usage time])
+OVS_VSWITCHD_START([add-port br0 p0 -- set Interface p0 type=dummy-pmd], [], [], [DUMMY_NUMA])
+
+#CHECK_CPU_DISCOVERED()
+#CHECK_PMD_THREADS_CREATED()
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show | grep Displaying], [0], [dnl
+Displaying last 60 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs -1 | grep Displaying], [0], [dnl
+Displaying last 60 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 0 | grep Displaying], [0], [dnl
+Displaying last 60 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 1 | grep Displaying], [0], [dnl
+Displaying last 5 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 5 | grep Displaying], [0], [dnl
+Displaying last 5 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 6 | grep Displaying], [0], [dnl
+Displaying last 10 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 51 | grep Displaying], [0], [dnl
+Displaying last 55 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 55 | grep Displaying], [0], [dnl
+Displaying last 55 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 56 | grep Displaying], [0], [dnl
+Displaying last 60 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 60 | grep Displaying], [0], [dnl
+Displaying last 60 seconds pmd usage %
+])
+
+AT_CHECK([ovs-appctl dpif-netdev/pmd-rxq-show -secs 61 | grep Displaying], [0], [dnl
+Displaying last 60 seconds pmd usage %
 ])
 
 OVS_VSWITCHD_STOP
@@ -526,8 +616,8 @@ icmp,vlan_tci=0x0000,dl_src=50:54:00:00:00:09,dl_dst=50:54:00:00:00:0a,nw_src=10
 dnl Check resetting to default number of rx queues after removal from the db.
 AT_CHECK([ovs-vsctl remove interface p1 options n_rxq])
 
-AT_CHECK([ovs-appctl dpif/show | grep p1 | sed 's/\(tx_queues=\)[[0-9]]*/\1<cleared>/g'], [0], [dnl
-    p1 1/1: (dummy-pmd: configured_rx_queues=1, configured_tx_queues=<cleared>, requested_rx_queues=1, requested_tx_queues=<cleared>)
+AT_CHECK([ovs-appctl dpif/show | grep p1], [0], [dnl
+    p1 1/1: (dummy-pmd: n_rxq=1, n_txq=1, numa_id=0)
 ])
 
 OVS_VSWITCHD_STOP
@@ -1074,7 +1164,7 @@ dummy@dp0:
   lookups: hit:0 missed:0 lost:0
   flows: 0
   port 0: dp0 (dummy-internal)
-  port 1: p1 (dummy-pmd: configured_rx_queues=1, configured_tx_queues=1, requested_rx_queues=1, requested_tx_queues=1)
+  port 1: p1 (dummy-pmd: n_rxq=1, n_txq=1, numa_id=0)
   port 2: p2 (dummy)
 ])
 
@@ -1188,6 +1278,428 @@ AT_CHECK([ovs-appctl dpif-netdev/subtable-lookup-prio-set generic 300], [2],
 [], [dnl
 error converting priority, use integer in range 0-255
 ovs-appctl: ovs-vswitchd: server returned an error
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+AT_SETUP([PMD - pmd sleep])
+OVS_VSWITCHD_START([add-port br0 p0 -- set Interface p0 type=dummy-pmd options:n_rxq=8 options:numa_id=1], [], [], [--dummy-numa 0,0,0,1,1,8,8])
+
+dnl Check default
+CHECK_DP_SLEEP_MAX([0], [])
+CHECK_PMD_SLEEP_MAX([0], [0], [0], [])
+CHECK_PMD_SLEEP_MAX([1], [3], [0], [])
+CHECK_PMD_SLEEP_MAX([8], [5], [0], [])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    0 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:    0 us
+])
+
+dnl Check low value max sleep
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set open_vswitch . other_config:pmd-sleep-max="1"])
+CHECK_DP_SLEEP_MAX([1], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [1], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [1], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [1], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    1 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:    1 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:    1 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:    1 us
+])
+
+dnl Check high value max sleep
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set open_vswitch . other_config:pmd-sleep-max="10000"])
+CHECK_DP_SLEEP_MAX([10000], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [10000], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [10000], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [10000], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep: 10000 us
+pmd thread numa_id 0 core_id 0:
+  max sleep: 10000 us
+pmd thread numa_id 1 core_id 3:
+  max sleep: 10000 us
+pmd thread numa_id 8 core_id 5:
+  max sleep: 10000 us
+])
+
+dnl Check setting max sleep to zero
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set open_vswitch . other_config:pmd-sleep-max="0"])
+CHECK_DP_SLEEP_MAX([0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [0], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    0 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:    0 us
+])
+
+dnl Check above high value max sleep
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set open_vswitch . other_config:pmd-sleep-max="10001"])
+CHECK_DP_SLEEP_MAX([10000], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [10000], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [10000], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [10000], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep: 10000 us
+pmd thread numa_id 0 core_id 0:
+  max sleep: 10000 us
+pmd thread numa_id 1 core_id 3:
+  max sleep: 10000 us
+pmd thread numa_id 8 core_id 5:
+  max sleep: 10000 us
+])
+
+dnl Check rounding
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set open_vswitch . other_config:pmd-sleep-max="490"])
+CHECK_DP_SLEEP_MAX([490], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [490], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [490], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [490], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:  490 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  490 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  490 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  490 us
+])
+
+dnl Check rounding
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set open_vswitch . other_config:pmd-sleep-max="499"])
+CHECK_DP_SLEEP_MAX([499], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [499], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [499], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [499], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:  499 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  499 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  499 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  499 us
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+AT_SETUP([PMD - per PMD sleep])
+OVS_VSWITCHD_START([add-port br0 p0 -- set Interface p0 type=dummy-pmd options:n_rxq=8 options:numa_id=1],
+                    [], [], [--dummy-numa 0,0,0,1,1,8,8])
+
+dnl Check system default.
+CHECK_DP_SLEEP_MAX([0], [])
+CHECK_PMD_SLEEP_MAX([0], [0], [0], [])
+CHECK_PMD_SLEEP_MAX([1], [3], [0], [])
+CHECK_PMD_SLEEP_MAX([8], [5], [0], [])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    0 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:    0 us
+])
+
+dnl Only per PMD.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=3:300,0:100,5:400])
+CHECK_DP_SLEEP_MAX([0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [100], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [300], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [400], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    0 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  100 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  300 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  400 us
+])
+
+dnl Mix of not used default and per-PMD.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=50,3:300,0:100,5:200])
+CHECK_DP_SLEEP_MAX([50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [100], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [200], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [200], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:   50 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  100 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  300 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  200 us
+])
+
+dnl Remove a per-pmd entry and use default.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=50,3:300])
+CHECK_DP_SLEEP_MAX([50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [300], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [50], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:   50 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:   50 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  300 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:   50 us
+])
+
+dnl Mix and change values.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=3:400,200])
+CHECK_DP_SLEEP_MAX([200], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [200], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [400], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [200], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:  200 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  200 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  400 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  200 us
+])
+
+dnl Add values for pmds that don't exist yet.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=2:600,50,3:300,0:100,6:400,5:200])
+CHECK_DP_SLEEP_MAX([50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [100], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [300], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [200], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:   50 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  100 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  300 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  200 us
+])
+
+dnl Add more cores.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-cpu-mask=7f])
+CHECK_PMD_SLEEP_MAX([0], [1], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [2], [600], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [4], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [6],[400], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:   50 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:  100 us
+pmd thread numa_id 0 core_id 1:
+  max sleep:   50 us
+pmd thread numa_id 0 core_id 2:
+  max sleep:  600 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:  300 us
+pmd thread numa_id 1 core_id 4:
+  max sleep:   50 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:  200 us
+pmd thread numa_id 8 core_id 6:
+  max sleep:  400 us
+])
+
+dnl Go back to just a global value.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=90])
+CHECK_DP_SLEEP_MAX([90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [1], [90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [2], [90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [4], [90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [90], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [6], [90], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:   90 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:   90 us
+pmd thread numa_id 0 core_id 1:
+  max sleep:   90 us
+pmd thread numa_id 0 core_id 2:
+  max sleep:   90 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:   90 us
+pmd thread numa_id 1 core_id 4:
+  max sleep:   90 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:   90 us
+pmd thread numa_id 8 core_id 6:
+  max sleep:   90 us
+])
+
+dnl Try invalid value.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=qwe])
+CHECK_DP_SLEEP_MAX([0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [1], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [2], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [4], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [6], [0], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    0 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:    0 us
+pmd thread numa_id 0 core_id 1:
+  max sleep:    0 us
+pmd thread numa_id 0 core_id 2:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 4:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 6:
+  max sleep:    0 us
+])
+
+dnl Try invalid key:value.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl set Open_vSwitch . other_config:pmd-sleep-max=50,1:qwe,2:0])
+CHECK_DP_SLEEP_MAX([50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [1], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [2], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [4], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [50], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [6], [50], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:   50 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:   50 us
+pmd thread numa_id 0 core_id 1:
+  max sleep:   50 us
+pmd thread numa_id 0 core_id 2:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:   50 us
+pmd thread numa_id 1 core_id 4:
+  max sleep:   50 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:   50 us
+pmd thread numa_id 8 core_id 6:
+  max sleep:   50 us
+])
+
+dnl Remove config.
+get_log_next_line_num
+AT_CHECK([ovs-vsctl remove Open_vSwitch . other_config pmd-sleep-max])
+CHECK_DP_SLEEP_MAX([0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [0], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [1], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([0], [2], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [3], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([1], [4], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [5], [0], [+$LINENUM])
+CHECK_PMD_SLEEP_MAX([8], [6], [0], [+$LINENUM])
+AT_CHECK([ovs-appctl dpif-netdev/pmd-sleep-show], [0], [dnl
+Default max sleep:    0 us
+pmd thread numa_id 0 core_id 0:
+  max sleep:    0 us
+pmd thread numa_id 0 core_id 1:
+  max sleep:    0 us
+pmd thread numa_id 0 core_id 2:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 3:
+  max sleep:    0 us
+pmd thread numa_id 1 core_id 4:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 5:
+  max sleep:    0 us
+pmd thread numa_id 8 core_id 6:
+  max sleep:    0 us
+])
+
+OVS_VSWITCHD_STOP
+AT_CLEANUP
+
+AT_SETUP([PMD - revalidator modify overlapping flows])
+
+OVS_VSWITCHD_START(
+[add-port br0 p1 \
+   -- set bridge br0 datapath-type=dummy \
+   -- set interface p1 type=dummy-pmd \
+   -- add-port br0 p2 \
+   -- set interface p2 type=dummy-pmd
+], [], [], [DUMMY_NUMA])
+
+dnl Add one OpenFlow rule and generate a megaflow.
+AT_CHECK([ovs-ofctl add-flow br0 'table=0,in_port=p1,ip,nw_dst=10.1.2.0/24,actions=p2'])
+AT_CHECK([ovs-appctl netdev-dummy/receive p1 'ipv4(src=10.0.0.1,dst=10.1.2.2,proto=6),tcp(src=1,dst=2)'])
+
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl dpctl/dump-flows | sed 's/.*core: [[0-9]]*//'], [
+recirc_id(0),in_port(1),packet_type(ns=0,id=0),eth_type(0x0800),ipv4(dst=10.1.2.2/255.255.255.0,frag=no), packets:0, bytes:0, used:never, actions:2])
+
+AT_CHECK([ovs-appctl netdev-dummy/receive p1 'ipv4(src=10.0.0.1,dst=10.1.2.2,proto=6),tcp(src=1,dst=2)'])
+dnl Replace OpenFlow rules, trigger the revalidation.
+AT_CHECK([echo 'table=0,in_port=p1,ip,nw_dst=10.1.0.0/16 actions=ct(commit)' | dnl
+          ovs-ofctl --bundle replace-flows br0 -])
+AT_CHECK([ovs-appctl revalidator/wait])
+
+dnl Prevent flows from expiring.
+AT_CHECK([ovs-appctl time/stop])
+
+AT_CHECK([ovs-appctl netdev-dummy/receive p1 'ipv4(src=10.0.0.1,dst=10.1.0.2,proto=6),tcp(src=1,dst=2)'])
+OVS_WAIT_UNTIL_EQUAL([ovs-appctl dpctl/dump-flows | sed 's/.*core: [[0-9]]*//' | strip_xout_keep_actions], [
+recirc_id(0),in_port(1),packet_type(ns=0,id=0),eth_type(0x0800),ipv4(dst=10.1.0.2/255.255.0.0,frag=no), packets:0, bytes:0, used:never, actions:ct(commit)
+recirc_id(0),in_port(1),packet_type(ns=0,id=0),eth_type(0x0800),ipv4(dst=10.1.2.2/255.255.255.0,frag=no), packets:0, bytes:0, used:0.0s, actions:ct(commit)])
+
+dnl Send more 10.1.0.2 to make 10.1.0.0/16 tuple prepend 10.1.2.0/24 tuple in the pvector of subtables.
+for i in $(seq 0 256); do
+  AT_CHECK([ovs-appctl netdev-dummy/receive p1 'ipv4(src=10.0.0.1,dst=10.1.0.2,proto=6),tcp(src=1,dst=2)'])
+done
+
+dnl Warp time enough to trigger subtable optimization.
+AT_CHECK([ovs-appctl time/warp 500 2000], [0], [ignore])
+
+AT_CHECK([echo 'table=0,in_port=p1,ip,nw_dst=10.1.0.0/16 actions=p2' | dnl
+          ovs-ofctl --bundle replace-flows br0 -])
+
+AT_CHECK([ovs-appctl revalidator/wait])
+AT_CHECK([ovs-appctl dpctl/dump-flows | sed 's/.*core: [[0-9]]*//' | strip_xout_keep_actions], [0], [
+recirc_id(0),in_port(1),packet_type(ns=0,id=0),eth_type(0x0800),ipv4(dst=10.1.0.2/255.255.0.0,frag=no), packets:0, bytes:0, used:0.0s, actions:2
+recirc_id(0),in_port(1),packet_type(ns=0,id=0),eth_type(0x0800),ipv4(dst=10.1.2.2/255.255.255.0,frag=no), packets:0, bytes:0, used:0.0s, actions:2
 ])
 
 OVS_VSWITCHD_STOP

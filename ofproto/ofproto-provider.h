@@ -42,6 +42,7 @@
 #include "ofproto/ofproto.h"
 #include "openvswitch/list.h"
 #include "openvswitch/ofp-actions.h"
+#include "openvswitch/ofp-ct.h"
 #include "openvswitch/ofp-errors.h"
 #include "openvswitch/ofp-flow.h"
 #include "openvswitch/ofp-group.h"
@@ -449,6 +450,8 @@ void ofproto_rule_ref(struct rule *);
 bool ofproto_rule_try_ref(struct rule *);
 void ofproto_rule_unref(struct rule *);
 
+void ofproto_rule_stats_ds(struct ds *, struct rule *, bool offload_stats);
+
 static inline const struct rule_actions * rule_get_actions(const struct rule *);
 static inline bool rule_is_table_miss(const struct rule *);
 static inline bool rule_is_hidden(const struct rule *);
@@ -540,9 +543,18 @@ extern unsigned ofproto_max_revalidator;
  * duration exceeds half of max-revalidator config variable. */
 extern unsigned ofproto_min_revalidate_pps;
 
+/* Worst case delay (in ms) it might take before statistics of offloaded flows
+ * are updated. Offloaded flows younger than this delay will always be
+ * revalidated regardless of ofproto_min_revalidate_pps. */
+extern unsigned ofproto_offloaded_stats_delay;
+
 /* Number of upcall handler and revalidator threads. Only affects the
  * ofproto-dpif implementation. */
 extern uint32_t n_handlers, n_revalidators;
+
+/* If an explicit datapath drop action shall be added after trailing sample
+ * actions coming from IPFIX / sFlow / local sampling. */
+extern bool ofproto_explicit_sampled_drops;
 
 static inline struct rule *rule_from_cls_rule(const struct cls_rule *);
 
@@ -1483,6 +1495,15 @@ struct ofproto_class {
         bool bridge_ipfix, struct ovs_list *replies
         );
 
+    /* Configures local sampling on 'ofproto' according to the options array
+     * of 'options' which contains 'n_options' elements.
+     *
+     * EOPNOTSUPP as a return value indicates that 'ofproto' does not support
+     * local sampling. */
+    int (*set_local_sample)(struct ofproto *ofproto,
+                            const struct ofproto_lsample_options *options,
+                            size_t n_options);
+
     /* Configures connectivity fault management on 'ofport'.
      *
      * If 'cfm_settings' is nonnull, configures CFM according to its members.
@@ -1902,8 +1923,10 @@ struct ofproto_class {
 /* ## Connection tracking ## */
 /* ## ------------------- ## */
     /* Flushes the connection tracking tables. If 'zone' is not NULL,
-     * only deletes connections in '*zone'. */
-    void (*ct_flush)(const struct ofproto *, const uint16_t *zone);
+     * only deletes connections in '*zone'. If 'match' is not NULL,
+     * deletes connections specified by the match. */
+    void (*ct_flush)(const struct ofproto *, const uint16_t *zone,
+                     const struct ofp_ct_match *match);
 
     /* Sets conntrack timeout policy specified by 'timeout_policy' to 'zone'
      * in datapath type 'dp_type'. */
@@ -1913,6 +1936,19 @@ struct ofproto_class {
     /* Deletes the timeout policy associated with 'zone' in datapath type
      * 'dp_type'. */
     void (*ct_del_zone_timeout_policy)(const char *dp_type, uint16_t zone);
+
+    /* Updates the CT zone limit for specified zone. Setting 'zone' to
+     * 'OVS_ZONE_LIMIT_DEFAULT_ZONE' represents the default zone.
+     * 'NULL' passed as 'limit' indicates that the limit should be removed for
+     * the specified zone. The caller must ensure that the 'limit' value is
+     * within proper range (0 - UINT32_MAX). */
+    void (*ct_zone_limit_update)(const char *dp_type, int32_t zone,
+                                 int64_t *limit);
+
+    /* Sets the CT zone limit protection to "protected" for the specified
+     * datapath type. */
+    void (*ct_zone_limit_protection_update)(const char *dp_type,
+                                            bool protected);
 };
 
 extern const struct ofproto_class ofproto_dpif_class;
@@ -2019,9 +2055,11 @@ enum ofperr ofproto_flow_mod_init_for_learn(struct ofproto *,
                                             struct ofproto_flow_mod *)
     OVS_EXCLUDED(ofproto_mutex);
 enum ofperr ofproto_flow_mod_learn(struct ofproto_flow_mod *, bool keep_ref,
-                                   unsigned limit, bool *below_limit)
+                                   unsigned limit, bool *below_limit,
+                                   long long int last_used)
     OVS_EXCLUDED(ofproto_mutex);
-enum ofperr ofproto_flow_mod_learn_refresh(struct ofproto_flow_mod *ofm);
+enum ofperr ofproto_flow_mod_learn_refresh(struct ofproto_flow_mod *ofm,
+                                           long long int last_used);
 enum ofperr ofproto_flow_mod_learn_start(struct ofproto_flow_mod *ofm)
     OVS_REQUIRES(ofproto_mutex);
 void ofproto_flow_mod_learn_revert(struct ofproto_flow_mod *ofm)

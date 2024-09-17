@@ -21,6 +21,7 @@
 
 #include "bitmap.h"
 #include "column.h"
+#include "cooperative-multitasking.h"
 #include "openvswitch/dynamic-string.h"
 #include "monitor.h"
 #include "openvswitch/json.h"
@@ -211,11 +212,114 @@ struct ovsdb_jsonrpc_options *
 ovsdb_jsonrpc_default_options(const char *target)
 {
     struct ovsdb_jsonrpc_options *options = xzalloc(sizeof *options);
-    options->max_backoff = RECONNECT_DEFAULT_MAX_BACKOFF;
-    options->probe_interval = (stream_or_pstream_needs_probes(target)
-                               ? RECONNECT_DEFAULT_PROBE_INTERVAL
-                               : 0);
+    struct jsonrpc_session_options *rpc_opt = &options->rpc;
+
+    rpc_opt->max_backoff = RECONNECT_DEFAULT_MAX_BACKOFF;
+    rpc_opt->probe_interval = (stream_or_pstream_needs_probes(target)
+                               ? RECONNECT_DEFAULT_PROBE_INTERVAL : 0);
+    rpc_opt->dscp = DSCP_DEFAULT;
     return options;
+}
+
+struct ovsdb_jsonrpc_options *
+ovsdb_jsonrpc_options_clone(const struct ovsdb_jsonrpc_options *options)
+{
+    struct ovsdb_jsonrpc_options *clone;
+
+    clone = xmemdup(options, sizeof *options);
+    clone->role = nullable_xstrdup(options->role);
+
+    return clone;
+}
+
+void
+ovsdb_jsonrpc_options_free(struct ovsdb_jsonrpc_options *options)
+{
+    if (options) {
+        free(options->role);
+        free(options);
+    }
+}
+
+struct json *
+ovsdb_jsonrpc_options_to_json(const struct ovsdb_jsonrpc_options *options,
+                              bool jsonrpc_session_only)
+{
+    struct json *json = json_object_create();
+
+    json_object_put(json, "max-backoff",
+                    json_integer_create(options->rpc.max_backoff));
+    json_object_put(json, "inactivity-probe",
+                    json_integer_create(options->rpc.probe_interval));
+    json_object_put(json, "dscp", json_integer_create(options->rpc.dscp));
+
+    if (jsonrpc_session_only) {
+        /* Caller is not interested in OVSDB-specific options. */
+        return json;
+    }
+
+    json_object_put(json, "read-only",
+                    json_boolean_create(options->read_only));
+    if (options->role) {
+        json_object_put(json, "role", json_string_create(options->role));
+    }
+
+    return json;
+}
+
+void
+ovsdb_jsonrpc_options_update_from_json(struct ovsdb_jsonrpc_options *options,
+                                       const struct json *json,
+                                       bool jsonrpc_session_only)
+{
+    const struct json *max_backoff, *probe_interval, *read_only, *dscp, *role;
+    struct ovsdb_parser parser;
+    struct ovsdb_error *error;
+
+    ovsdb_parser_init(&parser, json, "JSON-RPC options");
+
+    max_backoff = ovsdb_parser_member(&parser, "max-backoff",
+                                      OP_INTEGER | OP_OPTIONAL);
+    if (max_backoff) {
+        options->rpc.max_backoff = json_integer(max_backoff);
+    }
+
+    probe_interval = ovsdb_parser_member(&parser, "inactivity-probe",
+                                         OP_INTEGER | OP_OPTIONAL);
+    if (probe_interval) {
+        options->rpc.probe_interval = json_integer(probe_interval);
+    }
+
+    dscp = ovsdb_parser_member(&parser, "dscp", OP_INTEGER | OP_OPTIONAL);
+    if (dscp) {
+        options->rpc.dscp = json_integer(dscp);
+    }
+
+    if (jsonrpc_session_only) {
+        /* Caller is not interested in OVSDB-specific options. */
+        goto exit;
+    }
+
+    read_only = ovsdb_parser_member(&parser, "read-only",
+                                    OP_BOOLEAN | OP_OPTIONAL);
+    if (read_only) {
+        options->read_only = json_boolean(read_only);
+    }
+
+    role = ovsdb_parser_member(&parser, "role", OP_STRING | OP_OPTIONAL);
+    if (role) {
+        free(options->role);
+        options->role = nullable_xstrdup(json_string(role));
+    }
+
+exit:
+    error = ovsdb_parser_finish(&parser);
+    if (error) {
+        char *s = ovsdb_error_to_string_free(error);
+
+        VLOG_WARN("%s", s);
+        free(s);
+    }
 }
 
 /* Sets 'svr''s current set of remotes to the names in 'new_remotes', with
@@ -237,7 +341,8 @@ ovsdb_jsonrpc_server_set_remotes(struct ovsdb_jsonrpc_server *svr,
         if (!options) {
             VLOG_INFO("%s: remote deconfigured", node->name);
             ovsdb_jsonrpc_server_del_remote(node);
-        } else if (options->dscp != remote->dscp) {
+        } else if (options->rpc.dscp != remote->dscp
+                   || !nullable_string_is_equal(options->role, remote->role)) {
             ovsdb_jsonrpc_server_del_remote(node);
          }
     }
@@ -266,26 +371,37 @@ ovsdb_jsonrpc_server_add_remote(struct ovsdb_jsonrpc_server *svr,
     struct pstream *listener;
     int error;
 
-    error = jsonrpc_pstream_open(name, &listener, options->dscp);
-    if (error && error != EAFNOSUPPORT) {
-        VLOG_ERR_RL(&rl, "%s: listen failed: %s", name, ovs_strerror(error));
+    error = jsonrpc_pstream_open(name, &listener, options->rpc.dscp);
+    switch (error) {
+    case 0:
+    case EAFNOSUPPORT:
+        remote = xmalloc(sizeof *remote);
+        remote->server = svr;
+        remote->listener = listener;
+        ovs_list_init(&remote->sessions);
+        remote->dscp = options->rpc.dscp;
+        remote->read_only = options->read_only;
+        remote->role = nullable_xstrdup(options->role);
+        shash_add(&svr->remotes, name, remote);
+        if (!listener) {
+            /* Not a listener, attempt creation of active jsonrpc session. */
+            ovsdb_jsonrpc_session_create(remote,
+                                         jsonrpc_session_open(name, true),
+                                         svr->read_only || remote->read_only);
+        }
+        return remote;
+
+    case EAGAIN:
+        VLOG_DBG_RL(&rl, "%s: listen failed: "
+                         "DNS resolution in progress or host not found", name);
+        return NULL;
+
+    default:
+        VLOG_ERR_RL(&rl, "%s: listen failed: %s", name,
+                    ovs_strerror(error));
         return NULL;
     }
-
-    remote = xmalloc(sizeof *remote);
-    remote->server = svr;
-    remote->listener = listener;
-    ovs_list_init(&remote->sessions);
-    remote->dscp = options->dscp;
-    remote->read_only = options->read_only;
-    remote->role = nullable_xstrdup(options->role);
-    shash_add(&svr->remotes, name, remote);
-
-    if (!listener) {
-        ovsdb_jsonrpc_session_create(remote, jsonrpc_session_open(name, true),
-                                      svr->read_only || remote->read_only);
-    }
-    return remote;
+    OVS_NOT_REACHED();
 }
 
 static void
@@ -574,20 +690,13 @@ ovsdb_jsonrpc_session_run(struct ovsdb_jsonrpc_session *s)
 }
 
 static void
-ovsdb_jsonrpc_session_set_options(struct ovsdb_jsonrpc_session *session,
-                                  const struct ovsdb_jsonrpc_options *options)
-{
-    jsonrpc_session_set_max_backoff(session->js, options->max_backoff);
-    jsonrpc_session_set_probe_interval(session->js, options->probe_interval);
-    jsonrpc_session_set_dscp(session->js, options->dscp);
-}
-
-static void
 ovsdb_jsonrpc_session_run_all(struct ovsdb_jsonrpc_remote *remote)
 {
     struct ovsdb_jsonrpc_session *s;
 
     LIST_FOR_EACH_SAFE (s, node, &remote->sessions) {
+        cooperative_multitasking_yield();
+
         int error = ovsdb_jsonrpc_session_run(s);
         if (error) {
             ovsdb_jsonrpc_session_close(s);
@@ -700,7 +809,7 @@ ovsdb_jsonrpc_session_set_all_options(
     struct ovsdb_jsonrpc_session *s;
 
     LIST_FOR_EACH (s, node, &remote->sessions) {
-        ovsdb_jsonrpc_session_set_options(s, options);
+        jsonrpc_session_set_options(s->js, &options->rpc);
     }
 }
 
@@ -1027,7 +1136,7 @@ ovsdb_jsonrpc_session_got_request(struct ovsdb_jsonrpc_session *s,
                                              request->id);
     } else if (!strcmp(request->method, "get_schema")) {
         struct ovsdb *db = ovsdb_jsonrpc_lookup_db(s, request, &reply);
-        if (!reply) {
+        if (db && !reply) {
             reply = jsonrpc_create_reply(ovsdb_schema_to_json(db->schema),
                                          request->id);
         }
@@ -1120,6 +1229,8 @@ static void
 ovsdb_jsonrpc_trigger_create(struct ovsdb_jsonrpc_session *s, struct ovsdb *db,
                              struct jsonrpc_msg *request)
 {
+    ovs_assert(db);
+
     /* Check for duplicate ID. */
     size_t hash = json_hash(request->id, 0);
     struct ovsdb_jsonrpc_trigger *t
@@ -1134,7 +1245,8 @@ ovsdb_jsonrpc_trigger_create(struct ovsdb_jsonrpc_session *s, struct ovsdb *db,
     /* Insert into trigger table. */
     t = xmalloc(sizeof *t);
     bool disconnect_all = ovsdb_trigger_init(
-        &s->up, db, &t->trigger, request, time_msec(), s->read_only,
+        &s->up, db, &t->trigger, request, time_msec(),
+        s->read_only || db->read_only,
         s->remote->role, jsonrpc_session_get_id(s->js));
     t->id = json_clone(request->id);
     hmap_insert(&s->triggers, &t->hmap_node, hash);
@@ -1380,6 +1492,8 @@ ovsdb_jsonrpc_monitor_create(struct ovsdb_jsonrpc_session *s, struct ovsdb *db,
                              enum ovsdb_monitor_version version,
                              const struct json *request_id)
 {
+    ovs_assert(db);
+
     struct ovsdb_jsonrpc_monitor *m = NULL;
     struct ovsdb_monitor *dbmon = NULL;
     struct json *monitor_id, *monitor_requests;

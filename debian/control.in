@@ -21,7 +21,7 @@ Build-Depends:
  iproute2,
  libcap-ng-dev,
  libdbus-1-dev [amd64 i386 ppc64el arm64],
-# DPDK_NETDEV  libdpdk-dev (>= 21.11) [amd64 i386 ppc64el arm64],
+# DPDK_NETDEV  libdpdk-dev (>= 23.11) [amd64 i386 ppc64el arm64],
  libnuma-dev [amd64 i386 ppc64el arm64],
  libpcap-dev [amd64 i386 ppc64el arm64],
  libssl-dev,
@@ -287,6 +287,7 @@ Depends:
 Suggests:
  python3-netaddr,
  python3-pyparsing,
+ python3-unbound,
 Description: Python 3 bindings for Open vSwitch
  Open vSwitch is a production quality, multilayer, software-based,
  Ethernet virtual switch. It is designed to enable massive network

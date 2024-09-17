@@ -1,6 +1,6 @@
 {"name": "Open_vSwitch",
- "version": "8.3.0",
- "cksum": "3781850481 26690",
+ "version": "8.7.0",
+ "cksum": "3751637058 27869",
  "tables": {
    "Open_vSwitch": {
      "columns": {
@@ -280,7 +280,8 @@
                "min": 0, "max": "unlimited"}},
        "bfd_status": {
            "type": {"key": "string", "value": "string",
-               "min": 0, "max": "unlimited"}},
+               "min": 0, "max": "unlimited"},
+           "ephemeral": true},
        "cfm_mpid": {
          "type": {
            "key": {"type": "integer"},
@@ -460,6 +461,9 @@
          "type": {"key": "string", "value": "integer",
                   "min": 0, "max": "unlimited"},
          "ephemeral": true},
+       "filter": {
+         "type": {"key": {"type": "string"},
+                  "min": 0, "max": 1}},
        "external_ids": {
          "type": {"key": "string", "value": "string",
                   "min": 0, "max": "unlimited"}}}},
@@ -530,6 +534,16 @@
                           "minInteger": 0,
                           "maxInteger": 4294967295},
                   "min": 0, "max": 1}},
+       "stats_interval": {
+         "type": {"key": {"type": "integer",
+                          "minInteger": 1,
+                          "maxInteger": 3600},
+                  "min": 0, "max": 1}},
+       "template_interval": {
+         "type": {"key": {"type": "integer",
+                          "minInteger": 1,
+                          "maxInteger": 3600},
+                  "min": 0, "max": 1}},
        "other_config": {
          "type": {"key": "string", "value": "string",
                   "min": 0, "max": "unlimited"}},
@@ -550,6 +564,11 @@
        "ipfix": {
          "type": {"key": {"type": "uuid",
                           "refTable": "IPFIX"},
+                  "min": 0, "max": 1}},
+       "local_group_id": {
+         "type": {"key": {"type": "integer",
+                          "minInteger": 0,
+                          "maxInteger": 4294967295},
                   "min": 0, "max": 1}},
        "external_ids": {
          "type": {"key": "string", "value": "string",
@@ -659,6 +678,11 @@
        "capabilities": {
          "type": {"key": "string", "value": "string",
                   "min": 0, "max": "unlimited"}},
+       "ct_zone_default_limit": {
+          "type": { "key": {"type": "integer",
+                            "minInteger": 0,
+                            "maxInteger": 4294967295},
+                    "min": 0, "max": 1}},
        "external_ids": {
          "type": {"key": "string", "value": "string",
                   "min": 0, "max": "unlimited"}}}},
@@ -668,6 +692,11 @@
          "type": {"key": {"type": "uuid",
                           "refTable": "CT_Timeout_Policy"},
                   "min": 0, "max": 1}},
+       "limit": {
+          "type": { "key": {"type": "integer",
+                            "minInteger": 0,
+                            "maxInteger": 4294967295},
+                    "min": 0, "max": 1}},
        "external_ids": {
          "type": {"key": "string", "value": "string",
                   "min": 0, "max": "unlimited"}}}},

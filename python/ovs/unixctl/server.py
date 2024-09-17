@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import copy
 import errno
 import os
@@ -35,6 +36,7 @@ class UnixctlConnection(object):
         assert isinstance(rpc, ovs.jsonrpc.Connection)
         self._rpc = rpc
         self._request_id = None
+        self._fmt = ovs.unixctl.UnixctlOutputFormat.TEXT
 
     def run(self):
         self._rpc.run()
@@ -63,10 +65,29 @@ class UnixctlConnection(object):
         return error
 
     def reply(self, body):
-        self._reply_impl(True, body)
+        assert body is None or isinstance(body, str)
+
+        if body is None:
+            body = ""
+
+        if self._fmt == ovs.unixctl.UnixctlOutputFormat.JSON:
+            body = {
+                "reply-format": "plain",
+                "reply": body
+            }
+
+        return self._reply_impl_json(True, body)
+
+    def reply_json(self, body):
+        self._reply_impl_json(True, body)
 
     def reply_error(self, body):
-        self._reply_impl(False, body)
+        assert body is None or isinstance(body, str)
+
+        if body is None:
+            body = ""
+
+        return self._reply_impl_json(False, body)
 
     # Called only by unixctl classes.
     def _close(self):
@@ -78,17 +99,10 @@ class UnixctlConnection(object):
         if not self._rpc.get_backlog():
             self._rpc.recv_wait(poller)
 
-    def _reply_impl(self, success, body):
+    def _reply_impl_json(self, success, body):
         assert isinstance(success, bool)
-        assert body is None or isinstance(body, str)
 
         assert self._request_id is not None
-
-        if body is None:
-            body = ""
-
-        if body and not body.endswith("\n"):
-            body += "\n"
 
         if success:
             reply = Message.create_reply(body, self._request_id)
@@ -134,6 +148,25 @@ def _unixctl_version(conn, unused_argv, version):
     assert isinstance(conn, UnixctlConnection)
     version = "%s (Open vSwitch) %s" % (ovs.util.PROGRAM_NAME, version)
     conn.reply(version)
+
+
+def _unixctl_set_options(conn, argv, unused_aux):
+    assert isinstance(conn, UnixctlConnection)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--format", default="text",
+                        choices=[fmt.name.lower()
+                                 for fmt in ovs.unixctl.UnixctlOutputFormat],
+                        type=str.lower)
+
+    try:
+        args = parser.parse_args(args=argv)
+    except argparse.ArgumentError as e:
+        conn.reply_error(str(e))
+        return
+
+    conn._fmt = ovs.unixctl.UnixctlOutputFormat[args.format.upper()]
+    conn.reply(None)
 
 
 class UnixctlServer(object):
@@ -210,48 +243,7 @@ class UnixctlServer(object):
         ovs.unixctl.command_register("version", "", 0, 0, _unixctl_version,
                                      version)
 
+        ovs.unixctl.command_register("set-options", "[--format text|json]", 1,
+                                     2, _unixctl_set_options, None)
+
         return 0, UnixctlServer(listener)
-
-
-class UnixctlClient(object):
-    def __init__(self, conn):
-        assert isinstance(conn, ovs.jsonrpc.Connection)
-        self._conn = conn
-
-    def transact(self, command, argv):
-        assert isinstance(command, str)
-        assert isinstance(argv, list)
-        for arg in argv:
-            assert isinstance(arg, str)
-
-        request = Message.create_request(command, argv)
-        error, reply = self._conn.transact_block(request)
-
-        if error:
-            vlog.warn("error communicating with %s: %s"
-                      % (self._conn.name, os.strerror(error)))
-            return error, None, None
-
-        if reply.error is not None:
-            return 0, str(reply.error), None
-        else:
-            assert reply.result is not None
-            return 0, None, str(reply.result)
-
-    def close(self):
-        self._conn.close()
-        self.conn = None
-
-    @staticmethod
-    def create(path):
-        assert isinstance(path, str)
-
-        unix = "unix:%s" % ovs.util.abs_file_name(ovs.dirs.RUNDIR, path)
-        error, stream = ovs.stream.Stream.open_block(
-            ovs.stream.Stream.open(unix))
-
-        if error:
-            vlog.warn("failed to connect to %s" % path)
-            return error, None
-
-        return 0, UnixctlClient(ovs.jsonrpc.Connection(stream))

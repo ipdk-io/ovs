@@ -395,7 +395,7 @@ dpif_netlink_open(const struct dpif_class *class OVS_UNUSED, const char *name,
     dp_request.user_features |= OVS_DP_F_UNALIGNED;
     dp_request.user_features |= OVS_DP_F_VPORT_PIDS;
     dp_request.user_features |= OVS_DP_F_UNSUPPORTED;
-    error = dpif_netlink_dp_transact(&dp_request, &dp, &buf);
+    error = dpif_netlink_dp_transact(&dp_request, NULL, NULL);
     if (error) {
         /* The Open vSwitch kernel module has two modes for dispatching
          * upcalls: per-vport and per-cpu.
@@ -919,6 +919,9 @@ get_vport_type(const struct dpif_netlink_vport *vport)
     case OVS_VPORT_TYPE_GTPU:
         return "gtpu";
 
+    case OVS_VPORT_TYPE_SRV6:
+        return "srv6";
+
     case OVS_VPORT_TYPE_BAREUDP:
         return "bareudp";
 
@@ -957,6 +960,8 @@ netdev_to_ovs_vport_type(const char *type)
         return OVS_VPORT_TYPE_GRE;
     } else if (!strcmp(type, "gtpu")) {
         return OVS_VPORT_TYPE_GTPU;
+    } else if (!strcmp(type, "srv6")) {
+        return OVS_VPORT_TYPE_SRV6;
     } else if (!strcmp(type, "bareudp")) {
         return OVS_VPORT_TYPE_BAREUDP;
     } else {
@@ -2582,7 +2587,7 @@ dpif_netlink_calculate_n_handlers(void)
         n_handlers = MIN(next_prime_num, total_cores);
     }
 
-    return n_handlers;
+    return MAX(n_handlers, 1);
 }
 
 static int
@@ -3355,7 +3360,6 @@ dpif_netlink_ct_flush(struct dpif *dpif OVS_UNUSED, const uint16_t *zone,
 
 static int
 dpif_netlink_ct_set_limits(struct dpif *dpif OVS_UNUSED,
-                           const uint32_t *default_limits,
                            const struct ovs_list *zone_limits)
 {
     if (ovs_ct_limit_family < 0) {
@@ -3373,13 +3377,6 @@ dpif_netlink_ct_set_limits(struct dpif *dpif OVS_UNUSED,
 
     size_t opt_offset;
     opt_offset = nl_msg_start_nested(request, OVS_CT_LIMIT_ATTR_ZONE_LIMIT);
-    if (default_limits) {
-        struct ovs_zone_limit req_zone_limit = {
-            .zone_id = OVS_ZONE_LIMIT_DEFAULT_ZONE,
-            .limit   = *default_limits,
-        };
-        nl_msg_put(request, &req_zone_limit, sizeof req_zone_limit);
-    }
 
     if (!ovs_list_is_empty(zone_limits)) {
         struct ct_dpif_zone_limit *zone_limit;
@@ -3401,7 +3398,6 @@ dpif_netlink_ct_set_limits(struct dpif *dpif OVS_UNUSED,
 
 static int
 dpif_netlink_zone_limits_from_ofpbuf(const struct ofpbuf *buf,
-                                     uint32_t *default_limit,
                                      struct ovs_list *zone_limits)
 {
     static const struct nl_policy ovs_ct_limit_policy[] = {
@@ -3434,11 +3430,8 @@ dpif_netlink_zone_limits_from_ofpbuf(const struct ofpbuf *buf,
                 nl_attr_get(attr[OVS_CT_LIMIT_ATTR_ZONE_LIMIT]);
 
     while (rem >= sizeof *zone_limit) {
-        if (zone_limit->zone_id == OVS_ZONE_LIMIT_DEFAULT_ZONE) {
-            *default_limit = zone_limit->limit;
-        } else if (zone_limit->zone_id < OVS_ZONE_LIMIT_DEFAULT_ZONE ||
-                   zone_limit->zone_id > UINT16_MAX) {
-        } else {
+        if (zone_limit->zone_id >= OVS_ZONE_LIMIT_DEFAULT_ZONE &&
+            zone_limit->zone_id <= UINT16_MAX) {
             ct_dpif_push_zone_limit(zone_limits, zone_limit->zone_id,
                                     zone_limit->limit, zone_limit->count);
         }
@@ -3451,7 +3444,6 @@ dpif_netlink_zone_limits_from_ofpbuf(const struct ofpbuf *buf,
 
 static int
 dpif_netlink_ct_get_limits(struct dpif *dpif OVS_UNUSED,
-                           uint32_t *default_limit,
                            const struct ovs_list *zone_limits_request,
                            struct ovs_list *zone_limits_reply)
 {
@@ -3472,14 +3464,11 @@ dpif_netlink_ct_get_limits(struct dpif *dpif OVS_UNUSED,
         size_t opt_offset = nl_msg_start_nested(request,
                                                 OVS_CT_LIMIT_ATTR_ZONE_LIMIT);
 
-        struct ovs_zone_limit req_zone_limit = {
-            .zone_id = OVS_ZONE_LIMIT_DEFAULT_ZONE,
-        };
-        nl_msg_put(request, &req_zone_limit, sizeof req_zone_limit);
-
         struct ct_dpif_zone_limit *zone_limit;
         LIST_FOR_EACH (zone_limit, node, zone_limits_request) {
-            req_zone_limit.zone_id = zone_limit->zone;
+            struct ovs_zone_limit req_zone_limit = {
+                .zone_id = zone_limit->zone,
+            };
             nl_msg_put(request, &req_zone_limit, sizeof req_zone_limit);
         }
 
@@ -3492,8 +3481,7 @@ dpif_netlink_ct_get_limits(struct dpif *dpif OVS_UNUSED,
         goto out;
     }
 
-    err = dpif_netlink_zone_limits_from_ofpbuf(reply, default_limit,
-                                               zone_limits_reply);
+    err = dpif_netlink_zone_limits_from_ofpbuf(reply, zone_limits_reply);
 
 out:
     ofpbuf_delete(request);
@@ -4105,7 +4093,6 @@ dpif_netlink_meter_get_features(const struct dpif *dpif_,
                                 struct ofputil_meter_features *features)
 {
     if (probe_broken_meters(CONST_CAST(struct dpif *, dpif_))) {
-        features = NULL;
         return;
     }
 
@@ -4516,6 +4503,7 @@ dpif_netlink_cache_set_size(struct dpif *dpif_, uint32_t level, uint32_t size)
 const struct dpif_class dpif_netlink_class = {
     "system",
     false,                      /* cleanup_required */
+    false,                      /* synced_dp_layers */
     NULL,                       /* init */
     dpif_netlink_enumerate,
     NULL,
@@ -4561,12 +4549,17 @@ const struct dpif_class dpif_netlink_class = {
     dpif_netlink_ct_dump_start,
     dpif_netlink_ct_dump_next,
     dpif_netlink_ct_dump_done,
+    NULL,                       /* ct_exp_dump_start */
+    NULL,                       /* ct_exp_dump_next */
+    NULL,                       /* ct_exp_dump_done */
     dpif_netlink_ct_flush,
     NULL,                       /* ct_set_maxconns */
     NULL,                       /* ct_get_maxconns */
     NULL,                       /* ct_get_nconns */
     NULL,                       /* ct_set_tcp_seq_chk */
     NULL,                       /* ct_get_tcp_seq_chk */
+    NULL,                       /* ct_set_sweep_interval */
+    NULL,                       /* ct_get_sweep_interval */
     dpif_netlink_ct_set_limits,
     dpif_netlink_ct_get_limits,
     dpif_netlink_ct_del_limits,
@@ -4686,6 +4679,8 @@ dpif_netlink_vport_from_ofpbuf(struct dpif_netlink_vport *vport,
                                    .optional = true },
         [OVS_VPORT_ATTR_OPTIONS] = { .type = NL_A_NESTED, .optional = true },
         [OVS_VPORT_ATTR_NETNSID] = { .type = NL_A_U32, .optional = true },
+        [OVS_VPORT_ATTR_UPCALL_STATS] = { .type = NL_A_NESTED,
+                                          .optional = true },
     };
 
     dpif_netlink_vport_init(vport);
@@ -4716,6 +4711,21 @@ dpif_netlink_vport_from_ofpbuf(struct dpif_netlink_vport *vport,
     }
     if (a[OVS_VPORT_ATTR_STATS]) {
         vport->stats = nl_attr_get(a[OVS_VPORT_ATTR_STATS]);
+    }
+    if (a[OVS_VPORT_ATTR_UPCALL_STATS]) {
+        const struct nlattr *nla;
+        size_t left;
+
+        NL_NESTED_FOR_EACH (nla, left, a[OVS_VPORT_ATTR_UPCALL_STATS]) {
+            if (nl_attr_type(nla) == OVS_VPORT_UPCALL_ATTR_SUCCESS) {
+                vport->upcall_success = nl_attr_get_u64(nla);
+            } else if (nl_attr_type(nla) == OVS_VPORT_UPCALL_ATTR_FAIL) {
+                vport->upcall_fail = nl_attr_get_u64(nla);
+            }
+        }
+    } else {
+        vport->upcall_success = UINT64_MAX;
+        vport->upcall_fail = UINT64_MAX;
     }
     if (a[OVS_VPORT_ATTR_OPTIONS]) {
         vport->options = nl_attr_get(a[OVS_VPORT_ATTR_OPTIONS]);

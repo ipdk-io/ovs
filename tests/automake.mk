@@ -19,6 +19,8 @@ EXTRA_DIST += \
 	$(OVSDB_CLUSTER_TESTSUITE) \
 	tests/atlocal.in \
 	$(srcdir)/package.m4 \
+	$(srcdir)/tests/test-dpparse.py \
+	$(srcdir)/tests/test-ofparse.py \
 	$(srcdir)/tests/testsuite \
 	$(srcdir)/tests/testsuite.patch
 
@@ -108,7 +110,8 @@ TESTSUITE_AT = \
 	tests/mcast-snooping.at \
 	tests/packet-type-aware.at \
 	tests/nsh.at \
-	tests/drop-stats.at
+	tests/drop-stats.at \
+	tests/learning-switch.at
 
 EXTRA_DIST += $(FUZZ_REGRESSION_TESTS)
 FUZZ_REGRESSION_TESTS = \
@@ -142,10 +145,6 @@ $(srcdir)/tests/fuzz-regression-list.at: tests/automake.mk
             basename=`echo $$name | sed 's,^.*/,,'`; \
 	    echo "TEST_FUZZ_REGRESSION([$$basename])"; \
 	done > $@.tmp && mv $@.tmp $@
-
-EXTRA_DIST += $(MFEX_AUTOVALIDATOR_TESTS)
-MFEX_AUTOVALIDATOR_TESTS = \
-	tests/mfex_fuzzy.py
 
 OVSDB_CLUSTER_TESTSUITE_AT = \
 	tests/ovsdb-cluster-testsuite.at \
@@ -184,7 +183,8 @@ SYSTEM_TESTSUITE_AT = \
 SYSTEM_OFFLOADS_TESTSUITE_AT = \
 	tests/system-common-macros.at \
 	tests/system-offloads-traffic.at \
-	tests/system-offloads-testsuite.at
+	tests/system-offloads-testsuite.at \
+	tests/system-offloads-testsuite-macros.at
 
 SYSTEM_DPDK_TESTSUITE_AT = \
 	tests/system-common-macros.at \
@@ -211,8 +211,7 @@ AUTOTEST_PATH = utilities:vswitchd:ovsdb:vtep:tests:ipsec:$(PTHREAD_WIN32_DIR_DL
 check-local:
 	set $(SHELL) '$(TESTSUITE)' -C tests AUTOTEST_PATH=$(AUTOTEST_PATH); \
 	"$$@" $(TESTSUITEFLAGS) || \
-	(test -z "$$(find $(TESTSUITE_DIR) -name 'asan.*')" && \
-	 test -z "$$(find $(TESTSUITE_DIR) -name 'ubsan.*')" && \
+	(test -z "$$(find $(TESTSUITE_DIR) -name 'sanitizers.*')" && \
 	 test X'$(RECHECK)' = Xyes && "$$@" --recheck)
 
 # Python Coverage support.
@@ -451,10 +450,12 @@ tests_ovstest_SOURCES = \
 	tests/test-barrier.c \
 	tests/test-bundle.c \
 	tests/test-byte-order.c \
+	tests/test-byteq.c \
 	tests/test-classifier.c \
 	tests/test-ccmap.c \
 	tests/test-cmap.c \
 	tests/test-conntrack.c \
+	tests/test-cooperative-multitasking.c \
 	tests/test-csum.c \
 	tests/test-flows.c \
 	tests/test-hash.c \
@@ -474,6 +475,7 @@ tests_ovstest_SOURCES = \
 	tests/test-packets.c \
 	tests/test-random.c \
 	tests/test-rcu.c \
+	tests/test-rculist.c \
 	tests/test-reconnect.c \
 	tests/test-rstp.c \
 	tests/test-sflow.c \
@@ -497,7 +499,8 @@ endif
 if LINUX
 tests_ovstest_SOURCES += \
 	tests/test-netlink-conntrack.c \
-	tests/test-netlink-policy.c
+	tests/test-netlink-policy.c \
+	tests/test-psample.c
 endif
 
 tests_ovstest_LDADD = lib/libopenvswitch.la
@@ -516,12 +519,15 @@ tests_test_type_props_SOURCES = tests/test-type-props.c
 CHECK_PYFILES = \
 	tests/appctl.py \
 	tests/flowgen.py \
-	tests/mfex_fuzzy.py \
+	tests/genpkts.py \
 	tests/ovsdb-monitor-sort.py \
+	tests/system-dpdk-find-device.py \
 	tests/test-daemon.py \
+	tests/test-dpparse.py \
 	tests/test-json.py \
 	tests/test-jsonrpc.py \
 	tests/test-l7.py \
+	tests/test-ofparse.py \
 	tests/test-ovsdb.py \
 	tests/test-reconnect.py \
 	tests/test-stream.py \

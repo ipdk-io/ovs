@@ -114,7 +114,7 @@ struct dp_netdev_pmd_thread {
     atomic_ullong intrvl_cycles;
 
     /* Write index for 'busy_cycles_intrvl'. */
-    unsigned int intrvl_idx;
+    atomic_count intrvl_idx;
     /* Busy cycles in last PMD_INTERVAL_MAX intervals. */
     atomic_ullong *busy_cycles_intrvl;
 
@@ -179,6 +179,9 @@ struct dp_netdev_pmd_thread {
     unsigned core_id;               /* CPU core id of this pmd thread. */
     int numa_id;                    /* numa node id of this pmd thread. */
     bool isolated;
+
+    /* Max sleep request in microseconds. */
+    atomic_uint64_t max_sleep;
 
     /* Queue id used by this pmd thread to send packets on all netdevs if
      * XPS disabled for this netdev. All static_tx_qid's are unique and less

@@ -24,12 +24,20 @@
 #include <limits.h>
 #include <string.h>
 
+#include "cooperative-multitasking.h"
 #include "openvswitch/dynamic-string.h"
 #include "hash.h"
+#include "json.h"
 #include "openvswitch/shash.h"
 #include "unicode.h"
 #include "util.h"
 #include "uuid.h"
+
+/* Non-public JSSF_* flags.  Must not overlap with public ones defined
+ * in include/openvswitch/json.h. */
+enum {
+    JSSF_YIELD = 1 << 7,
+};
 
 /* The type of a JSON token. */
 enum json_token_type {
@@ -190,6 +198,14 @@ json_serialized_object_create(const struct json *src)
 }
 
 struct json *
+json_serialized_object_create_with_yield(const struct json *src)
+{
+    struct json *json = json_create(JSON_SERIALIZED_OBJECT);
+    json->string = json_to_string(src, JSSF_SORT | JSSF_YIELD);
+    return json;
+}
+
+struct json *
 json_array_create_empty(void)
 {
     struct json *json = json_create(JSON_ARRAY);
@@ -255,6 +271,21 @@ json_array_create_3(struct json *elem0, struct json *elem1, struct json *elem2)
     elems[1] = elem1;
     elems[2] = elem2;
     return json_array_create(elems, 3);
+}
+
+bool
+json_array_contains_string(const struct json *json, const char *str)
+{
+    ovs_assert(json->type == JSON_ARRAY);
+
+    for (size_t i = 0; i < json->array.n; i++) {
+        const struct json *elem = json->array.elems[i];
+
+        if (elem->type == JSON_STRING && !strcmp(json_string(elem), str)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 struct json *
@@ -360,20 +391,20 @@ json_integer(const struct json *json)
     return json->integer;
 }
 
-static void json_destroy_object(struct shash *object);
-static void json_destroy_array(struct json_array *array);
+static void json_destroy_object(struct shash *object, bool yield);
+static void json_destroy_array(struct json_array *array, bool yield);
 
 /* Frees 'json' and everything it points to, recursively. */
 void
-json_destroy__(struct json *json)
+json_destroy__(struct json *json, bool yield)
 {
     switch (json->type) {
     case JSON_OBJECT:
-        json_destroy_object(json->object);
+        json_destroy_object(json->object, yield);
         break;
 
     case JSON_ARRAY:
-        json_destroy_array(&json->array);
+        json_destroy_array(&json->array, yield);
         break;
 
     case JSON_STRING:
@@ -395,14 +426,22 @@ json_destroy__(struct json *json)
 }
 
 static void
-json_destroy_object(struct shash *object)
+json_destroy_object(struct shash *object, bool yield)
 {
     struct shash_node *node;
+
+    if (yield) {
+        cooperative_multitasking_yield();
+    }
 
     SHASH_FOR_EACH_SAFE (node, object) {
         struct json *value = node->data;
 
-        json_destroy(value);
+        if (yield) {
+            json_destroy_with_yield(value);
+        } else {
+            json_destroy(value);
+        }
         shash_delete(object, node);
     }
     shash_destroy(object);
@@ -410,18 +449,26 @@ json_destroy_object(struct shash *object)
 }
 
 static void
-json_destroy_array(struct json_array *array)
+json_destroy_array(struct json_array *array, bool yield)
 {
     size_t i;
 
+    if (yield) {
+        cooperative_multitasking_yield();
+    }
+
     for (i = 0; i < array->n; i++) {
-        json_destroy(array->elems[i]);
+        if (yield) {
+            json_destroy_with_yield(array->elems[i]);
+        } else {
+            json_destroy(array->elems[i]);
+        }
     }
     free(array->elems);
 }
 
-static struct json *json_clone_object(const struct shash *object);
-static struct json *json_clone_array(const struct json_array *array);
+static struct json *json_deep_clone_object(const struct shash *object);
+static struct json *json_deep_clone_array(const struct json_array *array);
 
 /* Returns a deep copy of 'json'. */
 struct json *
@@ -429,10 +476,10 @@ json_deep_clone(const struct json *json)
 {
     switch (json->type) {
     case JSON_OBJECT:
-        return json_clone_object(json->object);
+        return json_deep_clone_object(json->object);
 
     case JSON_ARRAY:
-        return json_clone_array(&json->array);
+        return json_deep_clone_array(&json->array);
 
     case JSON_STRING:
         return json_string_create(json->string);
@@ -464,7 +511,7 @@ json_nullable_clone(const struct json *json)
 }
 
 static struct json *
-json_clone_object(const struct shash *object)
+json_deep_clone_object(const struct shash *object)
 {
     struct shash_node *node;
     struct json *json;
@@ -472,20 +519,20 @@ json_clone_object(const struct shash *object)
     json = json_object_create();
     SHASH_FOR_EACH (node, object) {
         struct json *value = node->data;
-        json_object_put(json, node->name, json_clone(value));
+        json_object_put(json, node->name, json_deep_clone(value));
     }
     return json;
 }
 
 static struct json *
-json_clone_array(const struct json_array *array)
+json_deep_clone_array(const struct json_array *array)
 {
     struct json **elems;
     size_t i;
 
     elems = xmalloc(array->n * sizeof *elems);
     for (i = 0; i < array->n; i++) {
-        elems[i] = json_clone(array->elems[i]);
+        elems[i] = json_deep_clone(array->elems[i]);
     }
     return json_array_create(elems, array->n);
 }
@@ -1649,6 +1696,10 @@ json_serialize_object(const struct shash *object, struct json_serializer *s)
     s->depth++;
     indent_line(s);
 
+    if (s->flags & JSSF_YIELD) {
+        cooperative_multitasking_yield();
+    }
+
     if (s->flags & JSSF_SORT) {
         const struct shash_node **nodes;
         size_t n, i;
@@ -1681,6 +1732,10 @@ json_serialize_array(const struct json_array *array, struct json_serializer *s)
 
     ds_put_char(ds, '[');
     s->depth++;
+
+    if (s->flags & JSSF_YIELD) {
+        cooperative_multitasking_yield();
+    }
 
     if (array->n > 0) {
         indent_line(s);

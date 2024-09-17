@@ -48,6 +48,7 @@
 #include "openvswitch/meta-flow.h"
 #include "openvswitch/ofp-actions.h"
 #include "openvswitch/ofp-bundle.h"
+#include "openvswitch/ofp-ct.h"
 #include "openvswitch/ofp-errors.h"
 #include "openvswitch/ofp-group.h"
 #include "openvswitch/ofp-match.h"
@@ -153,6 +154,12 @@ static int show_stats = 1;
 /* --pcap: Makes "compose-packet" print a pcap on stdout. */
 static int print_pcap = 0;
 
+/* --bare: Makes "compose-packet" print a bare hexified payload. */
+static int print_bare = 0;
+
+/* -bad-csum: Makes "compose-packet" generate an invalid checksum. */
+static int bad_csum = 0;
+
 /* --raw: Makes "ofp-print" read binary data from stdin. */
 static int raw = 0;
 
@@ -172,7 +179,7 @@ main(int argc, char *argv[])
     ctx.argc = argc - optind;
     ctx.argv = argv + optind;
 
-    daemon_become_new_user(false);
+    daemon_become_new_user(false, false);
     if (read_only) {
         ovs_cmdl_run_command_read_only(&ctx, get_all_commands());
     } else {
@@ -242,6 +249,8 @@ parse_options(int argc, char *argv[])
         {"color", optional_argument, NULL, OPT_COLOR},
         {"may-create", no_argument, NULL, OPT_MAY_CREATE},
         {"pcap", no_argument, &print_pcap, 1},
+        {"bare", no_argument, &print_bare, 1},
+        {"bad-csum", no_argument, &bad_csum, 1},
         {"raw", no_argument, &raw, 1},
         {"read-only", no_argument, NULL, OPT_READ_ONLY},
         DAEMON_LONG_OPTIONS,
@@ -485,6 +494,11 @@ usage(void)
            "  dump-ipfix-bridge SWITCH    print ipfix stats of bridge\n"
            "  dump-ipfix-flow SWITCH      print flow ipfix of a bridge\n"
            "  ct-flush-zone SWITCH ZONE   flush conntrack entries in ZONE\n"
+           "  ct-flush SWITCH [ZONE] [mark=X[/M]] [labels=Y[/N]]\n"
+           "                  [CT_ORIG_TUPLE [CT_REPLY_TUPLE]]\n"
+           "                              flush conntrack entries specified\n"
+           "                              by CT_ORIG/REPLY_TUPLE, ZONE, mark\n"
+           "                              and labels\n"
            "\nFor OpenFlow switches and controllers:\n"
            "  probe TARGET                probe whether TARGET is up\n"
            "  ping TARGET [N]             latency of N-byte echos\n"
@@ -2123,7 +2137,7 @@ monitor_vconn(struct vconn *vconn, bool reply_to_echo_requests,
     int error;
 
     daemon_save_fd(STDERR_FILENO);
-    daemonize_start(false);
+    daemonize_start(false, false);
     error = unixctl_server_create(unixctl_path, &server);
     if (error) {
         ovs_fatal(error, "failed to create unixctl server");
@@ -3046,6 +3060,30 @@ ofctl_ct_flush_zone(struct ovs_cmdl_context *ctx)
     struct nx_zone_id *nzi = ofpbuf_put_zeros(msg, sizeof *nzi);
     nzi->zone_id = htons(zone_id);
 
+    transact_noreply(vconn, msg);
+    vconn_close(vconn);
+}
+
+static void
+ofctl_ct_flush(struct ovs_cmdl_context *ctx)
+{
+    struct vconn *vconn;
+    struct ofp_ct_match match = {0};
+    struct ds ds = DS_EMPTY_INITIALIZER;
+    uint16_t zone;
+    int args = ctx->argc - 2;
+    bool with_zone = false;
+
+    if (args && !ofp_ct_match_parse((const char **) &ctx->argv[2],
+                                    args, &ds, &match, &with_zone, &zone)) {
+        ovs_fatal(0, "Failed to parse CT match: %s", ds_cstr(&ds));
+    }
+
+    open_vconn(ctx->argv[1], &vconn);
+    enum ofp_version version = vconn_get_version(vconn);
+    struct ofpbuf *msg = ofp_ct_match_encode(&match, with_zone ? &zone : NULL,
+                                             version);
+    ds_destroy(&ds);
     transact_noreply(vconn, msg);
     vconn_close(vconn);
 }
@@ -4896,20 +4934,33 @@ ofctl_parse_key_value(struct ovs_cmdl_context *ctx)
     }
 }
 
-/* "compose-packet [--pcap] FLOW [L7]": Converts the OpenFlow flow
- * specification FLOW to a packet with flow_compose() and prints the hex bytes
- * in the packet on stdout.  Also verifies that the flow extracted from that
- * packet matches the original FLOW.
+/* "compose-packet [--pcap|--bare] [--bad-csum] FLOW [L7]": Converts the
+ * OpenFlow flow specification FLOW to a packet with flow_compose() and prints
+ * the hex bytes of the packet, with offsets, to stdout.
  *
- * With --pcap, prints the packet to stdout instead as a pcap file, so that you
- * can do something like "ovs-ofctl --pcap compose-packet udp | tcpdump -vvvv
- * -r-" to use another tool to dump the packet contents.
+ * With --pcap, prints the packet in pcap format, so that you can do something
+ * like "ovs-ofctl --pcap compose-packet udp | tcpdump -vvvv -r-" to use
+ * another tool to dump the packet contents.
+ *
+ * With --bare, prints the packet as a single bare hex string with no
+ * spaces or offsets, so that you can pass the result directly to e.g.
+ * "ovs-appctl netdev-dummy/receive vif $(ovs-ofctl compose-packet --bare
+ * FLOW)"
+ *
+ * With --bad-csum, produces a packet with an invalid IP checksum. (For IPv4.)
+ *
+ * Regardless of the mode, the command also verifies that the flow extracted
+ * from that packet matches the original FLOW.
  *
  * If L7 is specified, draws the L7 payload data from it, otherwise defaults to
  * 64 bytes of payload. */
 static void
 ofctl_compose_packet(struct ovs_cmdl_context *ctx)
 {
+    if (print_pcap && print_bare) {
+        ovs_fatal(1, "--bare and --pcap are mutually exclusive");
+    }
+
     if (print_pcap && isatty(STDOUT_FILENO)) {
         ovs_fatal(1, "not writing pcap data to stdout; redirect to a file "
                   "or pipe to tcpdump instead");
@@ -4937,7 +4988,7 @@ ofctl_compose_packet(struct ovs_cmdl_context *ctx)
         l7_len = dp_packet_size(&payload);
         l7 = dp_packet_steal_data(&payload);
     }
-    flow_compose(&p, &flow1, l7, l7_len);
+    flow_compose(&p, &flow1, l7, l7_len, bad_csum);
     free(l7);
 
     if (print_pcap) {
@@ -4945,6 +4996,16 @@ ofctl_compose_packet(struct ovs_cmdl_context *ctx)
         ovs_pcap_write_header(p_file);
         ovs_pcap_write(p_file, &p);
         ovs_pcap_close(p_file);
+    } else if (print_bare) {
+        /* Binary to a bare hex string. */
+        for (int i = 0; i < dp_packet_size(&p); i++) {
+            uint8_t val = ((uint8_t *) dp_packet_data(&p))[i];
+            /* Don't use ds_put_hex because it adds 0x prefix as well as
+             * it doesn't guarantee an even number of payload characters, which
+             * may be important elsewhere (e.g. in netdev-dummy/receive). */
+            printf("%02" PRIx8, val);
+        }
+
     } else {
         ovs_hex_dump(stdout, dp_packet_data(&p), dp_packet_size(&p), 0, false);
     }
@@ -5061,7 +5122,11 @@ static const struct ovs_cmdl_command all_commands[] = {
       1, 1, ofctl_dump_ipfix_flow, OVS_RO },
 
     { "ct-flush-zone", "switch zone",
-      2, 2, ofctl_ct_flush_zone, OVS_RO },
+      2, 2, ofctl_ct_flush_zone, OVS_RW },
+
+    { "ct-flush", "switch [zone=N] [mark=X[/M]] [labels=Y[/N]] "
+                  "[ct-orig-tuple [ct-reply-tuple]]",
+      1, 6, ofctl_ct_flush, OVS_RW },
 
     { "ofp-parse", "file",
       1, 1, ofctl_ofp_parse, OVS_RW },

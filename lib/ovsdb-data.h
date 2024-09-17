@@ -195,6 +195,8 @@ ovsdb_unconstrained_datum_from_json(struct ovsdb_datum *,
     OVS_WARN_UNUSED_RESULT;
 struct json *ovsdb_datum_to_json(const struct ovsdb_datum *,
                                  const struct ovsdb_type *);
+struct json *ovsdb_datum_to_json_deep(const struct ovsdb_datum *,
+                                      const struct ovsdb_type *);
 
 char *ovsdb_datum_from_string(struct ovsdb_datum *,
                               const struct ovsdb_type *, const char *,
@@ -254,6 +256,7 @@ void ovsdb_datum_added_removed(struct ovsdb_datum *added,
                                struct ovsdb_datum *removed,
                                const struct ovsdb_datum *old,
                                const struct ovsdb_datum *new,
+                               const struct ovsdb_datum *diff,
                                const struct ovsdb_type *type);
 
 void ovsdb_datum_diff(struct ovsdb_datum *diff,
