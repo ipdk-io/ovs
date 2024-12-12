@@ -115,7 +115,7 @@ def extract_ofp_msgs(output_file_name):
         number = int(number)
 
         get_line()
-        m = re.match('\s+(?:OFPRAW_%s)(\d*)_([A-Z0-9_]+),?$' % type_,
+        m = re.match(r'\s+(?:OFPRAW_%s)(\d*)_([A-Z0-9_]+),?$' % type_,
                      line)
         if not m:
             fatal("syntax error expecting OFPRAW_ enum")

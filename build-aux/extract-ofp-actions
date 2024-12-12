@@ -119,10 +119,10 @@ def extract_ofp_actions(fn, definitions):
             if line.startswith('/*') or not line or line.isspace():
                 fatal("unexpected syntax within action")
             comment += ' %s' % line.lstrip('* \t').rstrip(' \t\r\n')
-        comment = re.sub('\[[^]]*\]', '', comment)
+        comment = re.sub(r'\[[^]]*\]', '', comment)
         comment = comment[:-2].rstrip()
 
-        m = re.match('([^:]+):\s+(.*)$', comment)
+        m = re.match(r'([^:]+):\s+(.*)$', comment)
         if not m:
             fatal("unexpected syntax between actions")
 
