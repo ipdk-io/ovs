@@ -318,9 +318,9 @@ def group_xml_to_nroff(group_node, fields):
         '.SS "Summary:"\n',
         ".TS\n",
         "tab(;);\n",
-        "l l l l l l l.\n",
+        "l l l l l l.\n",
         "Name;Bytes;Mask;RW?;Prereqs;NXM/OXM Support\n",
-        "\_;\_;\_;\_;\_;\_\n",
+        r"\_;\_;\_;\_;\_;\_\n",
     ]
     content += summary
     content += [".TE\n"]
@@ -332,7 +332,7 @@ def make_oxm_classes_xml(document):
     s = """tab(;);
 l l l.
 Prefix;Vendor;Class
-\_;\_;\_
+\\_;\\_;\\_
 """
     for key in sorted(OXM_CLASSES, key=OXM_CLASSES.get):
         vendor, class_, class_type = OXM_CLASSES.get(key)
@@ -374,7 +374,7 @@ def make_ovs_fields(meta_flow_h, meta_flow_xml):
         """\
 '\\" tp
 .\\" -*- mode: troff; coding: utf-8 -*-
-.TH "ovs\-fields" 7 "%s" "Open vSwitch" "Open vSwitch Manual"
+.TH "ovs\\-fields" 7 "%s" "Open vSwitch" "Open vSwitch Manual"
 .fp 5 L CR              \\" Make fixed-width font available as \\fL.
 .de ST
 .  PP
@@ -404,7 +404,7 @@ def make_ovs_fields(meta_flow_h, meta_flow_xml):
 ..
 .if \\n[.g] .mso www.tmac
 .SH NAME
-ovs\-fields \- protocol header fields in OpenFlow and Open vSwitch
+ovs\\-fields \\- protocol header fields in OpenFlow and Open vSwitch
 .
 .PP
 """

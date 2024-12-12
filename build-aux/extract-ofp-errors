@@ -241,19 +241,19 @@ def extract_ofp_errors(fn):
             comment += ' %s' % line.lstrip('* \t').rstrip(' \t\r\n')
         comment = comment[:-2].rstrip()
 
-        m = re.match('Expected: (.*)\.$', comment)
+        m = re.match(r'Expected: (.*)\.$', comment)
         if m:
             expected_errors[m.group(1)] = (fileName, lineNumber)
             continue
 
-        m = re.match('((?:.(?!\.  ))+.)\.\s+(.*)$', comment)
+        m = re.match(r'((?:.(?!\.  ))+.)\.\s+(.*)$', comment)
         if not m:
             fatal("unexpected syntax between errors")
 
         dsts, comment = m.groups()
 
         getLine()
-        m = re.match('\s+(?:OFPERR_([A-Z0-9_]+))(\s*=\s*OFPERR_OFS)?,',
+        m = re.match(r'\s+(?:OFPERR_([A-Z0-9_]+))(\s*=\s*OFPERR_OFS)?,',
                      line)
         if not m:
             fatal("syntax error expecting OFPERR_ enum value")
@@ -262,7 +262,7 @@ def extract_ofp_errors(fn):
         if enum in names:
             fatal("%s specified twice" % enum)
 
-        comments.append(re.sub('\[[^]]*\]', '', comment))
+        comments.append(re.sub(r'\[[^]]*\]', '', comment))
         names.append(enum)
 
         for dst in dsts.split(', '):
